@@ -48,7 +48,6 @@ var runtimeWorkflowAllowedNodeTypes = map[string]bool{
 	"agent":          true,
 	"main_agent":     true,
 	"subissue":       true,
-	"inline":         true,
 	"condition":      true,
 	"merge":          true,
 	"final_response": true,
