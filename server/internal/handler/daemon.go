@@ -1174,6 +1174,11 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 			resp.WorkspaceID = uuidToString(issue.WorkspaceID)
 			resp.ThreadName = issue.Title
 			resp.WorkflowContext = h.workflowContextForIssue(r.Context(), issue.ID)
+			// Sub-agent route table for runtime-workflow orchestration. The
+			// daemon renders this into the agent brief's `## Workflow
+			// Orchestration` block; the brief's render gate already scopes it
+			// to issue tasks (not chat / quick-create / autopilot).
+			resp.SubAgentRoutes = h.subAgentRoutesForWorkspace(r.Context(), issue.WorkspaceID)
 
 			// Squad-leader briefing injection: when the issue is assigned
 			// to a squad and the claiming agent is that squad's current
@@ -1733,6 +1738,31 @@ func (h *Handler) workflowContextForIssue(ctx context.Context, issueID pgtype.UU
 		}
 	}
 	return b.String()
+}
+
+// subAgentRoutesForWorkspace builds the route table the main agent uses to
+// dispatch runtime-workflow subissue nodes. It lists every non-archived agent
+// in the workspace (ListAgents already filters `archived_at IS NULL`) and
+// exposes only ID/Name/Role/Description — never the agent's bound skills, by
+// design (the main agent must not see sub-agent skills). The DB has no separate
+// role column, so Role reuses the agent's Description. Returns nil on error so
+// the brief renders the "no dispatchable sub-agents" fallback rather than
+// failing the claim.
+func (h *Handler) subAgentRoutesForWorkspace(ctx context.Context, workspaceID pgtype.UUID) []SubAgentRouteData {
+	agents, err := h.Queries.ListAgents(ctx, workspaceID)
+	if err != nil {
+		return nil
+	}
+	out := make([]SubAgentRouteData, 0, len(agents))
+	for _, a := range agents {
+		out = append(out, SubAgentRouteData{
+			ID:          uuidToString(a.ID),
+			Name:        a.Name,
+			Role:        a.Description,
+			Description: a.Description,
+		})
+	}
+	return out
 }
 
 // ListPendingTasksByRuntime returns queued/dispatched tasks for a runtime.

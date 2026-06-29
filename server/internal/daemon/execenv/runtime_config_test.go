@@ -1421,3 +1421,38 @@ func TestImageOutputSectionSkippedForCommentlessTaskKinds(t *testing.T) {
 		})
 	}
 }
+
+func TestWorkflowOrchestrationRenderedForIssueTasks(t *testing.T) {
+	ctx := TaskContextForEnv{
+		IssueID: "11111111-2222-3333-4444-555555555555",
+		SubAgentRoutes: []SubAgentRouteForEnv{
+			{ID: "aaaa1111-0000-0000-0000-000000000001", Name: "Coder", Role: "engineer", Description: "writes code"},
+		},
+	}
+	dir := t.TempDir()
+	content, err := InjectRuntimeConfig(dir, "claude", ctx)
+	if err != nil {
+		t.Fatalf("InjectRuntimeConfig: %v", err)
+	}
+	for _, want := range []string{
+		"## Workflow Orchestration",
+		"multica workflow submit",
+		"aaaa1111-0000-0000-0000-000000000001",
+		"Coder",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("brief missing %q", want)
+		}
+	}
+}
+
+func TestWorkflowOrchestrationNotRenderedForChatTasks(t *testing.T) {
+	dir := t.TempDir()
+	content, err := InjectRuntimeConfig(dir, "claude", TaskContextForEnv{ChatSessionID: "chat-1"})
+	if err != nil {
+		t.Fatalf("InjectRuntimeConfig: %v", err)
+	}
+	if strings.Contains(content, "## Workflow Orchestration") {
+		t.Errorf("chat task must not get workflow orchestration block")
+	}
+}

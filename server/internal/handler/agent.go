@@ -162,6 +162,20 @@ type ProjectResourceData struct {
 	Label        string          `json:"label,omitempty"`
 }
 
+// SubAgentRouteData is the wire shape for one routable sub-agent included in a
+// claim response when a main agent is working an issue task. The daemon injects
+// these into the agent brief's `## Workflow Orchestration` block as the route
+// table for dispatching runtime-workflow subissue nodes. Carries only
+// ID/Name/Role/Description; never the sub-agent's bound skills (spec: the main
+// agent does not see sub-agent skills). The mirror struct on the daemon side
+// lives in internal/daemon/types.go with the same JSON field names.
+type SubAgentRouteData struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Role        string `json:"role"`
+	Description string `json:"description"`
+}
+
 type AgentTaskResponse struct {
 	ID          string `json:"id"`
 	AgentID     string `json:"agent_id"`
@@ -192,6 +206,7 @@ type AgentTaskResponse struct {
 	ProjectTitle     string                `json:"project_title,omitempty"`     // for surfacing in agent context
 	ProjectResources []ProjectResourceData `json:"project_resources,omitempty"` // resources attached to the project
 	WorkflowContext  string                `json:"workflow_context,omitempty"`  // latest workflow_run summary for this issue, when present
+	SubAgentRoutes   []SubAgentRouteData   `json:"sub_agent_routes,omitempty"`  // workspace sub-agents the main agent may dispatch to in a runtime workflow (issue tasks only)
 	CreatedAt        string                `json:"created_at"`
 	PriorSessionID   string                `json:"prior_session_id,omitempty"` // session ID from a previous task on same issue
 	PriorWorkDir     string                `json:"prior_work_dir,omitempty"`   // work_dir from a previous task on same issue

@@ -448,6 +448,30 @@ func buildMetaSkillContent(provider string, ctx TaskContextForEnv) string {
 		b.WriteString("\n\n")
 	}
 
+	if ctx.IssueID != "" && ctx.ChatSessionID == "" && ctx.AutopilotRunID == "" && ctx.QuickCreatePrompt == "" {
+		b.WriteString("## Workflow Orchestration\n\n")
+		b.WriteString("For a complex issue that splits into multiple relatively independent sub-tasks needing visible progress, auditing, or a Stop control, you MAY compile a runtime workflow graph and submit it with:\n\n")
+		b.WriteString("```\nmultica workflow submit <issueId> --definition-stdin\n```\n\n")
+		b.WriteString("The sidecar then orchestrates it: subissue nodes are dispatched to sub-agents as child issues; condition/merge/inline nodes run internally; a main_issue_task/final_response node hands a final summary back to you. For simple single-step tasks, plain conversation, or light edits, do NOT use a workflow — just work natively.\n\n")
+		b.WriteString("Definition JSON shape: top-level `meta`, optional `source_skills`, optional `state`, `nodes`, `routing`.\n")
+		b.WriteString("Node `type` whitelist: `agent`, `main_agent`, `subissue`, `inline`, `condition`, `merge`, `final_response`.\n")
+		b.WriteString("Node `dispatch` whitelist: `subissue`, `inline`, `main_issue_task` (`direct_subagent` is reserved and not implemented — do not use).\n")
+		b.WriteString("Rules: a subissue node MUST set `agent` to a sub-agent route key (UUID below); main_issue_task may only be type main_agent or final_response; routing MUST connect START and END; node ids unique.\n\n")
+		b.WriteString("Minimal example:\n\n")
+		b.WriteString("```json\n")
+		b.WriteString("{\"meta\":{\"name\":\"runtime-workflow\"},\"nodes\":[{\"id\":\"implement\",\"type\":\"subissue\",\"dispatch\":\"subissue\",\"agent\":\"<sub-agent-uuid>\",\"config\":{\"system\":\"Implement and return a summary.\"},\"outputs\":[\"implementation_summary\"]},{\"id\":\"final_summary\",\"type\":\"main_agent\",\"dispatch\":\"main_issue_task\",\"config\":{\"purpose\":\"summarize results\"}}],\"routing\":[{\"from\":\"START\",\"to\":\"implement\"},{\"from\":\"implement\",\"to\":\"final_summary\"},{\"from\":\"final_summary\",\"to\":\"END\"}]}\n")
+		b.WriteString("```\n\n")
+		if len(ctx.SubAgentRoutes) > 0 {
+			b.WriteString("Dispatchable sub-agents (use the UUID as the node `agent` route key):\n")
+			for _, sa := range ctx.SubAgentRoutes {
+				fmt.Fprintf(&b, "- `%s` — %s (%s): %s\n", sa.ID, sa.Name, sa.Role, sa.Description)
+			}
+			b.WriteString("\n")
+		} else {
+			b.WriteString("No dispatchable sub-agents are available in this workspace; do not use subissue nodes.\n\n")
+		}
+	}
+
 	b.WriteString("## Available Commands\n\n")
 	b.WriteString("**Use `--output json` for structured data.** Human table output now prints routable issue keys (for example `MUL-123`) and short UUID prefixes for workspace resources; use `--full-id` on list commands when you need canonical UUIDs.\n\n")
 	b.WriteString("The default brief includes the commands needed for the core agent loop and common issue create/update tasks. For everything else, run `multica --help`, `multica <command> --help`, or `multica <command> <subcommand> --help`; prefer `--output json` when the command supports it.\n\n")

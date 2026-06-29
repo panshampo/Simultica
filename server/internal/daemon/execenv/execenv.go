@@ -30,6 +30,15 @@ type ProjectResourceForEnv struct {
 	Label        string          // optional user-supplied label
 }
 
+// SubAgentRouteForEnv is one routable sub-agent shown to the main agent for
+// workflow orchestration. ID is the route key used as the node's `agent` field.
+type SubAgentRouteForEnv struct {
+	ID          string
+	Name        string
+	Role        string
+	Description string
+}
+
 // PrepareParams holds all inputs needed to set up an execution environment.
 type PrepareParams struct {
 	WorkspacesRoot string // base path for all envs (e.g., ~/multica_workspaces)
@@ -76,6 +85,10 @@ type TaskContextForEnv struct {
 	ProjectTitle            string                  // human-readable project title
 	ProjectResources        []ProjectResourceForEnv // resources attached to the project
 	WorkflowContext         string                  // latest workflow_run summary for this issue, when present
+	// SubAgentRoutes lists workspace sub-agents the main agent may dispatch to
+	// when composing a runtime workflow. Only ID/Name/Role/Description — never
+	// the sub-agent's bound skills (spec: main agent does not see sub-agent skills).
+	SubAgentRoutes          []SubAgentRouteForEnv
 	ChatSessionID           string                  // non-empty for chat tasks
 	AutopilotRunID          string                  // non-empty for autopilot run_only tasks
 	AutopilotID             string
