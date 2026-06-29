@@ -1,0 +1,105 @@
+meta:
+  name: "Review Loop Workflow Template"
+  version: "1.0"
+  description: "Generic execute -> review -> auto-loop or human-gate workflow pattern for Simultica skills."
+
+state:
+  fields:
+    - name: task
+      type: string
+      required: true
+    - name: execution_result
+      type: string
+    - name: workflow_status
+      type: string
+      default: "pending"
+      description: "done | fixable_auto | fixable_needs_decision | blocked | budget_exhausted"
+    - name: next_target
+      type: string
+      default: "final_report"
+      description: "execute | final_report"
+    - name: blocker_type
+      type: string
+      default: "none"
+    - name: needs_user_decision
+      type: boolean
+      default: false
+    - name: revisionCount
+      type: number
+      default: 0
+    - name: review_result_text
+      type: string
+    - name: loop_gate_value
+      type: string
+      default: "loop_gate"
+    - name: final_report_text
+      type: string
+
+nodes:
+  - id: execute
+    type: agent
+    dispatch: subissue
+    agent: "Simultica TraeX"
+    inputs: [task]
+    outputs: [execution_result]
+    config:
+      system: |
+        Execute the requested work. Return a concrete result, changed artifacts, and verification evidence.
+
+  - id: review
+    type: agent
+    dispatch: subissue
+    agent: "Simultica TraeX"
+    inputs: [task, execution_result, revisionCount]
+    outputs: [workflow_status, next_target, blocker_type, needs_user_decision, review_result_text]
+    on_complete:
+      - action: increment
+        field: revisionCount
+    config:
+      system: |
+        Review the execution result and decide whether to finish, auto-fix, ask the user, or stop on a blocker.
+        Use workflow_status=fixable_auto only when another automatic pass is safe.
+        If revisionCount is 3 or more and more work remains, use workflow_status=budget_exhausted and needs_user_decision=true.
+
+  - id: loop_gate
+    type: transform
+    dispatch: inline
+    inputs: [workflow_status, next_target, revisionCount]
+    outputs: [loop_gate_value]
+    config:
+      transform:
+        loop_gate_value: "loop_gate"
+
+  - id: final_report
+    type: final_response
+    dispatch: main_issue_task
+    inputs: [task, execution_result, workflow_status, blocker_type, needs_user_decision, revisionCount, review_result_text]
+    outputs: [final_report_text]
+    config:
+      system: |
+        Summarize the workflow outcome. If needs_user_decision is true, ask for the precise decision needed to continue.
+
+routing:
+  - from: START
+    to: execute
+  - from: execute
+    to: review
+  - from: review
+    to: loop_gate
+  - from: loop_gate
+    condition: 'workflow_status == "fixable_auto" && next_target == "execute" && revisionCount < 3'
+    to: execute
+    else: final_report
+  - from: final_report
+    to: END
+
+execution:
+  maxSteps: 10
+  defaultProfile: standard
+  profiles:
+    standard:
+      hardTimeoutMs: 180000
+      firstProgressTimeoutMs: 0
+      idleTimeoutAfterProgressMs: 60000
+      softTimeoutMs: 30000
+      maxOutputChars: 24000
