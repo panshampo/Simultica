@@ -227,6 +227,41 @@ func TestSubmitRuntimeWorkflowAllowsEmptySourceSkill(t *testing.T) {
 	}
 }
 
+func TestSubmitRuntimeWorkflowAllowsOwnedSourceSkill(t *testing.T) {
+	agentID := createHandlerTestAgent(t, "Runtime Workflow Owned Skill Agent", nil)
+	skillID := insertHandlerTestSkill(t, "owned-source-skill", "owned body")
+	if _, err := testPool.Exec(context.Background(),
+		`INSERT INTO agent_skill (agent_id, skill_id) VALUES ($1, $2)`,
+		agentID, skillID,
+	); err != nil {
+		t.Fatalf("bind skill to agent: %v", err)
+	}
+	issueID := createHandlerTestIssueWithAssignee(t, "owned source skill", agentID, "in_progress")
+	body := map[string]any{
+		"definition": map[string]any{
+			"meta": map[string]any{"name": "x"},
+			"nodes": []map[string]any{
+				{
+					"id":              "impl",
+					"type":            "subissue",
+					"dispatch":        "subissue",
+					"agent":           uuidToString(parseUUID(agentID)),
+					"source_skill_id": uuidToString(parseUUID(skillID)),
+				},
+			},
+			"routing": []map[string]any{{"from": "START", "to": "impl"}, {"from": "impl", "to": "END"}},
+		},
+	}
+	req := newRequest(http.MethodPost, "/api/issues/"+issueID+"/runtime-workflows?workspace_id="+testWorkspaceID, body)
+	req = withURLParam(req, "id", issueID)
+	rec := httptest.NewRecorder()
+	testHandler.SubmitRuntimeWorkflow(rec, req)
+	// 拥有该 source_skill 的节点不应被来源校验拦截（可能因 sidecar 不可用返回 502，但不能是 400 来源错误）
+	if rec.Code == http.StatusBadRequest {
+		t.Fatalf("owned source_skill must not be rejected by source validation: %s", rec.Body.String())
+	}
+}
+
 func TestEnqueueWorkflowPlannerTaskSetsContext(t *testing.T) {
 	ctx := context.Background()
 	agentID := createHandlerTestAgent(t, "Workflow Planner Agent", nil)
