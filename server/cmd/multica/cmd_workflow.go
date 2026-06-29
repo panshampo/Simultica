@@ -66,6 +66,11 @@ func runWorkflowSubmit(cmd *cobra.Command, args []string) error {
 	}
 
 	fromStdin, _ := cmd.Flags().GetBool("definition-stdin")
+	initialStateFromStdin, _ := cmd.Flags().GetBool("initial-state-stdin")
+	if fromStdin && initialStateFromStdin {
+		return fmt.Errorf("--definition-stdin and --initial-state-stdin cannot be combined; only one value can be read from stdin")
+	}
+
 	definitionRaw, _ := cmd.Flags().GetString("definition")
 	if fromStdin {
 		buf, err := io.ReadAll(cmd.InOrStdin())
@@ -79,7 +84,7 @@ func runWorkflowSubmit(cmd *cobra.Command, args []string) error {
 	}
 
 	initialStateRaw, _ := cmd.Flags().GetString("initial-state")
-	if v, _ := cmd.Flags().GetBool("initial-state-stdin"); v {
+	if initialStateFromStdin {
 		buf, err := io.ReadAll(cmd.InOrStdin())
 		if err != nil {
 			return fmt.Errorf("read --initial-state-stdin: %w", err)
@@ -102,6 +107,11 @@ func runWorkflowSubmit(cmd *cobra.Command, args []string) error {
 	var result map[string]any
 	if err := client.PostJSON(ctx, path, body, &result); err != nil {
 		return fmt.Errorf("submit runtime workflow: %w", err)
+	}
+
+	output, _ := cmd.Flags().GetString("output")
+	if output != "json" {
+		return fmt.Errorf("unsupported --output %q: only json is supported", output)
 	}
 	return cli.PrintJSON(os.Stdout, result)
 }
