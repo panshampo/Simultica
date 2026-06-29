@@ -39,6 +39,15 @@ type SubAgentRouteForEnv struct {
 	Description string
 }
 
+// WorkflowMainNodeForEnv marks a task as a workflow final/review node execution,
+// so the main agent knows it is summarizing a workflow run rather than handling
+// an ordinary comment-triggered task.
+type WorkflowMainNodeForEnv struct {
+	RunID    string
+	NodeID   string
+	NodeType string
+}
+
 // PrepareParams holds all inputs needed to set up an execution environment.
 type PrepareParams struct {
 	WorkspacesRoot string // base path for all envs (e.g., ~/multica_workspaces)
@@ -89,6 +98,11 @@ type TaskContextForEnv struct {
 	// when composing a runtime workflow. Only ID/Name/Role/Description — never
 	// the sub-agent's bound skills (spec: main agent does not see sub-agent skills).
 	SubAgentRoutes          []SubAgentRouteForEnv
+	// WorkflowMainNode is non-nil when this task is a workflow final/review node
+	// execution (created by EnqueueWorkflowMainNodeTask). The brief renders a
+	// `## Workflow Final/Review Task` block so the main agent knows it is
+	// summarizing a workflow run rather than handling an ordinary comment.
+	WorkflowMainNode        *WorkflowMainNodeForEnv
 	ChatSessionID           string                  // non-empty for chat tasks
 	AutopilotRunID          string                  // non-empty for autopilot run_only tasks
 	AutopilotID             string

@@ -176,6 +176,18 @@ type SubAgentRouteData struct {
 	Description string `json:"description"`
 }
 
+// WorkflowMainNodeData is the wire shape for the parsed `workflow_main_node`
+// task context (written by EnqueueWorkflowMainNodeTask). When present in a
+// claim response, the daemon renders the agent brief's `## Workflow
+// Final/Review Task` block so the main agent knows it is summarizing a
+// workflow run. The mirror struct on the daemon side lives in
+// internal/daemon/types.go with the same JSON field names.
+type WorkflowMainNodeData struct {
+	RunID    string `json:"workflow_run_id"`
+	NodeID   string `json:"node_id"`
+	NodeType string `json:"node_type"`
+}
+
 type AgentTaskResponse struct {
 	ID          string `json:"id"`
 	AgentID     string `json:"agent_id"`
@@ -202,11 +214,12 @@ type AgentTaskResponse struct {
 	ParentTaskID     *string               `json:"parent_task_id,omitempty"`
 	Agent            *TaskAgentData        `json:"agent,omitempty"`
 	Repos            []RepoData            `json:"repos,omitempty"`
-	ProjectID        string                `json:"project_id,omitempty"`        // issue's project, when present
-	ProjectTitle     string                `json:"project_title,omitempty"`     // for surfacing in agent context
-	ProjectResources []ProjectResourceData `json:"project_resources,omitempty"` // resources attached to the project
-	WorkflowContext  string                `json:"workflow_context,omitempty"`  // latest workflow_run summary for this issue, when present
-	SubAgentRoutes   []SubAgentRouteData   `json:"sub_agent_routes,omitempty"`  // workspace sub-agents the main agent may dispatch to in a runtime workflow (issue tasks only)
+	ProjectID        string                `json:"project_id,omitempty"`         // issue's project, when present
+	ProjectTitle     string                `json:"project_title,omitempty"`      // for surfacing in agent context
+	ProjectResources []ProjectResourceData `json:"project_resources,omitempty"`  // resources attached to the project
+	WorkflowContext  string                `json:"workflow_context,omitempty"`   // latest workflow_run summary for this issue, when present
+	SubAgentRoutes   []SubAgentRouteData   `json:"sub_agent_routes,omitempty"`   // workspace sub-agents the main agent may dispatch to in a runtime workflow (issue tasks only)
+	WorkflowMainNode *WorkflowMainNodeData `json:"workflow_main_node,omitempty"` // set when this task is a workflow final/review node execution
 	CreatedAt        string                `json:"created_at"`
 	PriorSessionID   string                `json:"prior_session_id,omitempty"` // session ID from a previous task on same issue
 	PriorWorkDir     string                `json:"prior_work_dir,omitempty"`   // work_dir from a previous task on same issue

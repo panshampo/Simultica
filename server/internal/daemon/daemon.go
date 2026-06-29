@@ -2639,6 +2639,7 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 		ProjectResources:                 convertProjectResourcesForEnv(task.ProjectResources),
 		WorkflowContext:                  task.WorkflowContext,
 		SubAgentRoutes:                   convertSubAgentRoutesForEnv(task.SubAgentRoutes),
+		WorkflowMainNode:                 convertWorkflowMainNodeForEnv(task.WorkflowMainNode),
 		ChatSessionID:                    task.ChatSessionID,
 		AutopilotRunID:                   task.AutopilotRunID,
 		AutopilotID:                      task.AutopilotID,
@@ -3606,6 +3607,13 @@ func convertSubAgentRoutesForEnv(in []SubAgentRouteData) []execenv.SubAgentRoute
 		out = append(out, execenv.SubAgentRouteForEnv{ID: r.ID, Name: r.Name, Role: r.Role, Description: r.Description})
 	}
 	return out
+}
+
+func convertWorkflowMainNodeForEnv(in *WorkflowMainNodeData) *execenv.WorkflowMainNodeForEnv {
+	if in == nil {
+		return nil
+	}
+	return &execenv.WorkflowMainNodeForEnv{RunID: in.RunID, NodeID: in.NodeID, NodeType: in.NodeType}
 }
 
 // markActiveEnvRoot records that a task is currently using the given env root,

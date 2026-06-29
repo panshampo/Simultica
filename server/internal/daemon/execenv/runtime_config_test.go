@@ -1456,3 +1456,29 @@ func TestWorkflowOrchestrationNotRenderedForChatTasks(t *testing.T) {
 		t.Errorf("chat task must not get workflow orchestration block")
 	}
 }
+
+func TestWorkflowMainNodeTaskRendered(t *testing.T) {
+	ctx := TaskContextForEnv{
+		IssueID: "11111111-2222-3333-4444-555555555555",
+		WorkflowMainNode: &WorkflowMainNodeForEnv{
+			RunID:    "run-abc",
+			NodeID:   "final_summary",
+			NodeType: "final_response",
+		},
+	}
+	dir := t.TempDir()
+	content, err := InjectRuntimeConfig(dir, "claude", ctx)
+	if err != nil {
+		t.Fatalf("InjectRuntimeConfig: %v", err)
+	}
+	for _, want := range []string{
+		"## Workflow Final/Review Task",
+		"run-abc",
+		"final_summary",
+		"final summary",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("brief missing %q", want)
+		}
+	}
+}

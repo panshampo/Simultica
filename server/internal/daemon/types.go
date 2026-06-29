@@ -43,6 +43,16 @@ type SubAgentRouteData struct {
 	Description string `json:"description"`
 }
 
+// WorkflowMainNodeData mirrors handler.WorkflowMainNodeData — the parsed
+// `workflow_main_node` task context that marks a task as a workflow
+// final/review node execution. The daemon renders it into the agent brief's
+// `## Workflow Final/Review Task` block.
+type WorkflowMainNodeData struct {
+	RunID    string `json:"workflow_run_id"`
+	NodeID   string `json:"node_id"`
+	NodeType string `json:"node_type"`
+}
+
 // Task represents a claimed task from the server.
 // Agent data (name, skills) is populated by the claim endpoint.
 type Task struct {
@@ -64,6 +74,7 @@ type Task struct {
 	ProjectResources        []ProjectResourceData `json:"project_resources,omitempty"`         // project-scoped resources to expose to the agent
 	WorkflowContext         string                `json:"workflow_context,omitempty"`          // latest workflow_run summary for this issue, when present
 	SubAgentRoutes          []SubAgentRouteData   `json:"sub_agent_routes,omitempty"`          // workspace sub-agents the main agent may dispatch to in a runtime workflow (issue tasks only)
+	WorkflowMainNode        *WorkflowMainNodeData `json:"workflow_main_node,omitempty"`        // set when this task is a workflow final/review node execution
 	PriorSessionID          string                `json:"prior_session_id,omitempty"`          // Claude session ID from a previous task on this issue
 	PriorWorkDir            string                `json:"prior_work_dir,omitempty"`            // work_dir from a previous task on this issue
 	TriggerCommentID        string                `json:"trigger_comment_id,omitempty"`        // comment that triggered this task

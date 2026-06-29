@@ -1180,6 +1180,23 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 			// to issue tasks (not chat / quick-create / autopilot).
 			resp.SubAgentRoutes = h.subAgentRoutesForWorkspace(r.Context(), issue.WorkspaceID)
 
+			// Workflow final/review node: when this task was enqueued by
+			// EnqueueWorkflowMainNodeTask, its context JSON carries
+			// type=workflow_main_node plus the run/node identifiers. Parse it so
+			// the daemon can render the `## Workflow Final/Review Task` brief
+			// block telling the main agent it is summarizing a workflow run.
+			if len(task.Context) > 0 {
+				var mn struct {
+					Type     string `json:"type"`
+					RunID    string `json:"workflow_run_id"`
+					NodeID   string `json:"node_id"`
+					NodeType string `json:"node_type"`
+				}
+				if json.Unmarshal(task.Context, &mn) == nil && mn.Type == "workflow_main_node" {
+					resp.WorkflowMainNode = &WorkflowMainNodeData{RunID: mn.RunID, NodeID: mn.NodeID, NodeType: mn.NodeType}
+				}
+			}
+
 			// Squad-leader briefing injection: when the issue is assigned
 			// to a squad and the claiming agent is that squad's current
 			// leader, append a full briefing (Operating Protocol + Roster

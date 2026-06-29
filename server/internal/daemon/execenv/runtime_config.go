@@ -472,6 +472,13 @@ func buildMetaSkillContent(provider string, ctx TaskContextForEnv) string {
 		}
 	}
 
+	if ctx.WorkflowMainNode != nil {
+		mn := ctx.WorkflowMainNode
+		b.WriteString("## Workflow Final/Review Task\n\n")
+		fmt.Fprintf(&b, "You are executing node `%s` (`%s`) of workflow run `%s`. This is NOT an ordinary comment-triggered task.\n\n", mn.NodeID, mn.NodeType, mn.RunID)
+		b.WriteString("Read the Runtime Workflow Context above and the completed sub-node results, then post a final summary comment on this issue that consolidates the workflow's outputs for the user. Do not re-plan or dispatch new sub-issues.\n\n")
+	}
+
 	b.WriteString("## Available Commands\n\n")
 	b.WriteString("**Use `--output json` for structured data.** Human table output now prints routable issue keys (for example `MUL-123`) and short UUID prefixes for workspace resources; use `--full-id` on list commands when you need canonical UUIDs.\n\n")
 	b.WriteString("The default brief includes the commands needed for the core agent loop and common issue create/update tasks. For everything else, run `multica --help`, `multica <command> --help`, or `multica <command> <subcommand> --help`; prefer `--output json` when the command supports it.\n\n")
