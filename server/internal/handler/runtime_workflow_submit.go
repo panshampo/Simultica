@@ -118,6 +118,23 @@ func inferRuntimeWorkflowDispatch(nodeType string) string {
 	}
 }
 
+// validateRuntimeWorkflowSourceSkills rejects any node that declares a
+// source_skill_id which is not bound to the main agent (the allowed set).
+// Nodes with no source_skill_id (freshly authored, not derived from a
+// template) are allowed.
+func validateRuntimeWorkflowSourceSkills(def runtimeWorkflowDefinition, allowed map[string]bool) error {
+	for _, node := range def.Nodes {
+		sid := strings.TrimSpace(node.SourceSkillID)
+		if sid == "" {
+			continue // 允许无来源的自定义节点
+		}
+		if !allowed[sid] {
+			return fmt.Errorf("node %q references source_skill_id %q not bound to the main agent", node.ID, sid)
+		}
+	}
+	return nil
+}
+
 func (h *Handler) SubmitRuntimeWorkflow(w http.ResponseWriter, r *http.Request) {
 	workspaceID, ok := h.workflowWorkspaceID(w, r)
 	if !ok {
@@ -148,6 +165,22 @@ func (h *Handler) SubmitRuntimeWorkflow(w http.ResponseWriter, r *http.Request) 
 	}
 	def, err := validateRuntimeWorkflowDefinition(req.Definition)
 	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	allowedSkills := map[string]bool{}
+	if issue.AssigneeID.Valid && issue.AssigneeType.Valid && issue.AssigneeType.String == "agent" {
+		skills, err := h.Queries.ListAgentSkills(r.Context(), issue.AssigneeID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "load agent skills: "+err.Error())
+			return
+		}
+		for _, s := range skills {
+			allowedSkills[uuidToString(s.ID)] = true
+		}
+	}
+	if err := validateRuntimeWorkflowSourceSkills(def, allowedSkills); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}

@@ -148,9 +148,6 @@ func validRuntimeWorkflowSubmitBody() map[string]any {
 					"type":                   "agent",
 					"dispatch":               "subissue",
 					"agent":                  "code",
-					"source_skill_id":        "skill-1",
-					"source_skill_name":      "implementation",
-					"source_node_id":         "implement",
 					"modified_from_template": false,
 					"config":                 map[string]any{"system": "implement the request"},
 					"outputs":                []string{"implementation_summary"},
@@ -161,6 +158,72 @@ func validRuntimeWorkflowSubmitBody() map[string]any {
 				{"from": "implement", "to": "END"},
 			},
 		},
+	}
+}
+
+// createHandlerTestIssueWithAssignee creates a fresh issue and assigns it to
+// the given agent. The brief referenced this helper by name; it does not exist
+// in this codebase, so it is defined here in terms of the real helpers
+// (createIssueForTimeline + a direct assignee UPDATE, the same assignment
+// pattern used by TestEnqueueWorkflowPlannerTaskSetsContext).
+func createHandlerTestIssueWithAssignee(t *testing.T, title, agentID, status string) string {
+	t.Helper()
+	issueID := createIssueForTimeline(t, title)
+	if _, err := testPool.Exec(context.Background(),
+		`UPDATE issue SET assignee_type = 'agent', assignee_id = $1, status = $2 WHERE id = $3`,
+		agentID, status, issueID,
+	); err != nil {
+		t.Fatalf("assign issue to agent: %v", err)
+	}
+	return issueID
+}
+
+func TestSubmitRuntimeWorkflowRejectsForeignSourceSkill(t *testing.T) {
+	agentID := createHandlerTestAgent(t, "Runtime Workflow Foreign Skill Agent", nil)
+	issueID := createHandlerTestIssueWithAssignee(t, "foreign source skill", agentID, "in_progress")
+	body := map[string]any{
+		"definition": map[string]any{
+			"meta": map[string]any{"name": "x"},
+			"nodes": []map[string]any{
+				{
+					"id":              "impl",
+					"type":            "subissue",
+					"dispatch":        "subissue",
+					"agent":           uuidToString(parseUUID(agentID)),
+					"source_skill_id": "00000000-0000-0000-0000-0000000000ff",
+				},
+			},
+			"routing": []map[string]any{{"from": "START", "to": "impl"}, {"from": "impl", "to": "END"}},
+		},
+	}
+	req := newRequest(http.MethodPost, "/api/issues/"+issueID+"/runtime-workflows?workspace_id="+testWorkspaceID, body)
+	req = withURLParam(req, "id", issueID)
+	rec := httptest.NewRecorder()
+	testHandler.SubmitRuntimeWorkflow(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for foreign source skill, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSubmitRuntimeWorkflowAllowsEmptySourceSkill(t *testing.T) {
+	agentID := createHandlerTestAgent(t, "Runtime Workflow Empty Skill Agent", nil)
+	issueID := createHandlerTestIssueWithAssignee(t, "empty source skill", agentID, "in_progress")
+	body := map[string]any{
+		"definition": map[string]any{
+			"meta": map[string]any{"name": "x"},
+			"nodes": []map[string]any{
+				{"id": "impl", "type": "subissue", "dispatch": "subissue", "agent": uuidToString(parseUUID(agentID))},
+			},
+			"routing": []map[string]any{{"from": "START", "to": "impl"}, {"from": "impl", "to": "END"}},
+		},
+	}
+	req := newRequest(http.MethodPost, "/api/issues/"+issueID+"/runtime-workflows?workspace_id="+testWorkspaceID, body)
+	req = withURLParam(req, "id", issueID)
+	rec := httptest.NewRecorder()
+	testHandler.SubmitRuntimeWorkflow(rec, req)
+	// 无 source_skill 的节点不应被来源校验拦截（可能因 sidecar 不可用返回 502，但不能是 400 来源错误）
+	if rec.Code == http.StatusBadRequest {
+		t.Fatalf("empty source_skill must not be rejected by source validation: %s", rec.Body.String())
 	}
 }
 
