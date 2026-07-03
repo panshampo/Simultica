@@ -9,6 +9,13 @@ type dsCopilotBackend struct {
 	cfg Config
 }
 
+func init() {
+	RegisterBackend("ds-copilot", func(cfg Config) (Backend, error) {
+		return &dsCopilotBackend{cfg: cfg}, nil
+	})
+	RegisterLaunchHeader("ds-copilot", "ds-copilot (stream-json)")
+}
+
 func (b *dsCopilotBackend) Execute(ctx context.Context, prompt string, opts ExecOptions) (*Session, error) {
 	opts.Model = ""
 	return (&claudeBackend{cfg: b.cfg}).execute(ctx, prompt, opts, claudeExecutionOptions{

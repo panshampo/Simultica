@@ -1,0 +1,85 @@
+{
+  "page": {
+    "title": "Templates",
+    "new_template": "New template",
+    "search_placeholder": "Search templates...",
+    "empty": "No templates yet",
+    "empty_search": "No templates match this search"
+  },
+  "table": {
+    "template": "Template",
+    "assignee": "Assignee",
+    "priority": "Priority",
+    "updated": "Updated",
+    "actions": "Actions"
+  },
+  "detail": {
+    "back": "Back to templates",
+    "not_found": "Template not found",
+    "issue_title": "Issue title",
+    "issue_body": "Issue body",
+    "empty_body": "No body template",
+    "properties": "Properties",
+    "references": "References",
+    "issue_refs": "Issues",
+    "automation_refs": "Automations"
+  },
+  "dialog": {
+    "create_title": "Create template",
+    "edit_title": "Edit template",
+    "description": "Save a reusable issue shape with a default assignee and priority.",
+    "assignee_note": "New issues from this template will be assigned to this actor."
+  },
+  "delete_dialog": {
+    "title": "Delete template?",
+    "description": "This deletes \"{{name}}\". Existing issues are not affected."
+  },
+  "fields": {
+    "name": "Name",
+    "name_placeholder": "Weekly release review",
+    "issue_title": "Issue title template",
+    "issue_title_placeholder": "Review {{release}} before launch",
+    "issue_body": "Issue body template",
+    "issue_body_placeholder": "Context, checklist, acceptance criteria...",
+    "project": "Project",
+    "no_project": "No project",
+    "assignee": "Assignee",
+    "assignee_placeholder": "Select agent or squad",
+    "assignee_empty": "Create an agent or squad before saving a template.",
+    "priority": "Priority",
+    "updated": "Updated",
+    "created": "Created"
+  },
+  "priority": {
+    "none": "None",
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "urgent": "Urgent"
+  },
+  "actions": {
+    "use": "Use",
+    "edit": "Edit",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "create": "Create",
+    "save": "Save",
+    "saving": "Saving...",
+    "deleting": "Deleting..."
+  },
+  "quick_create": {
+    "trigger": "Use template",
+    "empty": "No templates yet",
+    "loading": "Loading templates...",
+    "created": "Issue created from template"
+  },
+  "toast": {
+    "created": "Template created",
+    "updated": "Template updated",
+    "deleted": "Template deleted",
+    "save_failed": "Could not save template",
+    "delete_failed": "Could not delete template",
+    "instantiated": "Issue created from template",
+    "instantiate_failed": "Could not create issue from template"
+  }
+}

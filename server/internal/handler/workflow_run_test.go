@@ -62,6 +62,72 @@ func TestGetIssueWorkflowRun_ReturnsLatest(t *testing.T) {
 	}
 }
 
+func TestGetIssueWorkflowRunOverlaysSubIssueStatuses(t *testing.T) {
+	ctx := context.Background()
+	issueID := createIssueForTimeline(t, "wf child status overlay")
+	var runID string
+	if err := testPool.QueryRow(ctx, `
+		INSERT INTO workflow_run (workspace_id, root_issue_id, status, current_node, nodes_state, definition_snapshot)
+		VALUES ($1, $2, 'running', 'review', '{"review":{"status":"running","sub_issue_id":null},"blocked":{"status":"running","sub_issue_id":null}}', '{"meta":{"name":"wf"}}')
+		RETURNING id
+	`, testWorkspaceID, issueID).Scan(&runID); err != nil {
+		t.Fatalf("seed workflow_run: %v", err)
+	}
+	reviewID := createIssueForTimeline(t, "wf child in review")
+	blockedID := createIssueForTimeline(t, "wf child blocked")
+	if _, err := testPool.Exec(ctx, `
+		UPDATE issue
+		SET parent_issue_id=$1, origin_type='workflow_node', origin_id=$2, status='in_review'
+		WHERE id=$3
+	`, issueID, runID, reviewID); err != nil {
+		t.Fatalf("seed review child: %v", err)
+	}
+	if _, err := testPool.Exec(ctx, `
+		UPDATE issue
+		SET parent_issue_id=$1, origin_type='workflow_node', origin_id=$2, status='blocked'
+		WHERE id=$3
+	`, issueID, runID, blockedID); err != nil {
+		t.Fatalf("seed blocked child: %v", err)
+	}
+	if _, err := testPool.Exec(ctx, `
+		UPDATE workflow_run
+		SET nodes_state=jsonb_build_object(
+			'review', jsonb_build_object('status', 'running', 'sub_issue_id', $2::text),
+			'blocked', jsonb_build_object('status', 'running', 'sub_issue_id', $3::text)
+		)
+		WHERE id=$1
+	`, runID, reviewID, blockedID); err != nil {
+		t.Fatalf("link child nodes: %v", err)
+	}
+	t.Cleanup(func() {
+		testPool.Exec(ctx, `DELETE FROM workflow_run WHERE id = $1`, runID)
+	})
+
+	req := newRequest("GET", "/api/issues/"+issueID+"/workflow-run", nil)
+	req = withURLParam(req, "id", issueID)
+	w := httptest.NewRecorder()
+
+	testHandler.GetIssueWorkflowRun(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp WorkflowRunResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	var nodes map[string]map[string]any
+	if err := json.Unmarshal(resp.NodesState, &nodes); err != nil {
+		t.Fatalf("decode nodes_state: %v", err)
+	}
+	if nodes["review"]["status"] != "done" {
+		t.Fatalf("in_review child should overlay as done, got %#v", nodes["review"])
+	}
+	if nodes["blocked"]["status"] != "blocked" {
+		t.Fatalf("blocked child should overlay as blocked, got %#v", nodes["blocked"])
+	}
+}
+
 func TestCreateAndUpdateWorkflowRun(t *testing.T) {
 	ctx := context.Background()
 	issueID := createIssueForTimeline(t, "wf create update")

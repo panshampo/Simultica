@@ -50,23 +50,26 @@ func NewIssueService(q *db.Queries, tx TxStarter, bus *events.Bus, ac analytics.
 // to IssueService.Create. The handler owns the parsing step that turns its
 // request payload into this struct; the service stays transport-agnostic.
 type IssueCreateParams struct {
-	WorkspaceID    pgtype.UUID
-	Title          string
-	Description    pgtype.Text
-	Status         string
-	Priority       string
-	AssigneeType   pgtype.Text
-	AssigneeID     pgtype.UUID
-	CreatorType    string // "agent" or "member"
-	CreatorID      pgtype.UUID
-	ParentIssueID  pgtype.UUID
-	ProjectID      pgtype.UUID
-	StartDate      pgtype.Date
-	DueDate        pgtype.Date
-	OriginType     pgtype.Text
-	OriginID       pgtype.UUID
-	AttachmentIDs  []pgtype.UUID
-	AllowDuplicate bool
+	WorkspaceID           pgtype.UUID
+	Title                 string
+	Description           pgtype.Text
+	Status                string
+	Priority              string
+	AssigneeType          pgtype.Text
+	AssigneeID            pgtype.UUID
+	CreatorType           string // "agent" or "member"
+	CreatorID             pgtype.UUID
+	ParentIssueID         pgtype.UUID
+	ProjectID             pgtype.UUID
+	StartDate             pgtype.Date
+	DueDate               pgtype.Date
+	OriginType            pgtype.Text
+	OriginID              pgtype.UUID
+	AutomationRunID       pgtype.UUID
+	IssueTemplateID       pgtype.UUID
+	IssueTemplateSnapshot []byte
+	AttachmentIDs         []pgtype.UUID
+	AllowDuplicate        bool
 }
 
 // IssueCreateOpts groups optional knobs for IssueService.Create. Most
@@ -225,7 +228,30 @@ func (s *IssueService) Create(ctx context.Context, p IssueCreateParams, opts Iss
 	}
 
 	var issue db.Issue
-	if p.OriginType.Valid {
+	if p.IssueTemplateID.Valid {
+		issue, err = qtx.CreateIssueWithTemplate(ctx, db.CreateIssueWithTemplateParams{
+			WorkspaceID:           p.WorkspaceID,
+			Title:                 p.Title,
+			Description:           p.Description,
+			Status:                p.Status,
+			Priority:              p.Priority,
+			AssigneeType:          p.AssigneeType,
+			AssigneeID:            p.AssigneeID,
+			CreatorType:           p.CreatorType,
+			CreatorID:             p.CreatorID,
+			ParentIssueID:         p.ParentIssueID,
+			Position:              newPosition,
+			StartDate:             p.StartDate,
+			DueDate:               p.DueDate,
+			Number:                issueNumber,
+			ProjectID:             projectID,
+			OriginType:            p.OriginType,
+			OriginID:              p.OriginID,
+			AutomationRunID:       p.AutomationRunID,
+			IssueTemplateID:       p.IssueTemplateID,
+			IssueTemplateSnapshot: p.IssueTemplateSnapshot,
+		})
+	} else if p.OriginType.Valid {
 		issue, err = qtx.CreateIssueWithOrigin(ctx, db.CreateIssueWithOriginParams{
 			WorkspaceID:   p.WorkspaceID,
 			Title:         p.Title,

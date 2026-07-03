@@ -760,17 +760,19 @@ func webhookActionCandidates(eventAction string, payload json.RawMessage) []stri
 // ── Persistence helpers ─────────────────────────────────────────────────────
 
 type persistDeliveryInput struct {
-	WorkspaceID     pgtype.UUID
-	AutopilotID     pgtype.UUID
-	TriggerID       pgtype.UUID
-	Provider        string
-	Event           string
-	DedupeKey       string
-	DedupeSource    string
-	SignatureStatus string
-	ContentType     string
-	RawBody         []byte
-	SelectedHeaders []byte
+	WorkspaceID         pgtype.UUID
+	AutopilotID         pgtype.UUID
+	TriggerID           pgtype.UUID
+	AutomationID        pgtype.UUID
+	AutomationTriggerID pgtype.UUID
+	Provider            string
+	Event               string
+	DedupeKey           string
+	DedupeSource        string
+	SignatureStatus     string
+	ContentType         string
+	RawBody             []byte
+	SelectedHeaders     []byte
 }
 
 // persistInboundDelivery INSERTs a fresh `queued` delivery, returning (row,
@@ -779,15 +781,17 @@ type persistDeliveryInput struct {
 // Any other error bubbles up so the handler can 500 cleanly.
 func (h *Handler) persistInboundDelivery(r *http.Request, in persistDeliveryInput) (db.WebhookDelivery, bool, error) {
 	params := db.CreateWebhookDeliveryParams{
-		WorkspaceID:     in.WorkspaceID,
-		AutopilotID:     in.AutopilotID,
-		TriggerID:       in.TriggerID,
-		Provider:        in.Provider,
-		Event:           in.Event,
-		SignatureStatus: in.SignatureStatus,
-		Status:          deliveryStatusQueued,
-		SelectedHeaders: in.SelectedHeaders,
-		RawBody:         in.RawBody,
+		WorkspaceID:         in.WorkspaceID,
+		AutopilotID:         in.AutopilotID,
+		TriggerID:           in.TriggerID,
+		AutomationID:        in.AutomationID,
+		AutomationTriggerID: in.AutomationTriggerID,
+		Provider:            in.Provider,
+		Event:               in.Event,
+		SignatureStatus:     in.SignatureStatus,
+		Status:              deliveryStatusQueued,
+		SelectedHeaders:     in.SelectedHeaders,
+		RawBody:             in.RawBody,
 	}
 	if in.DedupeKey != "" {
 		params.DedupeKey = pgtype.Text{String: in.DedupeKey, Valid: true}
@@ -805,10 +809,19 @@ func (h *Handler) persistInboundDelivery(r *http.Request, in persistDeliveryInpu
 		return db.WebhookDelivery{}, false, err
 	}
 	// Dedupe collision: fetch the original row, bump attempt count.
-	existing, lookupErr := h.Queries.GetWebhookDeliveryByTriggerAndDedupe(r.Context(), db.GetWebhookDeliveryByTriggerAndDedupeParams{
-		TriggerID: in.TriggerID,
-		DedupeKey: pgtype.Text{String: in.DedupeKey, Valid: true},
-	})
+	var existing db.WebhookDelivery
+	var lookupErr error
+	if in.AutomationTriggerID.Valid {
+		existing, lookupErr = h.Queries.GetWebhookDeliveryByAutomationTriggerAndDedupe(r.Context(), db.GetWebhookDeliveryByAutomationTriggerAndDedupeParams{
+			AutomationTriggerID: in.AutomationTriggerID,
+			DedupeKey:           pgtype.Text{String: in.DedupeKey, Valid: true},
+		})
+	} else {
+		existing, lookupErr = h.Queries.GetWebhookDeliveryByTriggerAndDedupe(r.Context(), db.GetWebhookDeliveryByTriggerAndDedupeParams{
+			TriggerID: in.TriggerID,
+			DedupeKey: pgtype.Text{String: in.DedupeKey, Valid: true},
+		})
+	}
 	if lookupErr != nil {
 		return db.WebhookDelivery{}, false, fmt.Errorf("lookup duplicate delivery: %w", lookupErr)
 	}
@@ -876,6 +889,35 @@ func (h *Handler) finaliseDeliveryWithRun(
 	}
 	if _, err := h.Queries.UpdateWebhookDeliveryDispatched(r.Context(), params); err != nil {
 		slog.Warn("webhook: finalise with run failed",
+			"delivery_id", uuidToString(id),
+			"run_id", uuidToString(runID),
+			"error", err,
+		)
+	}
+	h.Metrics.RecordWebhookDelivery(h.deliveryProvider(r.Context(), id), status)
+}
+
+// finaliseDeliveryWithAutomationRun is the automation-family equivalent of
+// finaliseDeliveryWithRun. It links automation_run_id while leaving legacy
+// autopilot_run_id NULL.
+func (h *Handler) finaliseDeliveryWithAutomationRun(
+	r *http.Request,
+	id pgtype.UUID,
+	status string,
+	runID pgtype.UUID,
+	httpStatus int,
+	responseBody any,
+) {
+	bodyJSON, _ := json.Marshal(responseBody)
+	params := db.UpdateWebhookDeliveryDispatchedParams{
+		ID:              id,
+		Status:          status,
+		AutomationRunID: runID,
+		ResponseStatus:  pgtype.Int4{Int32: int32(httpStatus), Valid: true},
+		ResponseBody:    pgtype.Text{String: string(bodyJSON), Valid: true},
+	}
+	if _, err := h.Queries.UpdateWebhookDeliveryDispatched(r.Context(), params); err != nil {
+		slog.Warn("webhook: finalise automation with run failed",
 			"delivery_id", uuidToString(id),
 			"run_id", uuidToString(runID),
 			"error", err,

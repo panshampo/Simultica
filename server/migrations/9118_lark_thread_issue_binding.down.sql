@@ -1,4 +1,4 @@
--- Reverse of 118_lark_thread_issue_binding.up.sql. Restores the
+-- Reverse of 9118_lark_thread_issue_binding.up.sql. Restores the
 -- pre-thread schema: drops the triple UNIQUE / new columns, restores
 -- the legacy (installation_id, lark_chat_id) UNIQUE, removes
 -- agent.lark_issue_project_id.

@@ -450,14 +450,61 @@ func buildMetaSkillContent(provider string, ctx TaskContextForEnv) string {
 
 	if ctx.IssueID != "" && ctx.ChatSessionID == "" && ctx.AutopilotRunID == "" && ctx.QuickCreatePrompt == "" {
 		b.WriteString("## Workflow Orchestration\n\n")
-		b.WriteString("For a complex issue that splits into multiple relatively independent sub-tasks needing visible progress, auditing, or a Stop control, you MAY compile a runtime workflow graph and submit it with:\n\n")
+		b.WriteString("### Step 0: Workflow Decision (MANDATORY)\n\n")
+		b.WriteString("**Before doing anything else, you MUST decide whether this issue should be handled natively (single agent) or via a runtime workflow (multi-node orchestration).** Do not skip this step.\n\n")
+		b.WriteString("**Rule: if the issue clearly matches any of your bound skills that have a workflow definition, you MUST use the workflow — do NOT hand-roll sub-issues yourself.**\n\n")
+		b.WriteString("A skill has a workflow when its directory contains a `workflow.yaml` file. The workflow defines the multi-step orchestration plan; using it gives you visible progress tracking, stop/resume, and consistent execution order.\n\n")
+
+		// List skills with workflow indicators
+		workflowSkills := make([]SkillContextForEnv, 0)
+		plainSkills := make([]SkillContextForEnv, 0)
+		for _, s := range ctx.AgentSkills {
+			hasWF := false
+			for _, f := range s.Files {
+				if f.Path == "workflow.yaml" {
+					hasWF = true
+					break
+				}
+			}
+			if hasWF {
+				workflowSkills = append(workflowSkills, s)
+			} else {
+				plainSkills = append(plainSkills, s)
+			}
+		}
+
+		if len(workflowSkills) > 0 {
+			b.WriteString("**Your skills that have workflow definitions (MUST use when issue matches):**\n\n")
+			for _, s := range workflowSkills {
+				if desc := strings.TrimSpace(s.Description); desc != "" {
+					fmt.Fprintf(&b, "- **%s** (has workflow) — %s\n", s.Name, desc)
+				} else {
+					fmt.Fprintf(&b, "- **%s** (has workflow)\n", s.Name)
+				}
+			}
+			b.WriteString("\n")
+		}
+
+		b.WriteString("### How to start a skill-based workflow\n\n")
+		b.WriteString("Follow these steps EXACTLY. Do NOT hand-create sub-issues when a matching workflow skill exists.\n\n")
+		b.WriteString("1. Run `multica skill list --output json` to confirm the skill id of the matching workflow skill.\n")
+		b.WriteString("2. Run `multica skill files <skill-id> --output json` to find the `workflow.yaml` file id.\n")
+		b.WriteString("3. Run `multica skill files get <skill-id> <file-path> --output json` to get the `workflow.yaml` content.\n")
+		b.WriteString("4. Parse the YAML, set `source_skills` to the skill name so progress links back to it, and fill `state` from the issue context.\n")
+		b.WriteString("5. Convert the YAML definition to JSON and submit with:\n\n")
 		b.WriteString("```\nmultica workflow submit <issueId> --definition-stdin\n```\n\n")
-		b.WriteString("The sidecar then orchestrates it: subissue nodes are dispatched to sub-agents as child issues; condition/merge nodes run internally; a main_issue_task/final_response node hands a final summary back to you. For simple single-step tasks, plain conversation, or light edits, do NOT use a workflow — just work natively.\n\n")
+		b.WriteString("Paste the full workflow JSON into stdin. After submission succeeds, your task is complete for now. Immediately mark the issue as `blocked` with reason `waiting for runtime workflow`, then exit. Do NOT inspect code, poll child issues, create fallback sub-issues, write findings, or produce a final answer. The sidecar will dispatch sub-issue nodes to sub-agents, and a final main_issue_task node will trigger you again for review/summary.\n\n")
+
+		b.WriteString("### When NOT to use a workflow\n\n")
+		b.WriteString("- Simple single-step tasks, plain conversation, or light edits.\n")
+		b.WriteString("- Issues that don't match any workflow skill above and are small enough to handle directly.\n\n")
+
+		b.WriteString("### Workflow definition reference\n\n")
 		b.WriteString("Definition JSON shape: top-level `meta`, optional `source_skills`, optional `state`, `nodes`, `routing`.\n")
 		b.WriteString("Node `type` whitelist: `agent`, `main_agent`, `subissue`, `condition`, `merge`, `final_response`.\n")
 		b.WriteString("Node `dispatch` whitelist: `subissue`, `inline`, `main_issue_task` (`direct_subagent` is reserved and not implemented — do not use).\n")
 		b.WriteString("Rules: a subissue node MUST set `agent` to a sub-agent route key (UUID below); main_issue_task may only be type main_agent or final_response; routing MUST connect START and END; node ids unique.\n\n")
-		b.WriteString("Minimal example:\n\n")
+		b.WriteString("Minimal hand-rolled example (prefer using a skill's workflow.yaml instead):\n\n")
 		b.WriteString("```json\n")
 		b.WriteString("{\"meta\":{\"name\":\"runtime-workflow\"},\"nodes\":[{\"id\":\"implement\",\"type\":\"subissue\",\"dispatch\":\"subissue\",\"agent\":\"<sub-agent-uuid>\",\"config\":{\"system\":\"Implement and return a summary.\"},\"outputs\":[\"implementation_summary\"]},{\"id\":\"final_summary\",\"type\":\"main_agent\",\"dispatch\":\"main_issue_task\",\"config\":{\"purpose\":\"summarize results\"}}],\"routing\":[{\"from\":\"START\",\"to\":\"implement\"},{\"from\":\"implement\",\"to\":\"final_summary\"},{\"from\":\"final_summary\",\"to\":\"END\"}]}\n")
 		b.WriteString("```\n\n")
@@ -509,6 +556,11 @@ func buildMetaSkillContent(provider string, ctx TaskContextForEnv) string {
 	b.WriteString("- `multica issue metadata list <issue-id> [--output json]` — List every metadata key pinned to an issue. Empty `{}` is normal.\n")
 	b.WriteString("- `multica issue metadata set <issue-id> --key <k> --value <v> [--type string|number|bool]` — Pin (or overwrite) a single metadata key. The CLI auto-infers JSON primitives, so URLs and plain text are stored as strings — pass `--type number` or `--type bool` only when the semantic type matters.\n")
 	b.WriteString("- `multica issue metadata delete <issue-id> --key <k>` — Remove a metadata key.\n\n")
+	b.WriteString("### Skills\n")
+	b.WriteString("- `multica skill list --output json` — List all skills in the workspace.\n")
+	b.WriteString("- `multica skill get <skill-id> --output json` — Get skill details including description and content.\n")
+	b.WriteString("- `multica skill files list <skill-id> --output json` — List files attached to a skill (e.g. `workflow.yaml`).\n")
+	b.WriteString("- `multica skill files get <skill-id> <file-path>` — Get the content of a specific skill file. Use this to read `workflow.yaml` from a workflow skill.\n\n")
 	b.WriteString("### Squad maintenance\n")
 	b.WriteString("- `multica squad member set-role <squad-id> --member-id <id> --member-type <agent|member> --role <role> [--output json]` — Change a squad member role in place; use this instead of remove+add when only the role changes.\n\n")
 

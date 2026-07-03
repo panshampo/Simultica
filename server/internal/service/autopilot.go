@@ -31,6 +31,7 @@ type AutopilotService struct {
 	TxStarter TxStarter
 	Bus       *events.Bus
 	TaskSvc   *TaskService
+	IssueSvc  *IssueService
 }
 
 // DefaultAutopilotTriggerTimezone is the timezone used to render Autopilot
@@ -41,6 +42,168 @@ const DefaultAutopilotTriggerTimezone = "UTC"
 
 func NewAutopilotService(q *db.Queries, tx TxStarter, bus *events.Bus, taskSvc *TaskService) *AutopilotService {
 	return &AutopilotService{Queries: q, TxStarter: tx, Bus: bus, TaskSvc: taskSvc}
+}
+
+func (s *AutopilotService) SetIssueService(issueSvc *IssueService) {
+	s.IssueSvc = issueSvc
+}
+
+// DispatchAutomation is the v2 automation execution entry point. The handler
+// owns source-mode resolution so template dispatch can share IssueService's
+// numbering, duplicate guard, project validation, broadcast, and enqueue path.
+func (s *AutopilotService) DispatchAutomation(
+	ctx context.Context,
+	automation db.Automation,
+	triggerID pgtype.UUID,
+	source string,
+	payload []byte,
+	createParams IssueCreateParams,
+	resolvedIssuePayload []byte,
+	templateSnapshot []byte,
+	runOnly bool,
+	triggerSummary string,
+) (*db.AutomationRun, error) {
+	if runOnly {
+		return s.dispatchAutomationRunOnly(ctx, automation, triggerID, source, payload, resolvedIssuePayload, templateSnapshot, createParams.AssigneeID, triggerSummary)
+	}
+
+	run, err := s.Queries.CreateAutomationRun(ctx, db.CreateAutomationRunParams{
+		AutomationID:         automation.ID,
+		TriggerID:            triggerID,
+		Source:               source,
+		SourceModeSnapshot:   automation.SourceMode,
+		Status:               "pending",
+		TriggerPayload:       payload,
+		ResolvedIssuePayload: resolvedIssuePayload,
+		TemplateSnapshot:     templateSnapshot,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create automation run: %w", err)
+	}
+	if s.IssueSvc == nil {
+		updated, uerr := s.Queries.UpdateAutomationRunFailed(ctx, db.UpdateAutomationRunFailedParams{
+			ID:            run.ID,
+			FailureReason: pgtype.Text{String: "issue service not configured", Valid: true},
+		})
+		if uerr == nil {
+			run = updated
+		}
+		return &run, fmt.Errorf("issue service not configured")
+	}
+
+	createParams.AutomationRunID = run.ID
+	createParams.OriginType = pgtype.Text{String: "automation", Valid: true}
+	createParams.OriginID = automation.ID
+	res, err := s.IssueSvc.Create(ctx, createParams, IssueCreateOpts{
+		ActorID:          util.UUIDToString(createParams.CreatorID),
+		AnalyticsAgentID: util.UUIDToString(createParams.AssigneeID),
+		Platform:         analytics.PlatformServer,
+	})
+	if err != nil {
+		reason := err.Error()
+		updated, uerr := s.Queries.UpdateAutomationRunFailed(ctx, db.UpdateAutomationRunFailedParams{
+			ID:            run.ID,
+			FailureReason: pgtype.Text{String: reason, Valid: true},
+		})
+		if uerr == nil {
+			run = updated
+		}
+		return &run, fmt.Errorf("dispatch automation create issue: %w", err)
+	}
+
+	updatedRun, err := s.Queries.UpdateAutomationRunIssueCreated(ctx, db.UpdateAutomationRunIssueCreatedParams{
+		ID:      run.ID,
+		IssueID: res.Issue.ID,
+	})
+	if err != nil {
+		return &run, fmt.Errorf("link automation run to issue: %w", err)
+	}
+	run = updatedRun
+	s.Queries.UpdateAutomationLastRunAt(ctx, automation.ID)
+	return &run, nil
+}
+
+func (s *AutopilotService) dispatchAutomationRunOnly(
+	ctx context.Context,
+	automation db.Automation,
+	triggerID pgtype.UUID,
+	source string,
+	payload []byte,
+	resolvedIssuePayload []byte,
+	templateSnapshot []byte,
+	assigneeID pgtype.UUID,
+	triggerSummary string,
+) (*db.AutomationRun, error) {
+	run, err := s.Queries.CreateAutomationRun(ctx, db.CreateAutomationRunParams{
+		AutomationID:         automation.ID,
+		TriggerID:            triggerID,
+		Source:               source,
+		SourceModeSnapshot:   automation.SourceMode,
+		Status:               "running",
+		TriggerPayload:       payload,
+		ResolvedIssuePayload: resolvedIssuePayload,
+		TemplateSnapshot:     templateSnapshot,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create automation run: %w", err)
+	}
+	agent, err := s.Queries.GetAgent(ctx, assigneeID)
+	if err != nil {
+		updated, uerr := s.Queries.UpdateAutomationRunSkipped(ctx, db.UpdateAutomationRunSkippedParams{
+			ID:            run.ID,
+			FailureReason: pgtype.Text{String: "assignee agent no longer exists", Valid: true},
+		})
+		if uerr == nil {
+			run = updated
+		}
+		return &run, nil
+	}
+	ready, reason, err := AgentReadiness(ctx, s.Queries, agent)
+	if err != nil || !ready {
+		if reason == "" {
+			reason = "agent readiness check failed"
+		}
+		updated, uerr := s.Queries.UpdateAutomationRunSkipped(ctx, db.UpdateAutomationRunSkippedParams{
+			ID:            run.ID,
+			FailureReason: pgtype.Text{String: reason, Valid: true},
+		})
+		if uerr == nil {
+			run = updated
+		}
+		return &run, nil
+	}
+	task, err := s.Queries.CreateAutomationTask(ctx, db.CreateAutomationTaskParams{
+		AgentID:         agent.ID,
+		RuntimeID:       agent.RuntimeID,
+		Priority:        0,
+		AutomationRunID: run.ID,
+		TriggerSummary: pgtype.Text{
+			String: truncateForSummary(triggerSummary, triggerSummaryMaxLen),
+			Valid:  triggerSummary != "",
+		},
+	})
+	if err != nil {
+		updated, uerr := s.Queries.UpdateAutomationRunFailed(ctx, db.UpdateAutomationRunFailedParams{
+			ID:            run.ID,
+			FailureReason: pgtype.Text{String: err.Error(), Valid: true},
+		})
+		if uerr == nil {
+			run = updated
+		}
+		return &run, fmt.Errorf("create automation task: %w", err)
+	}
+	updatedRun, err := s.Queries.UpdateAutomationRunRunning(ctx, db.UpdateAutomationRunRunningParams{
+		ID:     run.ID,
+		TaskID: task.ID,
+	})
+	if err == nil {
+		run = updatedRun
+	}
+	if s.TaskSvc != nil {
+		s.TaskSvc.NotifyTaskEnqueued(ctx, task)
+	}
+	s.Queries.UpdateAutomationLastRunAt(ctx, automation.ID)
+	return &run, err
 }
 
 // DispatchAutopilot is the core execution entry point.
@@ -438,6 +601,66 @@ func (s *AutopilotService) SyncRunFromTask(ctx context.Context, task db.AgentTas
 	}
 }
 
+// SyncAutomationRunFromTask updates a v2 automation run when a run_only task
+// completes, fails, or is cancelled.
+func (s *AutopilotService) SyncAutomationRunFromTask(ctx context.Context, task db.AgentTaskQueue) {
+	if !task.AutomationRunID.Valid {
+		return
+	}
+
+	run, err := s.Queries.GetAutomationRun(ctx, task.AutomationRunID)
+	if err != nil {
+		return
+	}
+
+	automation, err := s.Queries.GetAutomation(ctx, run.AutomationID)
+	if err != nil {
+		return
+	}
+	wsID := util.UUIDToString(automation.WorkspaceID)
+
+	switch task.Status {
+	case "completed":
+		updatedRun, err := s.Queries.UpdateAutomationRunCompleted(ctx, db.UpdateAutomationRunCompletedParams{
+			ID:     run.ID,
+			Result: task.Result,
+		})
+		if err != nil {
+			slog.Warn("failed to complete automation run from task", "run_id", util.UUIDToString(run.ID), "error", err)
+			return
+		}
+		s.publishAutomationRunDone(wsID, updatedRun, "completed")
+	case "failed":
+		reason := "task " + task.Status
+		if task.Error.Valid {
+			reason = task.Error.String
+		}
+		updatedRun, err := s.Queries.UpdateAutomationRunFailed(ctx, db.UpdateAutomationRunFailedParams{
+			ID:            run.ID,
+			FailureReason: pgtype.Text{String: reason, Valid: true},
+		})
+		if err != nil {
+			slog.Warn("failed to fail automation run from task", "run_id", util.UUIDToString(run.ID), "error", err)
+			return
+		}
+		s.publishAutomationRunDone(wsID, updatedRun, "failed")
+	case "cancelled":
+		reason := "task " + task.Status
+		if task.Error.Valid {
+			reason = task.Error.String
+		}
+		updatedRun, err := s.Queries.UpdateAutomationRunCancelled(ctx, db.UpdateAutomationRunCancelledParams{
+			ID:            run.ID,
+			FailureReason: pgtype.Text{String: reason, Valid: true},
+		})
+		if err != nil {
+			slog.Warn("failed to cancel automation run from task", "run_id", util.UUIDToString(run.ID), "error", err)
+			return
+		}
+		s.publishAutomationRunDone(wsID, updatedRun, "cancelled")
+	}
+}
+
 // handleDispatchSkip recognises an errDispatchSkipped returned from a
 // dispatch function and rewrites the in-flight run to `skipped` (instead of
 // `failed`). Returns the updated run on a real skip, nil otherwise — callers
@@ -729,6 +952,19 @@ func (s *AutopilotService) publishRunDone(workspaceID string, run db.AutopilotRu
 	})
 }
 
+func (s *AutopilotService) publishAutomationRunDone(workspaceID string, run db.AutomationRun, status string) {
+	s.Bus.Publish(events.Event{
+		Type:        protocol.EventAutopilotRunDone,
+		WorkspaceID: workspaceID,
+		ActorType:   "system",
+		Payload: map[string]any{
+			"run_id":        util.UUIDToString(run.ID),
+			"automation_id": util.UUIDToString(run.AutomationID),
+			"status":        status,
+		},
+	})
+}
+
 func (s *AutopilotService) captureIssueCreatedFromAutopilot(ap db.Autopilot, run *db.AutopilotRun, issue db.Issue, leaderID pgtype.UUID) {
 	if s.TaskSvc == nil || s.TaskSvc.Analytics == nil {
 		return
@@ -1002,6 +1238,14 @@ func (s *AutopilotService) interpolateTemplate(ap db.Autopilot, run db.Autopilot
 		tmpl = ap.IssueTitleTemplate.String
 	}
 	triggerDate := formatAutopilotRunDate(run, triggerTimezone)
+	return RenderIssueTitleTemplateWithDate(tmpl, triggerDate)
+}
+
+// RenderIssueTitleTemplateWithDate applies the same strict title-template
+// substitution used by legacy autopilot runs. It intentionally supports only
+// {{date}}; unknown tokens are left unchanged and should be rejected by
+// ValidateIssueTitleTemplate at write time.
+func RenderIssueTitleTemplateWithDate(tmpl string, triggerDate string) string {
 	return issueTitleTemplateTokenRE.ReplaceAllStringFunc(tmpl, func(match string) string {
 		name := strings.TrimSpace(match[2 : len(match)-2])
 		switch name {

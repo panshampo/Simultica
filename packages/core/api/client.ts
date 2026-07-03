@@ -84,6 +84,21 @@ import type {
   PinnedItemType,
   ReorderPinsRequest,
   Invitation,
+  IssueTemplate,
+  CreateIssueTemplateRequest,
+  UpdateIssueTemplateRequest,
+  ListIssueTemplatesResponse,
+  InstantiateIssueTemplateResponse,
+  Automation,
+  AutomationTrigger,
+  AutomationRun,
+  CreateAutomationRequest,
+  UpdateAutomationRequest,
+  CreateAutomationTriggerRequest,
+  ListAutomationsResponse,
+  GetAutomationResponse,
+  ListAutomationRunsResponse,
+  AutomationSourceMode,
   Autopilot,
   AutopilotTrigger,
   AutopilotRun,
@@ -1965,6 +1980,140 @@ export class ApiClient {
     return parseWithFallback(raw, SquadMemberStatusListResponseSchema, EMPTY_SQUAD_MEMBER_STATUS_LIST, {
       endpoint: "GET /api/squads/:id/members/status",
     }) as SquadMemberStatusListResponse;
+  }
+
+  // Issue templates
+  async listIssueTemplates(params?: { project_id?: string | null }): Promise<ListIssueTemplatesResponse> {
+    const search = new URLSearchParams();
+    if (params?.project_id) search.set("project_id", params.project_id);
+    return this.fetch(`/api/issue-templates?${search}`);
+  }
+
+  async getIssueTemplate(id: string): Promise<IssueTemplate> {
+    return this.fetch(`/api/issue-templates/${id}`);
+  }
+
+  async createIssueTemplate(data: CreateIssueTemplateRequest): Promise<IssueTemplate> {
+    return this.fetch("/api/issue-templates", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateIssueTemplate(id: string, data: UpdateIssueTemplateRequest): Promise<IssueTemplate> {
+    return this.fetch(`/api/issue-templates/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteIssueTemplate(id: string): Promise<void> {
+    await this.fetch(`/api/issue-templates/${id}`, { method: "DELETE" });
+  }
+
+  async instantiateIssueTemplate(id: string): Promise<InstantiateIssueTemplateResponse> {
+    return this.fetch(`/api/issue-templates/${id}/instantiate`, { method: "POST" });
+  }
+
+  // Automations
+  async listAutomations(params?: { status?: string; source_mode?: AutomationSourceMode }): Promise<ListAutomationsResponse> {
+    const search = new URLSearchParams();
+    if (params?.status) search.set("status", params.status);
+    if (params?.source_mode) search.set("source_mode", params.source_mode);
+    return this.fetch(`/api/automations?${search}`);
+  }
+
+  async getAutomation(id: string): Promise<GetAutomationResponse> {
+    return this.fetch(`/api/automations/${id}`);
+  }
+
+  async createAutomation(data: CreateAutomationRequest): Promise<Automation> {
+    return this.fetch("/api/automations", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateAutomation(id: string, data: UpdateAutomationRequest): Promise<Automation> {
+    return this.fetch(`/api/automations/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteAutomation(id: string): Promise<void> {
+    await this.fetch(`/api/automations/${id}`, { method: "DELETE" });
+  }
+
+  async triggerAutomation(id: string): Promise<AutomationRun> {
+    return this.fetch(`/api/automations/${id}/trigger`, { method: "POST" });
+  }
+
+  async listAutomationRuns(id: string, params?: { limit?: number; offset?: number }): Promise<ListAutomationRunsResponse> {
+    const search = new URLSearchParams();
+    if (params?.limit) search.set("limit", params.limit.toString());
+    if (params?.offset) search.set("offset", params.offset.toString());
+    return this.fetch(`/api/automations/${id}/runs?${search}`);
+  }
+
+  async getAutomationRun(automationId: string, runId: string): Promise<AutomationRun> {
+    return this.fetch(`/api/automations/${automationId}/runs/${runId}`);
+  }
+
+  async createAutomationTrigger(automationId: string, data: CreateAutomationTriggerRequest): Promise<AutomationTrigger> {
+    return this.fetch(`/api/automations/${automationId}/triggers`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async listAutomationDeliveries(
+    automationId: string,
+    params?: { limit?: number; offset?: number },
+  ): Promise<ListWebhookDeliveriesResponse> {
+    const search = new URLSearchParams();
+    if (params?.limit) search.set("limit", params.limit.toString());
+    if (params?.offset) search.set("offset", params.offset.toString());
+    const raw = await this.fetch<unknown>(
+      `/api/automations/${automationId}/deliveries?${search}`,
+    );
+    return parseWithFallback(
+      raw,
+      ListWebhookDeliveriesResponseSchema,
+      EMPTY_LIST_WEBHOOK_DELIVERIES_RESPONSE,
+      { endpoint: "GET /api/automations/:id/deliveries" },
+    );
+  }
+
+  async getAutomationDelivery(
+    automationId: string,
+    deliveryId: string,
+  ): Promise<WebhookDelivery> {
+    const raw = await this.fetch<unknown>(
+      `/api/automations/${automationId}/deliveries/${deliveryId}`,
+    );
+    return parseWithFallback(
+      raw,
+      WebhookDeliveryResponseSchema,
+      { ...EMPTY_WEBHOOK_DELIVERY, id: deliveryId, automation_id: automationId },
+      { endpoint: "GET /api/automations/:id/deliveries/:deliveryId" },
+    );
+  }
+
+  async replayAutomationDelivery(
+    automationId: string,
+    deliveryId: string,
+  ): Promise<WebhookDelivery> {
+    const raw = await this.fetch<unknown>(
+      `/api/automations/${automationId}/deliveries/${deliveryId}/replay`,
+      { method: "POST" },
+    );
+    return parseWithFallback(
+      raw,
+      WebhookDeliveryResponseSchema,
+      { ...EMPTY_WEBHOOK_DELIVERY, automation_id: automationId },
+      { endpoint: "POST /api/automations/:id/deliveries/:deliveryId/replay" },
+    );
   }
 
   // Autopilots

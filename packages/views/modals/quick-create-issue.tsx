@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, Check, ChevronRight, Maximize2, Minimize2, X as XIcon } from "lucide-react";
+import { ArrowLeftRight, Check, ChevronRight, FileText, Maximize2, Minimize2, X as XIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { DialogTitle } from "@multica/ui/components/ui/dialog";
@@ -9,9 +9,13 @@ import { Button } from "@multica/ui/components/ui/button";
 import { Switch } from "@multica/ui/components/ui/switch";
 import { api, ApiError } from "@multica/core/api";
 import { useWorkspaceId } from "@multica/core/hooks";
-import { useCurrentWorkspace } from "@multica/core/paths";
+import { useCurrentWorkspace, useWorkspacePaths } from "@multica/core/paths";
 import { agentListOptions, squadListOptions } from "@multica/core/workspace/queries";
 import { projectListOptions } from "@multica/core/projects/queries";
+import {
+  issueTemplateListOptions,
+  useInstantiateIssueTemplate,
+} from "@multica/core/issue-templates";
 import {
   useQuickCreateStore,
   type QuickCreateActorType,
@@ -29,6 +33,7 @@ import { formatShortcut, modKey, enterKey } from "@multica/core/platform";
 import type { Agent, Squad } from "@multica/core/types";
 import { ActorAvatar } from "../common/actor-avatar";
 import { PillButton } from "../common/pill-button";
+import { useNavigation } from "../navigation";
 import { ProjectPicker } from "../projects/components/project-picker";
 import { canAssignAgent } from "../issues/components/pickers/assignee-picker";
 import {
@@ -46,6 +51,12 @@ import {
   FileDropOverlay,
 } from "../editor";
 import { FileUploadButton } from "@multica/ui/components/common/file-upload-button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@multica/ui/components/ui/dropdown-menu";
 import { useT } from "../i18n";
 import { matchesPinyin } from "../editor/extensions/pinyin-match";
 
@@ -82,12 +93,19 @@ export function AgentCreatePanel({
   setIsExpanded: (v: boolean) => void;
 }) {
   const { t } = useT("modals");
+  const { t: templatesT } = useT("templates");
+  const router = useNavigation();
   const workspaceName = useCurrentWorkspace()?.name;
+  const p = useWorkspacePaths();
   const wsId = useWorkspaceId();
   const userId = useAuthStore((s) => s.user?.id);
   const { data: members = [] } = useQuery(memberListOptions(wsId));
   const { data: agents = [] } = useQuery(agentListOptions(wsId));
   const { data: squads = [] } = useQuery(squadListOptions(wsId));
+  const { data: issueTemplates = [], isLoading: templatesLoading } = useQuery(
+    issueTemplateListOptions(wsId),
+  );
+  const instantiateTemplate = useInstantiateIssueTemplate();
   // Pull `isSuccess` so the stale-id sweep below can distinguish "still
   // loading" from "loaded as empty". Reading length alone treats both as
   // empty and incorrectly clears a valid persisted preference on every open.
@@ -354,6 +372,22 @@ export function AgentCreatePanel({
     }
   };
 
+  const instantiateFromTemplate = async (templateId: string) => {
+    if (instantiateTemplate.isPending) return;
+    try {
+      const issue = await instantiateTemplate.mutateAsync(templateId);
+      toast.success(templatesT(($) => $.quick_create.created));
+      onClose();
+      router.push(p.issueDetail(issue.id));
+    } catch (e) {
+      toast.error(
+        e instanceof Error && e.message
+          ? e.message
+          : templatesT(($) => $.toast.instantiate_failed),
+      );
+    }
+  };
+
   // Switch to the manual form, carrying what the user typed over as the
   // description (markdown, including any pasted images) so they don't lose
   // their work. The picked actor (agent or squad) becomes the default
@@ -522,6 +556,42 @@ export function AgentCreatePanel({
               disabled={uploading}
               onSelect={(file) => editorRef.current?.uploadFile(file)}
             />
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={instantiateTemplate.isPending}
+                  />
+                }
+              >
+                <FileText className="size-3.5" />
+                {templatesT(($) => $.quick_create.trigger)}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                {templatesLoading ? (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                    {templatesT(($) => $.quick_create.loading)}
+                  </div>
+                ) : issueTemplates.length === 0 ? (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                    {templatesT(($) => $.quick_create.empty)}
+                  </div>
+                ) : (
+                  issueTemplates.map((template) => (
+                    <DropdownMenuItem
+                      key={template.id}
+                      onClick={() => instantiateFromTemplate(template.id)}
+                    >
+                      <FileText className="size-3.5 text-muted-foreground" />
+                      <span className="truncate">{template.title}</span>
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
             {keepOpen && sentCount > 0 && (
               <span className="text-xs text-emerald-600 dark:text-emerald-400">
                 {t(($) => $.create_issue.agent.sent_count, { count: sentCount })}

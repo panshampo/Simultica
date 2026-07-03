@@ -220,7 +220,7 @@ func (h *Handler) SubmitRuntimeWorkflow(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	h.publishWorkflowRunUpdated(workspaceID, run)
+	h.publishWorkflowRunUpdated(r.Context(), workspaceID, run)
 	writeJSON(w, http.StatusAccepted, workflowRunToResponse(run))
 }
 

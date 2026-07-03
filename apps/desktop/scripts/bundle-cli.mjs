@@ -13,7 +13,7 @@
 // skip the build and fall through to auto-install at runtime. A genuine
 // Go compile error is fatal — you want that to block dev, not hide.
 
-import { access, chmod, copyFile, mkdir, rm } from "node:fs/promises";
+import { access, chmod, copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { execFileSync, execSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
@@ -73,6 +73,7 @@ const binName = binaryNameForPlatform(targetPlatform);
 const srcBinary = join(serverDir, "bin", `${goos}-${goarch}`, binName);
 const destDir = join(repoRoot, "apps", "desktop", "resources", "bin");
 const destBinary = join(destDir, binName);
+const localDevBinary = join(repoRoot, ".multica", "local-dev", binName);
 
 function sh(cmd) {
   try {
@@ -150,6 +151,14 @@ if (!(await exists(srcBinary))) {
 
 await rm(destDir, { recursive: true, force: true });
 await mkdir(destDir, { recursive: true });
+
+if (process.env.LOCAL_DEV_DESKTOP_FOREGROUND === "1" && targetPlatform !== "win32" && await exists(localDevBinary)) {
+  await writeFile(destBinary, `#!/usr/bin/env bash\nexec ${JSON.stringify(localDevBinary)} "$@"\n`);
+  await chmod(destBinary, 0o755);
+  console.log(`[bundle-cli] linked local-dev wrapper ${localDevBinary} → ${destBinary}`);
+  process.exit(0);
+}
+
 await copyFile(srcBinary, destBinary);
 await chmod(destBinary, 0o755);
 

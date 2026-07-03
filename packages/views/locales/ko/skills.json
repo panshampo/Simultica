@@ -116,6 +116,9 @@
     },
     "toast_saved": "스킬을 저장했습니다",
     "toast_save_failed": "스킬을 저장하지 못했습니다",
+    "toast_file_removed": "{{path}}을(를) 초안에서 제거했습니다",
+    "toast_workflow_saved": "워크플로를 저장했습니다",
+    "toast_workflow_save_failed": "워크플로를 저장하지 못했습니다",
     "toast_deleted": "스킬을 삭제했습니다",
     "toast_delete_failed": "스킬을 삭제하지 못했습니다",
     "delete_dialog": {

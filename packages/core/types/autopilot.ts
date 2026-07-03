@@ -15,10 +15,12 @@ export type AutopilotTriggerKind = "schedule" | "webhook" | "api";
 // handle it explicitly — falling through to a generic case used to show
 // the run as still-pending which masked the no-op.
 export type AutopilotRunStatus =
+  | "pending"
   | "issue_created"
   | "running"
   | "completed"
   | "failed"
+  | "cancelled"
   | "skipped";
 
 export type AutopilotRunSource = "schedule" | "manual" | "webhook" | "api";
@@ -44,6 +46,84 @@ export interface Autopilot {
 export interface WebhookEventFilter {
   event: string;
   actions?: string[];
+}
+
+export type AutomationStatus = AutopilotStatus;
+
+export type AutomationSourceMode = "inline" | "template";
+
+export type AutomationConcurrencyPolicy = "skip" | "queue" | "replace";
+
+export type AutomationTriggerKind = AutopilotTriggerKind;
+
+export type AutomationRunStatus = AutopilotRunStatus;
+
+export type AutomationRunSource = AutopilotRunSource;
+
+export interface InlineIssueConfig {
+  issue_title_template: string;
+  issue_body_template?: string | null;
+  assignee_type: AutopilotAssigneeType;
+  assignee_id: string;
+  project_id?: string | null;
+  priority: string;
+  execution_mode?: AutopilotExecutionMode;
+}
+
+export interface Automation {
+  id: string;
+  workspace_id: string;
+  title: string;
+  source_mode: AutomationSourceMode;
+  template_id: string | null;
+  inline_issue_config?: InlineIssueConfig | null;
+  status: AutomationStatus;
+  concurrency_policy: AutomationConcurrencyPolicy;
+  created_by_type: string;
+  created_by_id: string;
+  last_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AutomationTrigger {
+  id: string;
+  automation_id: string;
+  kind: AutomationTriggerKind;
+  enabled: boolean;
+  cron_expression: string | null;
+  timezone: string | null;
+  next_run_at: string | null;
+  webhook_token: string | null;
+  webhook_path?: string | null;
+  webhook_url?: string | null;
+  provider?: string | null;
+  has_signing_secret?: boolean;
+  signing_secret_hint?: string | null;
+  label: string | null;
+  event_filters?: WebhookEventFilter[] | null;
+  last_fired_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AutomationRun {
+  id: string;
+  automation_id: string;
+  trigger_id: string | null;
+  source: AutomationRunSource;
+  source_mode_snapshot: AutomationSourceMode;
+  status: AutomationRunStatus;
+  issue_id: string | null;
+  task_id: string | null;
+  triggered_at: string;
+  completed_at: string | null;
+  failure_reason: string | null;
+  trigger_payload: unknown;
+  resolved_issue_payload: unknown;
+  template_snapshot: unknown;
+  result: unknown;
+  created_at: string;
 }
 
 export interface AutopilotTrigger {
@@ -118,6 +198,7 @@ export interface CreateAutopilotTriggerRequest {
   cron_expression?: string;
   timezone?: string;
   label?: string;
+  provider?: string;
   // event_filters is only meaningful for webhook triggers.
   event_filters?: WebhookEventFilter[];
 }
@@ -131,6 +212,30 @@ export interface UpdateAutopilotTriggerRequest {
   event_filters?: WebhookEventFilter[] | null;
 }
 
+export interface CreateAutomationRequest {
+  title: string;
+  source_mode: AutomationSourceMode;
+  template_id?: string | null;
+  inline_issue_config?: InlineIssueConfig | null;
+  status?: AutomationStatus;
+  concurrency_policy?: AutomationConcurrencyPolicy;
+  execution_mode?: AutopilotExecutionMode;
+}
+
+export interface UpdateAutomationRequest {
+  title?: string;
+  source_mode?: AutomationSourceMode;
+  template_id?: string | null;
+  inline_issue_config?: InlineIssueConfig | null;
+  status?: AutomationStatus;
+  concurrency_policy?: AutomationConcurrencyPolicy;
+  execution_mode?: AutopilotExecutionMode;
+}
+
+export type CreateAutomationTriggerRequest = CreateAutopilotTriggerRequest;
+
+export type UpdateAutomationTriggerRequest = UpdateAutopilotTriggerRequest;
+
 export interface ListAutopilotsResponse {
   autopilots: Autopilot[];
   total: number;
@@ -143,6 +248,21 @@ export interface GetAutopilotResponse {
 
 export interface ListAutopilotRunsResponse {
   runs: AutopilotRun[];
+  total: number;
+}
+
+export interface ListAutomationsResponse {
+  automations: Automation[];
+  total: number;
+}
+
+export interface GetAutomationResponse {
+  automation: Automation;
+  triggers: AutomationTrigger[];
+}
+
+export interface ListAutomationRunsResponse {
+  runs: AutomationRun[];
   total: number;
 }
 
@@ -166,8 +286,10 @@ export type WebhookSignatureStatus =
 export interface WebhookDelivery {
   id: string;
   workspace_id: string;
-  autopilot_id: string;
-  trigger_id: string;
+  autopilot_id?: string | null;
+  trigger_id?: string | null;
+  automation_id?: string | null;
+  automation_trigger_id?: string | null;
   provider: string;
   event: string;
   dedupe_key: string | null;
@@ -177,7 +299,8 @@ export interface WebhookDelivery {
   attempt_count: number;
   content_type: string | null;
   response_status: number | null;
-  autopilot_run_id: string | null;
+  autopilot_run_id?: string | null;
+  automation_run_id?: string | null;
   replayed_from_delivery_id: string | null;
   error: string | null;
   received_at: string;

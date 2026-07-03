@@ -33,6 +33,44 @@ func TestNewReturnsDsCopilotBackend(t *testing.T) {
 	}
 }
 
+func TestNewReturnsRegisteredLocalBackends(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		agentType string
+		want      any
+	}{
+		{"ds-copilot", (*dsCopilotBackend)(nil)},
+		{"gemini", (*geminiBackend)(nil)},
+		{"traex", (*traexBackend)(nil)},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.agentType, func(t *testing.T) {
+			t.Parallel()
+			b, err := New(tt.agentType, Config{})
+			if err != nil {
+				t.Fatalf("New(%q) error: %v", tt.agentType, err)
+			}
+			switch tt.want.(type) {
+			case *dsCopilotBackend:
+				if _, ok := b.(*dsCopilotBackend); !ok {
+					t.Fatalf("expected *dsCopilotBackend, got %T", b)
+				}
+			case *geminiBackend:
+				if _, ok := b.(*geminiBackend); !ok {
+					t.Fatalf("expected *geminiBackend, got %T", b)
+				}
+			case *traexBackend:
+				if _, ok := b.(*traexBackend); !ok {
+					t.Fatalf("expected *traexBackend, got %T", b)
+				}
+			}
+		})
+	}
+}
+
 func TestNewReturnsCodexBackend(t *testing.T) {
 	t.Parallel()
 	b, err := New("codex", Config{ExecutablePath: "/nonexistent/codex"})

@@ -63,10 +63,8 @@ export function ExecutionLogSection({ issueId }: ExecutionLogSectionProps) {
   const [showPast, setShowPast] = useState(false);
 
   // Cache key registered in `issueKeys.tasks` (packages/core/issues/queries.ts)
-  // so the global useRealtimeSync `task:` prefix path invalidates it via
-  // a `["issues", "tasks"]` prefix-match — no local WS subscriptions
-  // needed, and the cache stays fresh even when this component isn't
-  // mounted (e.g. user cancels from agent-side, then navigates here).
+  // so the global useRealtimeSync `task:` path can invalidate this issue's
+  // list from the task lifecycle payload without local WS subscriptions.
   const { data: tasks = [] } = useQuery({
     queryKey: issueKeys.tasks(issueId),
     queryFn: () => api.listTasksByIssue(issueId),
@@ -88,6 +86,13 @@ export function ExecutionLogSection({ issueId }: ExecutionLogSectionProps) {
       ),
     [tasks],
   );
+  const hasRunningTask = activeTasks.some((task) => task.status === "running");
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!hasRunningTask || !open) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [hasRunningTask, open]);
 
   const pastTasks = useMemo(() => {
     const past = tasks.filter(
@@ -137,7 +142,7 @@ export function ExecutionLogSection({ issueId }: ExecutionLogSectionProps) {
       {open && (
         <div className="space-y-0.5 pl-2">
           {activeTasks.map((task) => (
-            <ActiveTaskRow key={task.id} task={task} issueId={issueId} />
+            <ActiveTaskRow key={task.id} task={task} issueId={issueId} now={now} />
           ))}
 
           {pastTasks.length > 0 && (
@@ -250,9 +255,11 @@ function useStatusLabel(status: AgentTask["status"]): string {
 export function ActiveTaskRow({
   task,
   issueId,
+  now: nowProp,
 }: {
   task: AgentTask;
   issueId: string;
+  now?: number;
 }) {
   const { t } = useT("issues");
   const [cancelling, setCancelling] = useState(false);
@@ -263,12 +270,14 @@ export function ActiveTaskRow({
 
   // Running rows show a live-ticking elapsed timer (the ticking digits carry
   // "alive", the duration carries "how long"). Only running rows tick.
-  const [now, setNow] = useState(() => Date.now());
+  const [localNow, setLocalNow] = useState(() => Date.now());
   useEffect(() => {
+    if (nowProp !== undefined) return;
     if (task.status !== "running") return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    const id = setInterval(() => setLocalNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [task.status]);
+  }, [nowProp, task.status]);
+  const now = nowProp ?? localNow;
   const elapsed =
     task.status === "running"
       ? formatDuration(

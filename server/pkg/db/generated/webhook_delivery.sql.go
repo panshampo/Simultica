@@ -16,7 +16,7 @@ UPDATE webhook_delivery
 SET attempt_count = attempt_count + 1,
     last_attempt_at = now()
 WHERE id = $1
-RETURNING id, workspace_id, autopilot_id, trigger_id, provider, event, dedupe_key, dedupe_source, signature_status, status, attempt_count, selected_headers, content_type, raw_body, response_status, response_body, autopilot_run_id, replayed_from_delivery_id, error, received_at, last_attempt_at, created_at
+RETURNING id, workspace_id, autopilot_id, trigger_id, provider, event, dedupe_key, dedupe_source, signature_status, status, attempt_count, selected_headers, content_type, raw_body, response_status, response_body, autopilot_run_id, replayed_from_delivery_id, error, received_at, last_attempt_at, created_at, automation_id, automation_trigger_id, automation_run_id
 `
 
 // On duplicate detection, bump attempt_count and refresh last_attempt_at on
@@ -48,6 +48,9 @@ func (q *Queries) BumpWebhookDeliveryAttempt(ctx context.Context, id pgtype.UUID
 		&i.ReceivedAt,
 		&i.LastAttemptAt,
 		&i.CreatedAt,
+		&i.AutomationID,
+		&i.AutomationTriggerID,
+		&i.AutomationRunID,
 	)
 	return i, err
 }
@@ -55,27 +58,29 @@ func (q *Queries) BumpWebhookDeliveryAttempt(ctx context.Context, id pgtype.UUID
 const createWebhookDelivery = `-- name: CreateWebhookDelivery :one
 
 INSERT INTO webhook_delivery (
-    workspace_id, autopilot_id, trigger_id, provider, event,
+    workspace_id, autopilot_id, trigger_id, automation_id, automation_trigger_id, provider, event,
     dedupe_key, dedupe_source, signature_status, status,
     selected_headers, content_type, raw_body,
     replayed_from_delivery_id
 ) VALUES (
-    $1, $2, $3, $4, $5,
-    $9, $10, $6, $7,
-    $8, $11, $12,
-    $13
-) RETURNING id, workspace_id, autopilot_id, trigger_id, provider, event, dedupe_key, dedupe_source, signature_status, status, attempt_count, selected_headers, content_type, raw_body, response_status, response_body, autopilot_run_id, replayed_from_delivery_id, error, received_at, last_attempt_at, created_at
+    $1, $7, $8, $9, $10, $2, $3,
+    $11, $12, $4, $5,
+    $6, $13, $14,
+    $15
+) RETURNING id, workspace_id, autopilot_id, trigger_id, provider, event, dedupe_key, dedupe_source, signature_status, status, attempt_count, selected_headers, content_type, raw_body, response_status, response_body, autopilot_run_id, replayed_from_delivery_id, error, received_at, last_attempt_at, created_at, automation_id, automation_trigger_id, automation_run_id
 `
 
 type CreateWebhookDeliveryParams struct {
 	WorkspaceID            pgtype.UUID `json:"workspace_id"`
-	AutopilotID            pgtype.UUID `json:"autopilot_id"`
-	TriggerID              pgtype.UUID `json:"trigger_id"`
 	Provider               string      `json:"provider"`
 	Event                  string      `json:"event"`
 	SignatureStatus        string      `json:"signature_status"`
 	Status                 string      `json:"status"`
 	SelectedHeaders        []byte      `json:"selected_headers"`
+	AutopilotID            pgtype.UUID `json:"autopilot_id"`
+	TriggerID              pgtype.UUID `json:"trigger_id"`
+	AutomationID           pgtype.UUID `json:"automation_id"`
+	AutomationTriggerID    pgtype.UUID `json:"automation_trigger_id"`
 	DedupeKey              pgtype.Text `json:"dedupe_key"`
 	DedupeSource           pgtype.Text `json:"dedupe_source"`
 	ContentType            pgtype.Text `json:"content_type"`
@@ -92,13 +97,15 @@ type CreateWebhookDeliveryParams struct {
 func (q *Queries) CreateWebhookDelivery(ctx context.Context, arg CreateWebhookDeliveryParams) (WebhookDelivery, error) {
 	row := q.db.QueryRow(ctx, createWebhookDelivery,
 		arg.WorkspaceID,
-		arg.AutopilotID,
-		arg.TriggerID,
 		arg.Provider,
 		arg.Event,
 		arg.SignatureStatus,
 		arg.Status,
 		arg.SelectedHeaders,
+		arg.AutopilotID,
+		arg.TriggerID,
+		arg.AutomationID,
+		arg.AutomationTriggerID,
 		arg.DedupeKey,
 		arg.DedupeSource,
 		arg.ContentType,
@@ -129,12 +136,15 @@ func (q *Queries) CreateWebhookDelivery(ctx context.Context, arg CreateWebhookDe
 		&i.ReceivedAt,
 		&i.LastAttemptAt,
 		&i.CreatedAt,
+		&i.AutomationID,
+		&i.AutomationTriggerID,
+		&i.AutomationRunID,
 	)
 	return i, err
 }
 
 const getWebhookDelivery = `-- name: GetWebhookDelivery :one
-SELECT id, workspace_id, autopilot_id, trigger_id, provider, event, dedupe_key, dedupe_source, signature_status, status, attempt_count, selected_headers, content_type, raw_body, response_status, response_body, autopilot_run_id, replayed_from_delivery_id, error, received_at, last_attempt_at, created_at FROM webhook_delivery
+SELECT id, workspace_id, autopilot_id, trigger_id, provider, event, dedupe_key, dedupe_source, signature_status, status, attempt_count, selected_headers, content_type, raw_body, response_status, response_body, autopilot_run_id, replayed_from_delivery_id, error, received_at, last_attempt_at, created_at, automation_id, automation_trigger_id, automation_run_id FROM webhook_delivery
 WHERE id = $1
 `
 
@@ -164,12 +174,62 @@ func (q *Queries) GetWebhookDelivery(ctx context.Context, id pgtype.UUID) (Webho
 		&i.ReceivedAt,
 		&i.LastAttemptAt,
 		&i.CreatedAt,
+		&i.AutomationID,
+		&i.AutomationTriggerID,
+		&i.AutomationRunID,
+	)
+	return i, err
+}
+
+const getWebhookDeliveryByAutomationTriggerAndDedupe = `-- name: GetWebhookDeliveryByAutomationTriggerAndDedupe :one
+SELECT id, workspace_id, autopilot_id, trigger_id, provider, event, dedupe_key, dedupe_source, signature_status, status, attempt_count, selected_headers, content_type, raw_body, response_status, response_body, autopilot_run_id, replayed_from_delivery_id, error, received_at, last_attempt_at, created_at, automation_id, automation_trigger_id, automation_run_id FROM webhook_delivery
+WHERE automation_trigger_id = $1
+  AND dedupe_key = $2
+ORDER BY (status IN ('rejected', 'failed')), created_at DESC
+LIMIT 1
+`
+
+type GetWebhookDeliveryByAutomationTriggerAndDedupeParams struct {
+	AutomationTriggerID pgtype.UUID `json:"automation_trigger_id"`
+	DedupeKey           pgtype.Text `json:"dedupe_key"`
+}
+
+// Automation-family equivalent of GetWebhookDeliveryByTriggerAndDedupe.
+func (q *Queries) GetWebhookDeliveryByAutomationTriggerAndDedupe(ctx context.Context, arg GetWebhookDeliveryByAutomationTriggerAndDedupeParams) (WebhookDelivery, error) {
+	row := q.db.QueryRow(ctx, getWebhookDeliveryByAutomationTriggerAndDedupe, arg.AutomationTriggerID, arg.DedupeKey)
+	var i WebhookDelivery
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.AutopilotID,
+		&i.TriggerID,
+		&i.Provider,
+		&i.Event,
+		&i.DedupeKey,
+		&i.DedupeSource,
+		&i.SignatureStatus,
+		&i.Status,
+		&i.AttemptCount,
+		&i.SelectedHeaders,
+		&i.ContentType,
+		&i.RawBody,
+		&i.ResponseStatus,
+		&i.ResponseBody,
+		&i.AutopilotRunID,
+		&i.ReplayedFromDeliveryID,
+		&i.Error,
+		&i.ReceivedAt,
+		&i.LastAttemptAt,
+		&i.CreatedAt,
+		&i.AutomationID,
+		&i.AutomationTriggerID,
+		&i.AutomationRunID,
 	)
 	return i, err
 }
 
 const getWebhookDeliveryByTriggerAndDedupe = `-- name: GetWebhookDeliveryByTriggerAndDedupe :one
-SELECT id, workspace_id, autopilot_id, trigger_id, provider, event, dedupe_key, dedupe_source, signature_status, status, attempt_count, selected_headers, content_type, raw_body, response_status, response_body, autopilot_run_id, replayed_from_delivery_id, error, received_at, last_attempt_at, created_at FROM webhook_delivery
+SELECT id, workspace_id, autopilot_id, trigger_id, provider, event, dedupe_key, dedupe_source, signature_status, status, attempt_count, selected_headers, content_type, raw_body, response_status, response_body, autopilot_run_id, replayed_from_delivery_id, error, received_at, last_attempt_at, created_at, automation_id, automation_trigger_id, automation_run_id FROM webhook_delivery
 WHERE trigger_id = $1
   AND dedupe_key = $2
 ORDER BY (status IN ('rejected', 'failed')), created_at DESC
@@ -214,12 +274,15 @@ func (q *Queries) GetWebhookDeliveryByTriggerAndDedupe(ctx context.Context, arg 
 		&i.ReceivedAt,
 		&i.LastAttemptAt,
 		&i.CreatedAt,
+		&i.AutomationID,
+		&i.AutomationTriggerID,
+		&i.AutomationRunID,
 	)
 	return i, err
 }
 
 const getWebhookDeliveryInWorkspace = `-- name: GetWebhookDeliveryInWorkspace :one
-SELECT id, workspace_id, autopilot_id, trigger_id, provider, event, dedupe_key, dedupe_source, signature_status, status, attempt_count, selected_headers, content_type, raw_body, response_status, response_body, autopilot_run_id, replayed_from_delivery_id, error, received_at, last_attempt_at, created_at FROM webhook_delivery
+SELECT id, workspace_id, autopilot_id, trigger_id, provider, event, dedupe_key, dedupe_source, signature_status, status, attempt_count, selected_headers, content_type, raw_body, response_status, response_body, autopilot_run_id, replayed_from_delivery_id, error, received_at, last_attempt_at, created_at, automation_id, automation_trigger_id, automation_run_id FROM webhook_delivery
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -255,16 +318,116 @@ func (q *Queries) GetWebhookDeliveryInWorkspace(ctx context.Context, arg GetWebh
 		&i.ReceivedAt,
 		&i.LastAttemptAt,
 		&i.CreatedAt,
+		&i.AutomationID,
+		&i.AutomationTriggerID,
+		&i.AutomationRunID,
 	)
 	return i, err
 }
 
-const listWebhookDeliveriesByAutopilot = `-- name: ListWebhookDeliveriesByAutopilot :many
+const listWebhookDeliveriesByAutomation = `-- name: ListWebhookDeliveriesByAutomation :many
 SELECT
-    d.id, d.workspace_id, d.autopilot_id, d.trigger_id, d.provider, d.event,
+    d.id, d.workspace_id, d.autopilot_id, d.trigger_id, d.automation_id, d.automation_trigger_id, d.provider, d.event,
     d.dedupe_key, d.dedupe_source, d.signature_status, d.status,
     d.attempt_count, d.content_type, d.response_status,
-    d.autopilot_run_id, d.replayed_from_delivery_id, d.error,
+    d.autopilot_run_id, d.automation_run_id, d.replayed_from_delivery_id, d.error,
+    d.received_at, d.last_attempt_at, d.created_at
+FROM webhook_delivery d
+JOIN automation a ON a.id = d.automation_id
+WHERE d.automation_id = $1
+  AND a.workspace_id = $2
+ORDER BY d.created_at DESC
+LIMIT $3 OFFSET $4
+`
+
+type ListWebhookDeliveriesByAutomationParams struct {
+	AutomationID pgtype.UUID `json:"automation_id"`
+	WorkspaceID  pgtype.UUID `json:"workspace_id"`
+	Limit        int32       `json:"limit"`
+	Offset       int32       `json:"offset"`
+}
+
+type ListWebhookDeliveriesByAutomationRow struct {
+	ID                     pgtype.UUID        `json:"id"`
+	WorkspaceID            pgtype.UUID        `json:"workspace_id"`
+	AutopilotID            pgtype.UUID        `json:"autopilot_id"`
+	TriggerID              pgtype.UUID        `json:"trigger_id"`
+	AutomationID           pgtype.UUID        `json:"automation_id"`
+	AutomationTriggerID    pgtype.UUID        `json:"automation_trigger_id"`
+	Provider               string             `json:"provider"`
+	Event                  string             `json:"event"`
+	DedupeKey              pgtype.Text        `json:"dedupe_key"`
+	DedupeSource           pgtype.Text        `json:"dedupe_source"`
+	SignatureStatus        string             `json:"signature_status"`
+	Status                 string             `json:"status"`
+	AttemptCount           int32              `json:"attempt_count"`
+	ContentType            pgtype.Text        `json:"content_type"`
+	ResponseStatus         pgtype.Int4        `json:"response_status"`
+	AutopilotRunID         pgtype.UUID        `json:"autopilot_run_id"`
+	AutomationRunID        pgtype.UUID        `json:"automation_run_id"`
+	ReplayedFromDeliveryID pgtype.UUID        `json:"replayed_from_delivery_id"`
+	Error                  pgtype.Text        `json:"error"`
+	ReceivedAt             pgtype.Timestamptz `json:"received_at"`
+	LastAttemptAt          pgtype.Timestamptz `json:"last_attempt_at"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+}
+
+// Automation-family list projection. Mirrors ListWebhookDeliveriesByAutopilot
+// while omitting large payload columns.
+func (q *Queries) ListWebhookDeliveriesByAutomation(ctx context.Context, arg ListWebhookDeliveriesByAutomationParams) ([]ListWebhookDeliveriesByAutomationRow, error) {
+	rows, err := q.db.Query(ctx, listWebhookDeliveriesByAutomation,
+		arg.AutomationID,
+		arg.WorkspaceID,
+		arg.Limit,
+		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListWebhookDeliveriesByAutomationRow{}
+	for rows.Next() {
+		var i ListWebhookDeliveriesByAutomationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.AutopilotID,
+			&i.TriggerID,
+			&i.AutomationID,
+			&i.AutomationTriggerID,
+			&i.Provider,
+			&i.Event,
+			&i.DedupeKey,
+			&i.DedupeSource,
+			&i.SignatureStatus,
+			&i.Status,
+			&i.AttemptCount,
+			&i.ContentType,
+			&i.ResponseStatus,
+			&i.AutopilotRunID,
+			&i.AutomationRunID,
+			&i.ReplayedFromDeliveryID,
+			&i.Error,
+			&i.ReceivedAt,
+			&i.LastAttemptAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWebhookDeliveriesByAutopilot = `-- name: ListWebhookDeliveriesByAutopilot :many
+SELECT
+    d.id, d.workspace_id, d.autopilot_id, d.trigger_id, d.automation_id, d.automation_trigger_id, d.provider, d.event,
+    d.dedupe_key, d.dedupe_source, d.signature_status, d.status,
+    d.attempt_count, d.content_type, d.response_status,
+    d.autopilot_run_id, d.automation_run_id, d.replayed_from_delivery_id, d.error,
     d.received_at, d.last_attempt_at, d.created_at
 FROM webhook_delivery d
 JOIN autopilot a ON a.id = d.autopilot_id
@@ -286,6 +449,8 @@ type ListWebhookDeliveriesByAutopilotRow struct {
 	WorkspaceID            pgtype.UUID        `json:"workspace_id"`
 	AutopilotID            pgtype.UUID        `json:"autopilot_id"`
 	TriggerID              pgtype.UUID        `json:"trigger_id"`
+	AutomationID           pgtype.UUID        `json:"automation_id"`
+	AutomationTriggerID    pgtype.UUID        `json:"automation_trigger_id"`
 	Provider               string             `json:"provider"`
 	Event                  string             `json:"event"`
 	DedupeKey              pgtype.Text        `json:"dedupe_key"`
@@ -296,6 +461,7 @@ type ListWebhookDeliveriesByAutopilotRow struct {
 	ContentType            pgtype.Text        `json:"content_type"`
 	ResponseStatus         pgtype.Int4        `json:"response_status"`
 	AutopilotRunID         pgtype.UUID        `json:"autopilot_run_id"`
+	AutomationRunID        pgtype.UUID        `json:"automation_run_id"`
 	ReplayedFromDeliveryID pgtype.UUID        `json:"replayed_from_delivery_id"`
 	Error                  pgtype.Text        `json:"error"`
 	ReceivedAt             pgtype.Timestamptz `json:"received_at"`
@@ -330,6 +496,8 @@ func (q *Queries) ListWebhookDeliveriesByAutopilot(ctx context.Context, arg List
 			&i.WorkspaceID,
 			&i.AutopilotID,
 			&i.TriggerID,
+			&i.AutomationID,
+			&i.AutomationTriggerID,
 			&i.Provider,
 			&i.Event,
 			&i.DedupeKey,
@@ -340,6 +508,7 @@ func (q *Queries) ListWebhookDeliveriesByAutopilot(ctx context.Context, arg List
 			&i.ContentType,
 			&i.ResponseStatus,
 			&i.AutopilotRunID,
+			&i.AutomationRunID,
 			&i.ReplayedFromDeliveryID,
 			&i.Error,
 			&i.ReceivedAt,
@@ -360,19 +529,21 @@ const updateWebhookDeliveryDispatched = `-- name: UpdateWebhookDeliveryDispatche
 UPDATE webhook_delivery
 SET status = $2,
     autopilot_run_id = $3,
-    response_status = $4,
-    response_body = $5,
+    automation_run_id = $4,
+    response_status = $5,
+    response_body = $6,
     last_attempt_at = now()
 WHERE id = $1
-RETURNING id, workspace_id, autopilot_id, trigger_id, provider, event, dedupe_key, dedupe_source, signature_status, status, attempt_count, selected_headers, content_type, raw_body, response_status, response_body, autopilot_run_id, replayed_from_delivery_id, error, received_at, last_attempt_at, created_at
+RETURNING id, workspace_id, autopilot_id, trigger_id, provider, event, dedupe_key, dedupe_source, signature_status, status, attempt_count, selected_headers, content_type, raw_body, response_status, response_body, autopilot_run_id, replayed_from_delivery_id, error, received_at, last_attempt_at, created_at, automation_id, automation_trigger_id, automation_run_id
 `
 
 type UpdateWebhookDeliveryDispatchedParams struct {
-	ID             pgtype.UUID `json:"id"`
-	Status         string      `json:"status"`
-	AutopilotRunID pgtype.UUID `json:"autopilot_run_id"`
-	ResponseStatus pgtype.Int4 `json:"response_status"`
-	ResponseBody   pgtype.Text `json:"response_body"`
+	ID              pgtype.UUID `json:"id"`
+	Status          string      `json:"status"`
+	AutopilotRunID  pgtype.UUID `json:"autopilot_run_id"`
+	AutomationRunID pgtype.UUID `json:"automation_run_id"`
+	ResponseStatus  pgtype.Int4 `json:"response_status"`
+	ResponseBody    pgtype.Text `json:"response_body"`
 }
 
 // Finalises a delivery that successfully created (or skipped to) an
@@ -383,6 +554,7 @@ func (q *Queries) UpdateWebhookDeliveryDispatched(ctx context.Context, arg Updat
 		arg.ID,
 		arg.Status,
 		arg.AutopilotRunID,
+		arg.AutomationRunID,
 		arg.ResponseStatus,
 		arg.ResponseBody,
 	)
@@ -410,6 +582,9 @@ func (q *Queries) UpdateWebhookDeliveryDispatched(ctx context.Context, arg Updat
 		&i.ReceivedAt,
 		&i.LastAttemptAt,
 		&i.CreatedAt,
+		&i.AutomationID,
+		&i.AutomationTriggerID,
+		&i.AutomationRunID,
 	)
 	return i, err
 }
@@ -422,7 +597,7 @@ SET status = $2,
     response_body = $5,
     last_attempt_at = now()
 WHERE id = $1
-RETURNING id, workspace_id, autopilot_id, trigger_id, provider, event, dedupe_key, dedupe_source, signature_status, status, attempt_count, selected_headers, content_type, raw_body, response_status, response_body, autopilot_run_id, replayed_from_delivery_id, error, received_at, last_attempt_at, created_at
+RETURNING id, workspace_id, autopilot_id, trigger_id, provider, event, dedupe_key, dedupe_source, signature_status, status, attempt_count, selected_headers, content_type, raw_body, response_status, response_body, autopilot_run_id, replayed_from_delivery_id, error, received_at, last_attempt_at, created_at, automation_id, automation_trigger_id, automation_run_id
 `
 
 type UpdateWebhookDeliveryTerminalParams struct {
@@ -468,6 +643,9 @@ func (q *Queries) UpdateWebhookDeliveryTerminal(ctx context.Context, arg UpdateW
 		&i.ReceivedAt,
 		&i.LastAttemptAt,
 		&i.CreatedAt,
+		&i.AutomationID,
+		&i.AutomationTriggerID,
+		&i.AutomationRunID,
 	)
 	return i, err
 }

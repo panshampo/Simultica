@@ -184,6 +184,9 @@ func New(queries *db.Queries, txStarter txStarter, hub *realtime.Hub, bus *event
 
 	taskSvc := service.NewTaskService(queries, txStarter, hub, bus, daemonHub)
 	taskSvc.Analytics = analyticsClient
+	issueSvc := service.NewIssueService(queries, txStarter, bus, analyticsClient, taskSvc)
+	autopilotSvc := service.NewAutopilotService(queries, txStarter, bus, taskSvc)
+	autopilotSvc.SetIssueService(issueSvc)
 	return &Handler{
 		Queries:               queries,
 		DB:                    executor,
@@ -192,8 +195,8 @@ func New(queries *db.Queries, txStarter txStarter, hub *realtime.Hub, bus *event
 		DaemonHub:             daemonHub,
 		Bus:                   bus,
 		TaskService:           taskSvc,
-		IssueService:          service.NewIssueService(queries, txStarter, bus, analyticsClient, taskSvc),
-		AutopilotService:      service.NewAutopilotService(queries, txStarter, bus, taskSvc),
+		IssueService:          issueSvc,
+		AutopilotService:      autopilotSvc,
 		EmailService:          emailService,
 		UpdateStore:           NewInMemoryUpdateStore(),
 		ModelListStore:        NewInMemoryModelListStore(),

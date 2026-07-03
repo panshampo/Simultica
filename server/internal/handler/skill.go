@@ -222,11 +222,22 @@ const workflowFilePath = "workflow.yaml"
 
 func fileListHasWorkflow(files []CreateSkillFileRequest) bool {
 	for _, f := range files {
-		if sanitizeNullBytes(f.Path) == workflowFilePath {
+		if sanitizeNullBytes(f.Path) == workflowFilePath && workflowYAMLHasNodes(f.Content) {
 			return true
 		}
 	}
 	return false
+}
+
+func workflowYAMLHasNodes(content string) bool {
+	if strings.TrimSpace(content) == "" {
+		return false
+	}
+	var def skillWorkflowDefinition
+	if err := yaml.Unmarshal([]byte(content), &def); err != nil {
+		return true
+	}
+	return len(def.Nodes) > 0
 }
 
 func mergeSkillConfigFlag(raw []byte, hasWorkflow bool) ([]byte, error) {
@@ -261,7 +272,12 @@ func (h *Handler) setSkillHasWorkflow(ctx context.Context, skill db.Skill, hasWo
 }
 
 func (h *Handler) setSkillWorkflowConfig(ctx context.Context, skill db.Skill, workflowYAML string) (db.Skill, error) {
-	config, err := mergeSkillConfigWorkflow(skill.Config, true, validateSkillWorkflowYAML(workflowYAML))
+	hasWorkflow := workflowYAMLHasNodes(workflowYAML)
+	var validation any
+	if hasWorkflow {
+		validation = validateSkillWorkflowYAML(workflowYAML)
+	}
+	config, err := mergeSkillConfigWorkflow(skill.Config, hasWorkflow, validation)
 	if err != nil {
 		return skill, err
 	}
@@ -661,7 +677,9 @@ func (h *Handler) UpdateSkill(w http.ResponseWriter, r *http.Request) {
 		var workflowValidation any
 		for _, f := range req.Files {
 			if sanitizeNullBytes(f.Path) == workflowFilePath {
-				workflowValidation = validateSkillWorkflowYAML(f.Content)
+				if workflowYAMLHasNodes(f.Content) {
+					workflowValidation = validateSkillWorkflowYAML(f.Content)
+				}
 				break
 			}
 		}
@@ -2096,13 +2114,22 @@ func (h *Handler) UpsertSkillFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to upsert skill file: "+err.Error())
 		return
 	}
+	updatedSkill := skill
 	if sf.Path == workflowFilePath {
-		if _, err := h.setSkillWorkflowConfig(r.Context(), skill, req.Content); err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to mark workflow skill: "+err.Error())
+		if strings.TrimSpace(req.Content) == "" {
+			updatedSkill, err = h.setSkillHasWorkflow(r.Context(), skill, false)
+		} else {
+			updatedSkill, err = h.setSkillWorkflowConfig(r.Context(), skill, req.Content)
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to update workflow skill flag: "+err.Error())
 			return
 		}
 	}
 
+	wsID := uuidToString(updatedSkill.WorkspaceID)
+	actorType, actorID := h.resolveActor(r, requestUserID(r), wsID)
+	h.publish(protocol.EventSkillUpdated, wsID, actorType, actorID, map[string]any{"skill": skillToResponse(updatedSkill)})
 	writeJSON(w, http.StatusOK, skillFileToResponse(sf))
 }
 

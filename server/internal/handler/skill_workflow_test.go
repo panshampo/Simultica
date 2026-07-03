@@ -6,6 +6,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"github.com/multica-ai/multica/server/internal/events"
+	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
 func TestUpsertWorkflowFileSetsHasWorkflowFlag(t *testing.T) {
@@ -25,6 +29,117 @@ func TestUpsertWorkflowFileSetsHasWorkflowFlag(t *testing.T) {
 	}
 	assertSkillHasWorkflow(t, skillID, true)
 	assertSkillWorkflowValidation(t, skillID, true)
+}
+
+func TestUpsertBlankWorkflowFileClearsHasWorkflowFlag(t *testing.T) {
+	skillID := insertHandlerTestSkill(t, "workflow-upsert-blank", "# skill")
+	req := newRequest("PUT", "/api/skills/"+skillID+"/files", map[string]any{
+		"path":    workflowFilePath,
+		"content": validWorkflowYAML(),
+	})
+	req = withURLParam(req, "id", skillID)
+	w := httptest.NewRecorder()
+	testHandler.UpsertSkillFile(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("initial UpsertSkillFile: expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	assertSkillHasWorkflow(t, skillID, true)
+
+	req = newRequest("PUT", "/api/skills/"+skillID+"/files", map[string]any{
+		"path":    workflowFilePath,
+		"content": " \n\t ",
+	})
+	req = withURLParam(req, "id", skillID)
+	w = httptest.NewRecorder()
+	testHandler.UpsertSkillFile(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("blank UpsertSkillFile: expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	assertSkillHasWorkflow(t, skillID, false)
+	assertSkillWorkflowValidationMissing(t, skillID)
+}
+
+func TestUpsertWorkflowFileWithoutNodesClearsHasWorkflowFlag(t *testing.T) {
+	skillID := insertHandlerTestSkill(t, "workflow-upsert-no-nodes", "# skill")
+	req := newRequest("PUT", "/api/skills/"+skillID+"/files", map[string]any{
+		"path":    workflowFilePath,
+		"content": validWorkflowYAML(),
+	})
+	req = withURLParam(req, "id", skillID)
+	w := httptest.NewRecorder()
+	testHandler.UpsertSkillFile(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("initial UpsertSkillFile: expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	assertSkillHasWorkflow(t, skillID, true)
+
+	req = newRequest("PUT", "/api/skills/"+skillID+"/files", map[string]any{
+		"path": workflowFilePath,
+		"content": `
+meta:
+  name: empty
+state:
+  fields: []
+nodes: []
+routing:
+  - from: START
+    to: END
+`,
+	})
+	req = withURLParam(req, "id", skillID)
+	w = httptest.NewRecorder()
+	testHandler.UpsertSkillFile(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("empty-node UpsertSkillFile: expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	assertSkillHasWorkflow(t, skillID, false)
+	assertSkillWorkflowValidationMissing(t, skillID)
+}
+
+func TestUpsertWorkflowFilePublishesSkillUpdatedWithWorkflowFlag(t *testing.T) {
+	skillID := insertHandlerTestSkill(t, "workflow-upsert-event", "# skill")
+	gotEvent := make(chan events.Event, 1)
+	testHandler.Bus.Subscribe(protocol.EventSkillUpdated, func(e events.Event) {
+		select {
+		case gotEvent <- e:
+		default:
+		}
+	})
+
+	req := newRequest("PUT", "/api/skills/"+skillID+"/files", map[string]any{
+		"path":    workflowFilePath,
+		"content": validWorkflowYAML(),
+	})
+	req = withURLParam(req, "id", skillID)
+	w := httptest.NewRecorder()
+
+	testHandler.UpsertSkillFile(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("UpsertSkillFile: expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	select {
+	case event := <-gotEvent:
+		payload, ok := event.Payload.(map[string]any)
+		if !ok {
+			t.Fatalf("event payload = %T, want map", event.Payload)
+		}
+		rawSkill, ok := payload["skill"].(SkillResponse)
+		if !ok {
+			t.Fatalf("event skill payload = %T, want SkillResponse", payload["skill"])
+		}
+		config, ok := rawSkill.Config.(map[string]any)
+		if !ok {
+			t.Fatalf("event skill config = %T, want map", rawSkill.Config)
+		}
+		if got, _ := config["has_workflow"].(bool); !got {
+			t.Fatalf("event has_workflow = %v, want true (config=%v)", got, config)
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("expected %s event", protocol.EventSkillUpdated)
+	}
 }
 
 func TestUpsertWorkflowFileStoresValidationErrors(t *testing.T) {
@@ -127,6 +242,26 @@ func TestUpdateSkillFilesSetsHasWorkflowFlagFromReplacementList(t *testing.T) {
 	assertSkillHasWorkflow(t, skillID, false)
 }
 
+func TestUpdateSkillFilesDoesNotSetHasWorkflowForWorkflowWithoutNodes(t *testing.T) {
+	skillID := insertHandlerTestSkill(t, "workflow-replace-no-nodes", "# skill")
+
+	req := newRequest("PUT", "/api/skills/"+skillID, map[string]any{
+		"files": []map[string]any{
+			{"path": workflowFilePath, "content": "meta:\n  name: empty\nstate:\n  fields: []\nnodes: []\nrouting: []\n"},
+		},
+	})
+	req = withURLParam(req, "id", skillID)
+	w := httptest.NewRecorder()
+
+	testHandler.UpdateSkill(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("UpdateSkill: expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	assertSkillHasWorkflow(t, skillID, false)
+	assertSkillWorkflowValidationMissing(t, skillID)
+}
+
 func validWorkflowYAML() string {
 	return `
 meta:
@@ -199,5 +334,20 @@ func assertSkillWorkflowValidation(t *testing.T, skillID string, wantValid bool)
 		if len(errors) == 0 {
 			t.Fatalf("workflow_validation errors missing for invalid workflow: %s", string(raw))
 		}
+	}
+}
+
+func assertSkillWorkflowValidationMissing(t *testing.T, skillID string) {
+	t.Helper()
+	var raw []byte
+	if err := testPool.QueryRow(context.Background(), `SELECT config FROM skill WHERE id=$1`, skillID).Scan(&raw); err != nil {
+		t.Fatalf("read skill config: %v", err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		t.Fatalf("decode skill config %s: %v", string(raw), err)
+	}
+	if _, ok := cfg["workflow_validation"]; ok {
+		t.Fatalf("workflow_validation should be removed when workflow is blank: %s", string(raw))
 	}
 }

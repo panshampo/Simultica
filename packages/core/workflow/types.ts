@@ -14,6 +14,11 @@ export type WorkflowNodeType =
   | "human_gate";
 export type WorkflowDispatch = "subissue" | "direct_subagent" | "inline" | "main_issue_task";
 
+export interface WorkflowOnCompleteIncrementAction {
+  action: "increment";
+  field: string;
+}
+
 export interface WorkflowNode {
   id: string;
   type: WorkflowNodeType;
@@ -25,6 +30,7 @@ export interface WorkflowNode {
   source_skill_name?: string;
   source_node_id?: string;
   modified_from_template?: boolean;
+  on_complete?: WorkflowOnCompleteIncrementAction[];
   config?: {
     agent?: string;
     system?: string;
@@ -38,6 +44,8 @@ export interface WorkflowEdge {
   to: string;
   condition?: string;
   else?: string;
+  sourceHandle?: string;
+  targetHandle?: string;
 }
 
 export interface WorkflowStateField {
@@ -57,7 +65,7 @@ export interface WorkflowDefinition {
   execution?: Record<string, unknown>;
 }
 
-export type WorkflowNodeStatus = "pending" | "running" | "done" | "failed" | "cancelling" | "cancelled";
+export type WorkflowNodeStatus = "pending" | "running" | "done" | "blocked" | "failed" | "cancelling" | "cancelled";
 
 export interface WorkflowNodeRunState {
   status: WorkflowNodeStatus;

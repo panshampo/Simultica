@@ -7,14 +7,14 @@
 -- (trigger_id, dedupe_key) raises 23505 and the handler treats it as
 -- "duplicate" rather than an error.
 INSERT INTO webhook_delivery (
-    workspace_id, autopilot_id, trigger_id, provider, event,
+    workspace_id, autopilot_id, trigger_id, automation_id, automation_trigger_id, provider, event,
     dedupe_key, dedupe_source, signature_status, status,
     selected_headers, content_type, raw_body,
     replayed_from_delivery_id
 ) VALUES (
-    $1, $2, $3, $4, $5,
-    sqlc.narg('dedupe_key'), sqlc.narg('dedupe_source'), $6, $7,
-    $8, sqlc.narg('content_type'), sqlc.narg('raw_body'),
+    $1, sqlc.narg('autopilot_id'), sqlc.narg('trigger_id'), sqlc.narg('automation_id'), sqlc.narg('automation_trigger_id'), $2, $3,
+    sqlc.narg('dedupe_key'), sqlc.narg('dedupe_source'), $4, $5,
+    $6, sqlc.narg('content_type'), sqlc.narg('raw_body'),
     sqlc.narg('replayed_from_delivery_id')
 ) RETURNING *;
 
@@ -41,6 +41,14 @@ WHERE trigger_id = $1
 ORDER BY (status IN ('rejected', 'failed')), created_at DESC
 LIMIT 1;
 
+-- name: GetWebhookDeliveryByAutomationTriggerAndDedupe :one
+-- Automation-family equivalent of GetWebhookDeliveryByTriggerAndDedupe.
+SELECT * FROM webhook_delivery
+WHERE automation_trigger_id = $1
+  AND dedupe_key = $2
+ORDER BY (status IN ('rejected', 'failed')), created_at DESC
+LIMIT 1;
+
 -- name: BumpWebhookDeliveryAttempt :one
 -- On duplicate detection, bump attempt_count and refresh last_attempt_at on
 -- the existing delivery so the UI / operator can see retry pressure without
@@ -58,6 +66,7 @@ RETURNING *;
 UPDATE webhook_delivery
 SET status = $2,
     autopilot_run_id = sqlc.narg('autopilot_run_id'),
+    automation_run_id = sqlc.narg('automation_run_id'),
     response_status = sqlc.narg('response_status'),
     response_body = sqlc.narg('response_body'),
     last_attempt_at = now()
@@ -87,14 +96,30 @@ RETURNING *;
 -- encoder — Deliveries tab would hit that on every reload. Detail views
 -- fetch the full row via GetWebhookDelivery / GetWebhookDeliveryInWorkspace.
 SELECT
-    d.id, d.workspace_id, d.autopilot_id, d.trigger_id, d.provider, d.event,
+    d.id, d.workspace_id, d.autopilot_id, d.trigger_id, d.automation_id, d.automation_trigger_id, d.provider, d.event,
     d.dedupe_key, d.dedupe_source, d.signature_status, d.status,
     d.attempt_count, d.content_type, d.response_status,
-    d.autopilot_run_id, d.replayed_from_delivery_id, d.error,
+    d.autopilot_run_id, d.automation_run_id, d.replayed_from_delivery_id, d.error,
     d.received_at, d.last_attempt_at, d.created_at
 FROM webhook_delivery d
 JOIN autopilot a ON a.id = d.autopilot_id
 WHERE d.autopilot_id = $1
+  AND a.workspace_id = $2
+ORDER BY d.created_at DESC
+LIMIT $3 OFFSET $4;
+
+-- name: ListWebhookDeliveriesByAutomation :many
+-- Automation-family list projection. Mirrors ListWebhookDeliveriesByAutopilot
+-- while omitting large payload columns.
+SELECT
+    d.id, d.workspace_id, d.autopilot_id, d.trigger_id, d.automation_id, d.automation_trigger_id, d.provider, d.event,
+    d.dedupe_key, d.dedupe_source, d.signature_status, d.status,
+    d.attempt_count, d.content_type, d.response_status,
+    d.autopilot_run_id, d.automation_run_id, d.replayed_from_delivery_id, d.error,
+    d.received_at, d.last_attempt_at, d.created_at
+FROM webhook_delivery d
+JOIN automation a ON a.id = d.automation_id
+WHERE d.automation_id = $1
   AND a.workspace_id = $2
 ORDER BY d.created_at DESC
 LIMIT $3 OFFSET $4;

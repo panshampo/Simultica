@@ -165,6 +165,13 @@ INSERT INTO agent_task_queue (agent_id, runtime_id, issue_id, status, priority, 
 VALUES ($1, $2, NULL, 'queued', $3, $4)
 RETURNING *;
 
+-- name: CreateAutomationTask :one
+INSERT INTO agent_task_queue (
+    agent_id, runtime_id, issue_id, status, priority, automation_run_id, trigger_summary
+) VALUES (
+    $1, $2, NULL, 'queued', $3, $4, sqlc.narg('trigger_summary')
+) RETURNING *;
+
 -- name: CreateWorkflowPlannerTask :one
 -- Workflow planner tasks are issue-linked but context-marked so the runtime
 -- can ask the main agent for a structured runtime workflow draft instead of a
@@ -203,13 +210,13 @@ WHERE id = $1 AND issue_id IS NULL;
 -- parent and the self-trigger guard in shouldEnqueueSquadLeaderOnComment
 -- continues to recognise it as a leader task.
 INSERT INTO agent_task_queue (
-    agent_id, runtime_id, issue_id, chat_session_id, autopilot_run_id,
+    agent_id, runtime_id, issue_id, chat_session_id, autopilot_run_id, automation_run_id,
     status, priority, trigger_comment_id, trigger_summary, context,
     session_id, work_dir,
     attempt, max_attempts, parent_task_id, force_fresh_session, is_leader_task
 )
 SELECT
-    p.agent_id, p.runtime_id, p.issue_id, p.chat_session_id, p.autopilot_run_id,
+    p.agent_id, p.runtime_id, p.issue_id, p.chat_session_id, p.autopilot_run_id, p.automation_run_id,
     'queued', p.priority, p.trigger_comment_id, p.trigger_summary, p.context,
     CASE WHEN p.failure_reason IS NOT DISTINCT FROM 'codex_semantic_inactivity' THEN NULL ELSE p.session_id END,
     CASE WHEN p.failure_reason IS NOT DISTINCT FROM 'codex_semantic_inactivity' THEN NULL ELSE p.work_dir END,
@@ -316,9 +323,11 @@ WHERE id = (
                 atq.issue_id IS NULL
                 AND atq.chat_session_id IS NULL
                 AND atq.autopilot_run_id IS NULL
+                AND atq.automation_run_id IS NULL
                 AND active.issue_id IS NULL
                 AND active.chat_session_id IS NULL
                 AND active.autopilot_run_id IS NULL
+                AND active.automation_run_id IS NULL
               )
             )
       )

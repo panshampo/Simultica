@@ -15,10 +15,10 @@ import {
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  autopilotDeliveriesOptions,
-  autopilotDeliveryOptions,
-  useReplayAutopilotDelivery,
-} from "@multica/core/autopilots";
+  automationDeliveriesOptions,
+  automationDeliveryOptions,
+  useReplayAutomationDelivery,
+} from "@multica/core/automations";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { Button } from "@multica/ui/components/ui/button";
@@ -98,17 +98,17 @@ function canReplay(delivery: WebhookDelivery): boolean {
 // --- Section --------------------------------------------------------------
 
 export function WebhookDeliveriesSection({
-  autopilotId,
+  automationId,
   hasWebhookTrigger,
 }: {
-  autopilotId: string;
+  automationId: string;
   hasWebhookTrigger: boolean;
 }) {
   const { t } = useT("autopilots");
   const wsId = useWorkspaceId();
 
   const { data: deliveries = [], isLoading } = useQuery(
-    autopilotDeliveriesOptions(wsId, autopilotId, {
+    automationDeliveriesOptions(wsId, automationId, {
       enabled: hasWebhookTrigger,
     }),
   );
@@ -139,7 +139,7 @@ export function WebhookDeliveriesSection({
             <DeliveryRow
               key={delivery.id}
               delivery={delivery}
-              autopilotId={autopilotId}
+              automationId={automationId}
             />
           ))}
         </div>
@@ -152,10 +152,10 @@ export function WebhookDeliveriesSection({
 
 function DeliveryRow({
   delivery,
-  autopilotId,
+  automationId,
 }: {
   delivery: WebhookDelivery;
-  autopilotId: string;
+  automationId: string;
 }) {
   const { t } = useT("autopilots");
   const [open, setOpen] = useState(false);
@@ -211,7 +211,7 @@ function DeliveryRow({
         <DeliveryDetailDialog
           open={open}
           onOpenChange={setOpen}
-          autopilotId={autopilotId}
+          automationId={automationId}
           delivery={delivery}
         />
       )}
@@ -224,18 +224,18 @@ function DeliveryRow({
 function DeliveryDetailDialog({
   open,
   onOpenChange,
-  autopilotId,
+  automationId,
   delivery,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  autopilotId: string;
+  automationId: string;
   delivery: WebhookDelivery;
 }) {
   const { t } = useT("autopilots");
   const wsId = useWorkspaceId();
   const { data: detail, isLoading } = useQuery(
-    autopilotDeliveryOptions(wsId, autopilotId, delivery.id, { enabled: open }),
+    automationDeliveryOptions(wsId, automationId, delivery.id, { enabled: open }),
   );
   // Use the detail row when loaded, otherwise the slim row from the list.
   // The slim row is missing raw_body / response_body / selected_headers; the
@@ -338,7 +338,7 @@ function DeliveryDetailDialog({
           <div className="flex items-center justify-between pt-2">
             <ReplayHint delivery={full} />
             <ReplayButton
-              autopilotId={autopilotId}
+              automationId={automationId}
               delivery={full}
               onSuccess={() => onOpenChange(false)}
             />
@@ -513,21 +513,21 @@ function ReplayHint({ delivery }: { delivery: WebhookDelivery }) {
 }
 
 function ReplayButton({
-  autopilotId,
+  automationId,
   delivery,
   onSuccess,
 }: {
-  autopilotId: string;
+  automationId: string;
   delivery: WebhookDelivery;
   onSuccess: () => void;
 }) {
   const { t } = useT("autopilots");
-  const replay = useReplayAutopilotDelivery();
+  const replay = useReplayAutomationDelivery();
   const enabled = canReplay(delivery) && !replay.isPending;
 
   const handleClick = async () => {
     try {
-      await replay.mutateAsync({ autopilotId, deliveryId: delivery.id });
+      await replay.mutateAsync({ automationId, deliveryId: delivery.id });
       toast.success(t(($) => $.deliveries.replay.toast_success));
       onSuccess();
     } catch (e: unknown) {

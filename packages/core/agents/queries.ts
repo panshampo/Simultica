@@ -24,14 +24,14 @@ export const agentRunCountsKeys = {
 //
 // The 30s staleTime is a safety net only; the primary freshness signal is
 // WS task events, which invalidate this query immediately. Without WS,
-// presence still updates within 30s on focus / mount.
+// presence still updates within 30s on mount/reconnect.
 export function agentTaskSnapshotOptions(wsId: string) {
   return queryOptions({
     queryKey: agentTaskSnapshotKeys.list(wsId),
     queryFn: () => api.getAgentTaskSnapshot(),
     staleTime: 30 * 1000,
     gcTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 }
 

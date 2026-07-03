@@ -1437,6 +1437,10 @@ func TestWorkflowOrchestrationRenderedForIssueTasks(t *testing.T) {
 	for _, want := range []string{
 		"## Workflow Orchestration",
 		"multica workflow submit",
+		"After submission succeeds",
+		"Do NOT inspect code",
+		"create fallback sub-issues",
+		"produce a final answer",
 		"aaaa1111-0000-0000-0000-000000000001",
 		"Coder",
 	} {

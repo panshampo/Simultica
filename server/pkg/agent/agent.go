@@ -129,11 +129,13 @@ func New(agentType string, cfg Config) (Backend, error) {
 		cfg.Logger = slog.Default()
 	}
 
+	if backend, ok, err := newRegisteredBackend(agentType, cfg); ok {
+		return backend, err
+	}
+
 	switch agentType {
 	case "claude":
 		return &claudeBackend{cfg: cfg}, nil
-	case "ds-copilot":
-		return &dsCopilotBackend{cfg: cfg}, nil
 	case "codex":
 		return &codexBackend{cfg: cfg}, nil
 	case "copilot":
@@ -144,8 +146,6 @@ func New(agentType string, cfg Config) (Backend, error) {
 		return &openclawBackend{cfg: cfg}, nil
 	case "hermes":
 		return &hermesBackend{cfg: cfg}, nil
-	case "gemini":
-		return &geminiBackend{cfg: cfg}, nil
 	case "pi":
 		return &piBackend{cfg: cfg}, nil
 	case "cursor":
@@ -156,10 +156,8 @@ func New(agentType string, cfg Config) (Backend, error) {
 		return &kiroBackend{cfg: cfg}, nil
 	case "antigravity":
 		return &antigravityBackend{cfg: cfg}, nil
-	case "traex":
-		return &traexBackend{cfg: cfg}, nil
 	default:
-		return nil, fmt.Errorf("unknown agent type: %q (supported: claude, ds-copilot, codex, copilot, opencode, openclaw, hermes, gemini, pi, cursor, kimi, kiro, antigravity, traex)", agentType)
+		return nil, fmt.Errorf("unknown agent type: %q (supported: %s)", agentType, supportedAgentTypesString())
 	}
 }
 
@@ -187,20 +185,34 @@ var launchHeaders = map[string]string{
 	"codex":       "codex app-server",
 	"copilot":     "copilot (json)",
 	"cursor":      "cursor-agent (stream-json)",
-	"ds-copilot":  "ds-copilot (stream-json)",
-	"gemini":      "gemini (stream-json)",
 	"hermes":      "hermes acp",
 	"kimi":        "kimi acp",
 	"kiro":        "kiro-cli acp",
 	"openclaw":    "openclaw agent (json)",
 	"opencode":    "opencode run (json)",
 	"pi":          "pi (json mode)",
-	"traex":       "traex app-server",
+}
+
+var builtInAgentTypes = []string{
+	"antigravity",
+	"claude",
+	"codex",
+	"copilot",
+	"cursor",
+	"hermes",
+	"kimi",
+	"kiro",
+	"openclaw",
+	"opencode",
+	"pi",
 }
 
 // LaunchHeader returns the user-visible launch skeleton for agentType, or an
 // empty string if the type is unknown. Callers render this as a preview so
 // users understand which command their custom_args get appended to.
 func LaunchHeader(agentType string) string {
+	if header, ok := registeredLaunchHeader(agentType); ok {
+		return header
+	}
 	return launchHeaders[agentType]
 }

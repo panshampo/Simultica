@@ -27,6 +27,13 @@ type traexBackend struct {
 	cfg Config
 }
 
+func init() {
+	RegisterBackend("traex", func(cfg Config) (Backend, error) {
+		return &traexBackend{cfg: cfg}, nil
+	})
+	RegisterLaunchHeader("traex", "traex app-server")
+}
+
 func (b *traexBackend) Execute(ctx context.Context, prompt string, opts ExecOptions) (*Session, error) {
 	cfg := b.cfg
 	if cfg.ExecutablePath == "" {

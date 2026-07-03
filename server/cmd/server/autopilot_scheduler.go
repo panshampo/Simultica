@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/multica-ai/multica/server/internal/handler"
 	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
@@ -27,6 +29,7 @@ func runAutopilotScheduler(ctx context.Context, queries *db.Queries, svc *servic
 			return
 		case <-ticker.C:
 			tickScheduledAutopilots(ctx, queries, svc)
+			tickScheduledAutomations(ctx, queries, svc)
 		}
 	}
 }
@@ -34,6 +37,11 @@ func runAutopilotScheduler(ctx context.Context, queries *db.Queries, svc *servic
 // recoverLostTriggers finds schedule triggers whose next_run_at is NULL
 // (claimed but never advanced, typically after a crash) and recomputes it.
 func recoverLostTriggers(ctx context.Context, queries *db.Queries) {
+	recoverLostAutopilotTriggers(ctx, queries)
+	recoverLostAutomationTriggers(ctx, queries)
+}
+
+func recoverLostAutopilotTriggers(ctx context.Context, queries *db.Queries) {
 	triggers, err := queries.RecoverLostTriggers(ctx)
 	if err != nil {
 		slog.Warn("autopilot scheduler: failed to recover lost triggers", "error", err)
@@ -65,6 +73,26 @@ func recoverLostTriggers(ctx context.Context, queries *db.Queries) {
 			slog.Warn("autopilot scheduler: failed to recover trigger",
 				"trigger_id", util.UUIDToString(t.ID), "error", err)
 		}
+	}
+}
+
+func recoverLostAutomationTriggers(ctx context.Context, queries *db.Queries) {
+	triggers, err := queries.RecoverLostAutomationTriggers(ctx)
+	if err != nil {
+		slog.Warn("autopilot scheduler: failed to recover lost automation triggers", "error", err)
+		return
+	}
+	if len(triggers) == 0 {
+		return
+	}
+
+	slog.Info("autopilot scheduler: recovering lost automation triggers", "count", len(triggers))
+	for _, t := range triggers {
+		advanceAutomationNextRun(ctx, queries, automationScheduleTrigger{
+			ID:             t.ID,
+			CronExpression: t.CronExpression,
+			Timezone:       t.Timezone,
+		})
 	}
 }
 
@@ -106,6 +134,50 @@ func tickScheduledAutopilots(ctx context.Context, queries *db.Queries, svc *serv
 	}
 }
 
+// tickScheduledAutomations claims all due v2 automation schedule triggers and
+// dispatches each one. It shares the legacy scheduler loop intentionally:
+// autopilots and automations have separate tables, but both are "scheduled
+// agent work" and should advance on the same cadence.
+func tickScheduledAutomations(ctx context.Context, queries *db.Queries, svc *service.AutopilotService) {
+	triggers, err := queries.ClaimDueAutomationScheduleTriggers(ctx)
+	if err != nil {
+		slog.Warn("autopilot scheduler: failed to claim due automation triggers", "error", err)
+		return
+	}
+	if len(triggers) == 0 {
+		return
+	}
+
+	slog.Info("autopilot scheduler: claimed due automation triggers", "count", len(triggers))
+
+	h := handler.Handler{Queries: queries, AutopilotService: svc}
+	for _, t := range triggers {
+		automation, err := queries.GetAutomation(ctx, t.AutomationID)
+		if err != nil {
+			slog.Warn("autopilot scheduler: failed to load automation",
+				"trigger_id", util.UUIDToString(t.ID),
+				"automation_id", util.UUIDToString(t.AutomationID),
+				"error", err,
+			)
+			continue
+		}
+
+		if _, err := h.DispatchAutomation(ctx, &http.Request{}, automation, t.ID, "schedule", nil); err != nil {
+			slog.Warn("autopilot scheduler: automation dispatch failed",
+				"automation_id", util.UUIDToString(automation.ID),
+				"trigger_id", util.UUIDToString(t.ID),
+				"error", err,
+			)
+		}
+
+		advanceAutomationNextRun(ctx, queries, automationScheduleTrigger{
+			ID:             t.ID,
+			CronExpression: t.CronExpression,
+			Timezone:       t.Timezone,
+		})
+	}
+}
+
 // advanceNextRun computes the next fire time and updates the trigger.
 func advanceNextRun(ctx context.Context, queries *db.Queries, t db.ClaimDueScheduleTriggersRow) {
 	if !t.CronExpression.Valid || t.CronExpression.String == "" {
@@ -132,6 +204,45 @@ func advanceNextRun(ctx context.Context, queries *db.Queries, t db.ClaimDueSched
 		NextRunAt: pgtype.Timestamptz{Time: next, Valid: true},
 	}); err != nil {
 		slog.Warn("autopilot scheduler: failed to advance next_run_at",
+			"trigger_id", util.UUIDToString(t.ID),
+			"error", err,
+		)
+	}
+}
+
+// advanceAutomationNextRun computes the next fire time and updates an
+// automation trigger after a claimed schedule dispatch attempt.
+type automationScheduleTrigger struct {
+	ID             pgtype.UUID
+	CronExpression pgtype.Text
+	Timezone       pgtype.Text
+}
+
+func advanceAutomationNextRun(ctx context.Context, queries *db.Queries, t automationScheduleTrigger) {
+	if !t.CronExpression.Valid || t.CronExpression.String == "" {
+		return
+	}
+
+	tz := service.DefaultAutopilotTriggerTimezone
+	if t.Timezone.Valid && t.Timezone.String != "" {
+		tz = t.Timezone.String
+	}
+
+	next, err := service.ComputeNextRun(t.CronExpression.String, tz)
+	if err != nil {
+		slog.Warn("autopilot scheduler: failed to compute automation next run",
+			"trigger_id", util.UUIDToString(t.ID),
+			"cron", t.CronExpression.String,
+			"error", err,
+		)
+		return
+	}
+
+	if err := queries.AdvanceAutomationTriggerNextRun(ctx, db.AdvanceAutomationTriggerNextRunParams{
+		ID:        t.ID,
+		NextRunAt: pgtype.Timestamptz{Time: next, Valid: true},
+	}); err != nil {
+		slog.Warn("autopilot scheduler: failed to advance automation next_run_at",
 			"trigger_id", util.UUIDToString(t.ID),
 			"error", err,
 		)

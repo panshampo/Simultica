@@ -3488,6 +3488,108 @@ func TestGetAutopilotRunGCCheck(t *testing.T) {
 	}
 }
 
+func TestClaimTaskByRuntime_AutomationRunOnlyHydratesWorkspaceAndContext(t *testing.T) {
+	if testHandler == nil {
+		t.Skip("database not available")
+	}
+
+	ctx := context.Background()
+	setHandlerTestWorkspaceRepos(t, []map[string]string{{"url": "https://github.com/example/automation-repo"}})
+
+	runtimeID := createClaimReclaimRuntime(t, ctx, "Automation run_only runtime")
+
+	var agentID string
+	if err := testPool.QueryRow(ctx, `
+		INSERT INTO agent (
+			workspace_id, name, description, runtime_mode, runtime_config,
+			runtime_id, visibility, max_concurrent_tasks, owner_id
+		)
+		VALUES ($1, 'Automation run_only agent', '', 'cloud', '{}'::jsonb, $2, 'private', 1, $3)
+		RETURNING id
+	`, testWorkspaceID, runtimeID, testUserID).Scan(&agentID); err != nil {
+		t.Fatalf("setup: create agent: %v", err)
+	}
+	t.Cleanup(func() { testPool.Exec(ctx, `DELETE FROM agent WHERE id = $1`, agentID) })
+
+	var automationID string
+	if err := testPool.QueryRow(ctx, `
+		INSERT INTO automation (
+			workspace_id, title, source_mode, inline_issue_config,
+			status, concurrency_policy, created_by_type, created_by_id
+		)
+		VALUES (
+			$1, 'Automation run_only title', 'inline',
+			'{"title":"Generated issue","description":"Automation description"}'::jsonb,
+			'active', 'skip', 'member', $2
+		)
+		RETURNING id
+	`, testWorkspaceID, testUserID).Scan(&automationID); err != nil {
+		t.Fatalf("setup: create automation: %v", err)
+	}
+	t.Cleanup(func() { testPool.Exec(ctx, `DELETE FROM automation WHERE id = $1`, automationID) })
+
+	var runID string
+	if err := testPool.QueryRow(ctx, `
+		INSERT INTO automation_run (
+			automation_id, source, source_mode_snapshot, status,
+			trigger_payload, resolved_issue_payload
+		)
+		VALUES (
+			$1, 'webhook', 'inline', 'running',
+			'{"event":"push","ref":"main"}'::jsonb,
+			'{"title":"Generated issue","description":"Automation description"}'::jsonb
+		)
+		RETURNING id
+	`, automationID).Scan(&runID); err != nil {
+		t.Fatalf("setup: create automation_run: %v", err)
+	}
+
+	if _, err := testPool.Exec(ctx, `
+		INSERT INTO agent_task_queue (
+			agent_id, runtime_id, status, priority,
+			automation_run_id, trigger_summary
+		)
+		VALUES ($1, $2, 'queued', 0, $3, 'Automation run_only title')
+	`, agentID, runtimeID, runID); err != nil {
+		t.Fatalf("setup: create automation task: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	req := newDaemonTokenRequest("POST", "/api/daemon/runtimes/"+runtimeID+"/tasks/claim", nil, testWorkspaceID, "automation-run-claim")
+	testHandler.ClaimTaskByRuntime(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("ClaimTaskByRuntime: expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Task *AgentTaskResponse `json:"task"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode claim response: %v", err)
+	}
+	if resp.Task == nil {
+		t.Fatalf("expected claimed task, got nil: %s", w.Body.String())
+	}
+	if resp.Task.WorkspaceID != testWorkspaceID {
+		t.Fatalf("expected WorkspaceID %q, got %q", testWorkspaceID, resp.Task.WorkspaceID)
+	}
+	if resp.Task.ThreadName != "Automation run_only title" {
+		t.Fatalf("expected ThreadName from automation title, got %q", resp.Task.ThreadName)
+	}
+	if resp.Task.AutopilotID != automationID {
+		t.Fatalf("expected compatibility AutopilotID %q, got %q", automationID, resp.Task.AutopilotID)
+	}
+	if resp.Task.AutopilotTitle != "Automation run_only title" {
+		t.Fatalf("expected compatibility AutopilotTitle, got %q", resp.Task.AutopilotTitle)
+	}
+	if !strings.Contains(string(resp.Task.AutopilotTriggerPayload), `"event":"push"`) {
+		t.Fatalf("expected trigger payload in compatibility field, got %s", string(resp.Task.AutopilotTriggerPayload))
+	}
+	if len(resp.Task.Repos) != 1 || resp.Task.Repos[0].URL != "https://github.com/example/automation-repo" {
+		t.Fatalf("expected workspace repo fallback, got %#v", resp.Task.Repos)
+	}
+}
+
 // TestGetTaskGCCheck verifies the task gc-check endpoint that quick-create
 // workdirs key on. Same anti-enumeration shape via requireDaemonTaskAccess.
 func TestGetTaskGCCheck(t *testing.T) {

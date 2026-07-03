@@ -1055,6 +1055,23 @@ func logClaimEndpointSlow(runtimeID, outcome string, start time.Time, authMs, cl
 	)
 }
 
+func automationRunDescription(payload json.RawMessage) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	var data struct {
+		Body        string `json:"body"`
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal(payload, &data); err != nil {
+		return ""
+	}
+	if strings.TrimSpace(data.Body) != "" {
+		return data.Body
+	}
+	return data.Description
+}
+
 // ClaimTaskByRuntime atomically claims the next queued task for a runtime.
 // The response includes the agent's name and skills, fetched fresh from the DB.
 func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
@@ -1471,11 +1488,46 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Automation run_only task: v2 automation tasks use automation_run_id but
+	// current daemons still consume the run-only prompt/env through the
+	// autopilot-shaped response fields. Mirror the automation context into
+	// those fields until an automation-specific daemon wire contract exists.
+	if task.AutomationRunID.Valid {
+		if run, err := h.Queries.GetAutomationRun(r.Context(), task.AutomationRunID); err == nil {
+			resp.AutopilotRunID = uuidToString(run.ID)
+			resp.AutopilotID = uuidToString(run.AutomationID)
+			resp.AutopilotSource = run.Source
+			if run.TriggerPayload != nil {
+				resp.AutopilotTriggerPayload = json.RawMessage(run.TriggerPayload)
+			}
+			if automation, err := h.Queries.GetAutomation(r.Context(), run.AutomationID); err == nil {
+				resp.AutopilotTitle = automation.Title
+				resp.ThreadName = automation.Title
+				if desc := automationRunDescription(run.ResolvedIssuePayload); desc != "" {
+					resp.AutopilotDescription = desc
+				} else if automation.InlineIssueConfig != nil {
+					resp.AutopilotDescription = string(automation.InlineIssueConfig)
+				}
+				if resp.WorkspaceID == "" {
+					resp.WorkspaceID = uuidToString(automation.WorkspaceID)
+				}
+				if len(resp.Repos) == 0 {
+					if ws, err := h.Queries.GetWorkspace(r.Context(), automation.WorkspaceID); err == nil && ws.Repos != nil {
+						var repos []RepoData
+						if json.Unmarshal(ws.Repos, &repos) == nil && len(repos) > 0 {
+							resp.Repos = repos
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// Quick-create task: no issue / chat / autopilot link — workspace and
 	// prompt come from the task's context JSONB. Resolve workspace from
 	// there so the isolation check below has something to compare.
 	hasQuickCreate := false
-	if task.Context != nil && !task.IssueID.Valid && !task.ChatSessionID.Valid && !task.AutopilotRunID.Valid {
+	if task.Context != nil && !task.IssueID.Valid && !task.ChatSessionID.Valid && !task.AutopilotRunID.Valid && !task.AutomationRunID.Valid {
 		var qc service.QuickCreateContext
 		if json.Unmarshal(task.Context, &qc) == nil && qc.Type == service.QuickCreateContextType {
 			hasQuickCreate = true
@@ -1616,6 +1668,7 @@ func (h *Handler) ClaimTaskByRuntime(w http.ResponseWriter, r *http.Request) {
 			"has_issue", task.IssueID.Valid,
 			"has_chat", task.ChatSessionID.Valid,
 			"has_autopilot_run", task.AutopilotRunID.Valid,
+			"has_automation_run", task.AutomationRunID.Valid,
 			"has_quick_create", hasQuickCreate,
 		)
 		if _, cerr := h.TaskService.CancelTask(r.Context(), task.ID); cerr != nil {

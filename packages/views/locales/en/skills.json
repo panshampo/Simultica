@@ -49,7 +49,9 @@
     "source_runtime_unknown": "From a runtime",
     "source_clawhub": "From ClawHub",
     "source_skills_sh": "From Skills.sh",
-    "source_github": "From GitHub"
+    "source_github": "From GitHub",
+    "workflow_yes": "Has workflow",
+    "workflow_no": "No workflow"
   },
   "detail": {
     "all_skills": "All skills",
@@ -102,6 +104,14 @@
       "permissions_locked": "Only the creator or a workspace admin can edit this skill.",
       "used_by_empty": "Not assigned to any agent yet. Open an agent's Skills tab to assign."
     },
+    "workflow_debug": {
+      "title": "Debug workflow",
+      "description": "Create a temporary issue and start this skill workflow immediately.",
+      "action": "Debug run",
+      "starting": "Starting...",
+      "toast_started": "Workflow debug issue started",
+      "toast_failed": "Failed to start workflow debug issue"
+    },
     "origin_card": {
       "imported_runtime": "Imported from local runtime",
       "imported_clawhub": "Imported from ClawHub",
@@ -116,6 +126,9 @@
     },
     "toast_saved": "Skill saved",
     "toast_save_failed": "Failed to save skill",
+    "toast_file_removed": "Removed {{path}} from the draft",
+    "toast_workflow_saved": "Workflow saved",
+    "toast_workflow_save_failed": "Failed to save workflow",
     "toast_deleted": "Skill deleted",
     "toast_delete_failed": "Failed to delete skill",
     "delete_dialog": {

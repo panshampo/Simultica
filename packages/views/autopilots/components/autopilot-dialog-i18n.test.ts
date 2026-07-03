@@ -37,13 +37,13 @@ describe("autopilot dialog partial-success toast", () => {
 
     it("falls back to the no-reason create string when reason is null", () => {
       expect(formatSchedulePartialFailureToast(t, "create", null)).toBe(
-        "Autopilot created, but schedule failed to save",
+        "Automation created, but schedule failed to save",
       );
     });
 
     it("falls back to the no-reason update string when reason is null", () => {
       expect(formatSchedulePartialFailureToast(t, "update", null)).toBe(
-        "Autopilot updated, but schedule failed to save",
+        "Automation updated, but schedule failed to save",
       );
     });
   });

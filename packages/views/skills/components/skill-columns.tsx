@@ -7,6 +7,7 @@ import {
   HardDrive,
   Lock,
   Pencil,
+  Workflow,
 } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import type {
@@ -25,6 +26,7 @@ import {
 import { readOrigin, totalFileCount } from "../lib/origin";
 import { resolvePublicFileUrl } from "@multica/core/workspace/avatar-url";
 import { useT } from "../../i18n";
+import { cn } from "@multica/ui/lib/utils";
 
 // Per-row data assembled at the page level. The columns reach into
 // `row.original` and never pull their own queries. `skill` is the list-shape
@@ -44,6 +46,7 @@ const COL_WIDTHS = {
   name: 240,
   usedBy: 140,
   source: 220,
+  workflow: 52,
   updated: 100,
   chevron: 48,
 } as const;
@@ -80,6 +83,13 @@ export function useSkillColumns(): ColumnDef<SkillRow>[] {
           runtime={row.original.runtime}
         />
       ),
+    },
+    {
+      id: "workflow",
+      header: () => null,
+      size: COL_WIDTHS.workflow,
+      enableResizing: false,
+      cell: ({ row }) => <WorkflowIndicator skill={row.original.skill} />,
     },
     {
       id: "updated",
@@ -176,6 +186,34 @@ function AgentAssignees({ agents }: { agents: Agent[] }) {
           +{extra}
         </span>
       )}
+    </div>
+  );
+}
+
+function WorkflowIndicator({ skill }: { skill: SkillSummary }) {
+  const { t } = useT("skills");
+  const hasWorkflow = skill.config?.has_workflow === true;
+  return (
+    <div className="flex items-center justify-center">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span
+              className={cn(
+                "inline-flex size-7 items-center justify-center rounded-md border",
+                hasWorkflow
+                  ? "border-blue-200 bg-blue-50 text-blue-700"
+                  : "border-transparent text-muted-foreground/30",
+              )}
+            >
+              <Workflow className="size-3.5" aria-hidden="true" />
+            </span>
+          }
+        />
+        <TooltipContent>
+          {hasWorkflow ? t(($) => $.table.workflow_yes) : t(($) => $.table.workflow_no)}
+        </TooltipContent>
+      </Tooltip>
     </div>
   );
 }

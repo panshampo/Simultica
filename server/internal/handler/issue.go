@@ -2418,6 +2418,10 @@ func (h *Handler) UpdateIssue(w http.ResponseWriter, r *http.Request) {
 		"creator_id":          uuidToString(prevIssue.CreatorID),
 	})
 
+	if statusChanged && issue.OriginType.Valid && issue.OriginType.String == "workflow_node" && issue.OriginID.Valid {
+		go h.notifyWorkflowRunOfSubIssueStatus(r.Context(), workspaceID, issue.OriginID)
+	}
+
 	// Reconcile task queue when assignee changes.
 	if assigneeChanged {
 		h.TaskService.CancelTasksForIssue(r.Context(), issue.ID)

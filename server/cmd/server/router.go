@@ -480,6 +480,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 	// purpose: the bearer token in the URL path IS the credential. Workspace
 	// context is derived from the trigger row, never from request headers.
 	r.Post("/api/webhooks/autopilots/{token}", h.HandleAutopilotWebhook)
+	r.Post("/api/webhooks/automations/{token}", h.HandleAutomationWebhook)
 	// GitHub App webhook (no Multica auth — requests are authenticated via
 	// HMAC-SHA256 signature in the handler) and post-install setup callback.
 	r.Post("/api/webhooks/github", h.HandleGitHubWebhook)
@@ -720,6 +721,18 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				})
 			})
 
+			// Issue templates
+			r.Route("/api/issue-templates", func(r chi.Router) {
+				r.Get("/", h.ListIssueTemplates)
+				r.Post("/", h.CreateIssueTemplate)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Get("/", h.GetIssueTemplate)
+					r.Patch("/", h.UpdateIssueTemplate)
+					r.Delete("/", h.DeleteIssueTemplate)
+					r.Post("/instantiate", h.InstantiateIssueTemplate)
+				})
+			})
+
 			// Task messages (user-facing, not daemon auth)
 			r.Get("/api/tasks/{taskId}/messages", h.ListTaskMessagesByUser)
 
@@ -790,6 +803,24 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 						r.Post("/rotate-webhook-token", h.RotateAutopilotTriggerWebhookToken)
 						r.Put("/signing-secret", h.SetAutopilotTriggerSigningSecret)
 					})
+				})
+			})
+
+			// Automations
+			r.Route("/api/automations", func(r chi.Router) {
+				r.Get("/", h.ListAutomations)
+				r.Post("/", h.CreateAutomation)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Get("/", h.GetAutomation)
+					r.Patch("/", h.UpdateAutomation)
+					r.Delete("/", h.DeleteAutomation)
+					r.Post("/trigger", h.TriggerAutomation)
+					r.Get("/runs", h.ListAutomationRuns)
+					r.Get("/runs/{runId}", h.GetAutomationRun)
+					r.Get("/deliveries", h.ListAutomationDeliveries)
+					r.Get("/deliveries/{deliveryId}", h.GetAutomationDelivery)
+					r.Post("/deliveries/{deliveryId}/replay", h.ReplayAutomationDelivery)
+					r.Post("/triggers", h.CreateAutomationTrigger)
 				})
 			})
 

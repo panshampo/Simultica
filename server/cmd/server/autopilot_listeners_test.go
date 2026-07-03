@@ -122,6 +122,131 @@ func TestAutopilotRunOnlyTaskTerminalEventsUpdateRun(t *testing.T) {
 	}
 }
 
+func TestAutomationRunOnlyTaskTerminalEventsUpdateRun(t *testing.T) {
+	ctx := context.Background()
+	queries := db.New(testPool)
+	bus := events.New()
+	taskSvc := service.NewTaskService(queries, testPool, nil, bus)
+	autopilotSvc := service.NewAutopilotService(queries, testPool, bus, taskSvc)
+	registerAutopilotListeners(bus, autopilotSvc)
+
+	var agentID, runtimeID string
+	if err := testPool.QueryRow(ctx,
+		`SELECT id::text, runtime_id::text FROM agent WHERE workspace_id = $1 ORDER BY created_at ASC LIMIT 1`,
+		testWorkspaceID,
+	).Scan(&agentID, &runtimeID); err != nil {
+		t.Fatalf("load fixture agent: %v", err)
+	}
+
+	tests := []struct {
+		name       string
+		finalize   func(task db.AgentTaskQueue)
+		wantStatus string
+		wantResult string
+		wantReason string
+	}{
+		{
+			name: "completed",
+			finalize: func(task db.AgentTaskQueue) {
+				if _, err := taskSvc.CompleteTask(ctx, task.ID, []byte(`{"output":"done"}`), "", ""); err != nil {
+					t.Fatalf("CompleteTask: %v", err)
+				}
+			},
+			wantStatus: "completed",
+			wantResult: "done",
+		},
+		{
+			name: "failed",
+			finalize: func(task db.AgentTaskQueue) {
+				if _, err := taskSvc.FailTask(ctx, task.ID, "boom", "", "", "agent_error"); err != nil {
+					t.Fatalf("FailTask: %v", err)
+				}
+			},
+			wantStatus: "failed",
+			wantReason: "boom",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			automation, err := queries.CreateAutomation(ctx, db.CreateAutomationParams{
+				WorkspaceID:       parseUUID(testWorkspaceID),
+				Title:             "Run-only automation listener " + tc.name,
+				SourceMode:        "inline",
+				InlineIssueConfig: []byte(`{"issue_title_template":"run only","assignee_type":"agent","assignee_id":"` + agentID + `","priority":"medium","execution_mode":"run_only"}`),
+				Status:            "active",
+				ConcurrencyPolicy: "skip",
+				CreatedByType:     "member",
+				CreatedByID:       parseUUID(testUserID),
+			})
+			if err != nil {
+				t.Fatalf("CreateAutomation: %v", err)
+			}
+			t.Cleanup(func() {
+				_, _ = testPool.Exec(context.Background(), `DELETE FROM automation WHERE id = $1`, automation.ID)
+			})
+
+			run, err := queries.CreateAutomationRun(ctx, db.CreateAutomationRunParams{
+				AutomationID:       automation.ID,
+				Source:             "manual",
+				SourceModeSnapshot: "inline",
+				Status:             "running",
+			})
+			if err != nil {
+				t.Fatalf("CreateAutomationRun: %v", err)
+			}
+			task, err := queries.CreateAutomationTask(ctx, db.CreateAutomationTaskParams{
+				AgentID:         parseUUID(agentID),
+				RuntimeID:       parseUUID(runtimeID),
+				Priority:        0,
+				AutomationRunID: run.ID,
+			})
+			if err != nil {
+				t.Fatalf("CreateAutomationTask: %v", err)
+			}
+			run, err = queries.UpdateAutomationRunRunning(ctx, db.UpdateAutomationRunRunningParams{
+				ID:     run.ID,
+				TaskID: task.ID,
+			})
+			if err != nil {
+				t.Fatalf("UpdateAutomationRunRunning: %v", err)
+			}
+
+			if _, err := testPool.Exec(ctx,
+				`UPDATE agent_task_queue SET status = 'dispatched', dispatched_at = now() WHERE id = $1`,
+				task.ID,
+			); err != nil {
+				t.Fatalf("mark task dispatched: %v", err)
+			}
+			started, err := queries.StartAgentTask(ctx, task.ID)
+			if err != nil {
+				t.Fatalf("StartAgentTask: %v", err)
+			}
+
+			tc.finalize(started)
+
+			updatedRun, err := queries.GetAutomationRun(ctx, run.ID)
+			if err != nil {
+				t.Fatalf("GetAutomationRun: %v", err)
+			}
+			if updatedRun.Status != tc.wantStatus {
+				t.Fatalf("expected run status %q, got %q", tc.wantStatus, updatedRun.Status)
+			}
+			if tc.wantResult != "" && !strings.Contains(string(updatedRun.Result), tc.wantResult) {
+				t.Fatalf("expected run result to contain %q, got %s", tc.wantResult, string(updatedRun.Result))
+			}
+			if tc.wantReason != "" {
+				if !updatedRun.FailureReason.Valid {
+					t.Fatalf("expected failure reason %q, got invalid", tc.wantReason)
+				}
+				if updatedRun.FailureReason.String != tc.wantReason {
+					t.Fatalf("expected failure reason %q, got %q", tc.wantReason, updatedRun.FailureReason.String)
+				}
+			}
+		})
+	}
+}
+
 // TestAutopilotDispatchSkipsWhenRuntimeOffline locks in the MUL-1899
 // admission gate: when the assignee agent's runtime is not online we must
 // record a `skipped` autopilot_run with a failure_reason and NOT enqueue an

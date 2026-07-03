@@ -25,6 +25,10 @@
     "create_issue": "创建 issue",
     "run_only": "仅运行"
   },
+  "source_mode": {
+    "inline": "自定义自动化",
+    "template": "Issue 模板"
+  },
   "relative_date": {
     "today": "今天",
     "one_day_ago": "1 天前",
@@ -71,8 +75,11 @@
     "section_run_history": "运行历史",
     "section_danger": "危险操作",
     "field_agent": "智能体",
+    "field_source_mode": "来源",
     "field_output_mode": "输出模式",
     "field_project": "关联项目",
+    "template_mode": "基于模板的自动化",
+    "template_unavailable": "模板不可用",
     "no_project": "不关联项目",
     "project_unavailable": "项目不可用",
     "field_prompt": "Prompt",
@@ -134,6 +141,7 @@
     "next_label": "下次：{{date}}",
     "webhook_url_label": "Webhook URL",
     "copy_url": "复制 URL",
+    "rotate_unavailable": "自动化 Webhook 暂不支持重新生成 URL",
     "url_copied": "已复制 Webhook URL",
     "url_copy_failed": "复制失败",
     "rotate_url": "重新生成 URL",
@@ -246,17 +254,58 @@
     "select_assignee": "选择智能体或小队",
     "section_project": "关联项目",
     "no_project": "不关联项目",
+    "section_source_mode": "来源",
+    "section_template": "Issue 模板",
+    "source_modes": {
+      "inline": {
+        "label": "自定义自动化",
+        "description": "在该自动化内定义 issue 内容"
+      },
+      "template": {
+        "label": "使用 issue 模板",
+        "description": "复用工作区模板，只配置触发和运行策略"
+      }
+    },
+    "source_mode_locked_after_create": "来源模式创建后不可切换。",
+    "template_select_placeholder": "选择 issue 模板",
+    "template_select_hint": "选择一个模板后，该自动化的 issue 定义会由模板管理。",
+    "template_mode_locked": "模板模式会在运行时读取最新模板。若要修改 issue 标题、正文、执行方、项目、优先级或输出行为，请编辑模板本身。",
+    "template_summary_label": "模板摘要",
+    "template_summary_empty": "选择一个 issue 模板以预览 issue 定义。",
+    "template_issue_title": "Issue 标题",
+    "template_priority": "优先级",
+    "template_project": "项目",
+    "template_project_bound": "模板项目",
+    "template_project_none": "不关联项目",
+    "template_assignee": "执行方",
+    "template_body": "正文",
     "section_output_mode": "输出模式",
+    "section_run_policy": "运行策略",
+    "concurrency_policy": {
+      "skip": {
+        "label": "跳过",
+        "description": "如果已有运行未结束，则忽略新的触发。"
+      },
+      "queue": {
+        "label": "排队",
+        "description": "保留新的触发，等当前运行结束后再执行。"
+      },
+      "replace": {
+        "label": "替换",
+        "description": "用最新触发替换当前运行。"
+      }
+    },
     "section_schedule": "时间表",
     "section_trigger_kind": "触发方式",
     "trigger_kind_schedule": "时间表",
     "trigger_kind_webhook": "Webhook",
+    "trigger_edit_readonly": "请在详情页管理触发器。",
     "section_webhook": "Webhook",
-    "webhook_help_create": "Autopilot 创建后 Multica 会生成一个 Webhook URL。向它 POST 任意 JSON 即可触发。",
-    "webhook_help_edit": "该 Autopilot 由 Webhook 触发。请在详情页复制或重新生成 URL。",
-    "webhook_created_title": "Webhook Autopilot 已就绪",
-    "webhook_created_description": "向下方的 URL POST 任意 JSON 即可触发该 Autopilot。请立即复制——之后也能在 Autopilot 详情页查看或重新生成。",
-    "webhook_created_warning": "请把该 URL 当作密码对待，任何拿到它的人都能触发该 Autopilot。",
+    "webhook_help_create": "自动化 创建后 Multica 会生成一个 Webhook URL。向它 POST 任意 JSON 即可触发。",
+    "webhook_help_edit": "该 自动化 由 Webhook 触发。请在详情页复制或重新生成 URL。",
+    "webhook_created_title": "Webhook 自动化 已就绪",
+    "webhook_created_description": "向下方的 URL POST 任意 JSON 即可触发该 自动化。请立即复制——之后也能在 自动化 详情页查看或重新生成。",
+    "webhook_created_warning": "请把该 URL 当作密码对待，任何拿到它的人都能触发该 自动化。",
     "webhook_created_done": "完成",
     "event_filter_label": "事件过滤",
     "event_filter_docs_link_label": "了解事件过滤的工作方式",

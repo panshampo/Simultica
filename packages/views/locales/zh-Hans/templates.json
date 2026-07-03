@@ -1,0 +1,85 @@
+{
+  "page": {
+    "title": "模板",
+    "new_template": "新建模板",
+    "search_placeholder": "搜索模板...",
+    "empty": "还没有模板",
+    "empty_search": "没有匹配的模板"
+  },
+  "table": {
+    "template": "模板",
+    "assignee": "负责人",
+    "priority": "优先级",
+    "updated": "更新",
+    "actions": "操作"
+  },
+  "detail": {
+    "back": "返回模板",
+    "not_found": "模板不存在",
+    "issue_title": "Issue 标题",
+    "issue_body": "Issue 正文",
+    "empty_body": "没有正文模板",
+    "properties": "属性",
+    "references": "引用",
+    "issue_refs": "Issues",
+    "automation_refs": "自动化"
+  },
+  "dialog": {
+    "create_title": "创建模板",
+    "edit_title": "编辑模板",
+    "description": "保存可复用的 issue 结构，并设置默认负责人和优先级。",
+    "assignee_note": "通过此模板创建的新 issue 会分配给该对象。"
+  },
+  "delete_dialog": {
+    "title": "删除模板？",
+    "description": "这会删除“{{name}}”。已有 issue 不会受影响。"
+  },
+  "fields": {
+    "name": "名称",
+    "name_placeholder": "每周发布评审",
+    "issue_title": "Issue 标题模板",
+    "issue_title_placeholder": "上线前评审 {{release}}",
+    "issue_body": "Issue 正文模板",
+    "issue_body_placeholder": "背景、检查项、验收标准...",
+    "project": "项目",
+    "no_project": "无项目",
+    "assignee": "负责人",
+    "assignee_placeholder": "选择智能体或小队",
+    "assignee_empty": "请先创建智能体或小队再保存模板。",
+    "priority": "优先级",
+    "updated": "更新",
+    "created": "创建"
+  },
+  "priority": {
+    "none": "无",
+    "low": "低",
+    "medium": "中",
+    "high": "高",
+    "urgent": "紧急"
+  },
+  "actions": {
+    "use": "使用",
+    "edit": "编辑",
+    "delete": "删除",
+    "cancel": "取消",
+    "create": "创建",
+    "save": "保存",
+    "saving": "保存中...",
+    "deleting": "删除中..."
+  },
+  "quick_create": {
+    "trigger": "使用模板",
+    "empty": "还没有模板",
+    "loading": "正在加载模板...",
+    "created": "已从模板创建 issue"
+  },
+  "toast": {
+    "created": "已创建模板",
+    "updated": "已更新模板",
+    "deleted": "已删除模板",
+    "save_failed": "保存模板失败",
+    "delete_failed": "删除模板失败",
+    "instantiated": "已从模板创建 issue",
+    "instantiate_failed": "从模板创建 issue 失败"
+  }
+}

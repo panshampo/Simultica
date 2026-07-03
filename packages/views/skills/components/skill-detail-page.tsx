@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -15,7 +15,6 @@ import {
   Trash2,
 } from "lucide-react";
 import type {
-  Agent,
   AgentRuntime,
   MemberWithUser,
   Skill,
@@ -61,7 +60,7 @@ import { BreadcrumbHeader } from "../../layout/breadcrumb-header";
 import { useCanEditSkill } from "../hooks/use-can-edit-skill";
 import { useSkillPermissions } from "@multica/core/permissions";
 import { CapabilityBanner } from "@multica/ui/components/common/capability-banner";
-import { readOrigin, totalFileCount, type OriginInfo } from "../lib/origin";
+import { readOrigin, totalFileCount } from "../lib/origin";
 import { FileTree } from "./file-tree";
 import { FileViewer } from "./file-viewer";
 import { WorkflowEditor } from "../../workflow/components/workflow-editor";
@@ -145,96 +144,115 @@ function AddFileInline({
 }
 
 // ---------------------------------------------------------------------------
-// Sidebar sections
+// Compact metadata
 // ---------------------------------------------------------------------------
 
-function UsedBySection({ agents }: { agents: Agent[] }) {
-  const { t } = useT("skills");
-  if (agents.length === 0) {
-    return (
-      <div className="rounded-md border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
-        {t(($) => $.detail.sidebar.used_by_empty)}
-      </div>
-    );
-  }
+export function MetadataChip({
+  children,
+  title,
+}: {
+  children: ReactNode;
+  title?: string;
+}) {
   return (
-    <ul className="space-y-1.5">
-      {agents.map((a) => (
-        <li
-          key={a.id}
-          className="flex items-center gap-2 rounded-md border bg-card px-2.5 py-1.5"
-        >
-          <ActorAvatar
-            name={a.name}
-            initials={a.name.slice(0, 2).toUpperCase()}
-            avatarUrl={resolvePublicFileUrl(a.avatar_url)}
-            isAgent
-            size={22}
-          />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-xs font-medium">{a.name}</div>
-            {a.description && (
-              <div className="truncate text-xs text-muted-foreground">
-                {a.description}
-              </div>
-            )}
-          </div>
-        </li>
-      ))}
-    </ul>
+    <span
+      title={title}
+      className="inline-flex max-w-full items-center gap-1 rounded-md border border-border/70 bg-background/70 px-2 py-1 text-[11px] leading-none text-muted-foreground"
+    >
+      {children}
+    </span>
   );
 }
 
-function OriginSidebarCard({
-  origin,
-  runtime,
+export function SkillHeaderCompact({
+  name,
+  description,
+  canEdit,
+  originLabel,
+  originType,
+  updatedLabel,
+  createdLabel,
+  creatorName,
+  creatorAvatarUrl,
+  fileCountLabel,
+  idLabel,
+  idTitle,
+  onNameChange,
+  onDescriptionChange,
 }: {
-  origin: OriginInfo;
-  runtime: AgentRuntime | null;
+  name: string;
+  description: string;
+  canEdit: boolean;
+  originLabel: string | null;
+  originType?: string;
+  updatedLabel: string;
+  createdLabel: string;
+  creatorName?: string;
+  creatorAvatarUrl?: string | null;
+  fileCountLabel: string;
+  idLabel: string;
+  idTitle: string;
+  onNameChange: (value: string) => void;
+  onDescriptionChange: (value: string) => void;
 }) {
   const { t } = useT("skills");
-  if (origin.type === "manual") return null;
-
-  const isRuntime = origin.type === "runtime_local";
-  const label =
-    origin.type === "runtime_local"
-      ? t(($) => $.detail.origin_card.imported_runtime)
-      : origin.type === "clawhub"
-        ? t(($) => $.detail.origin_card.imported_clawhub)
-        : origin.type === "github"
-          ? t(($) => $.detail.origin_card.imported_github)
-          : t(($) => $.detail.origin_card.imported_skills_sh);
-
   return (
-    <div className="rounded-md border bg-muted/30 p-3">
-      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-        {isRuntime ? (
-          <HardDrive className="h-3 w-3" />
-        ) : (
-          <Sparkles className="h-3 w-3" />
-        )}
-        {label}
+    <div className="shrink-0 space-y-3 border-b bg-card/35 px-4 py-3 sm:px-5">
+      <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(14rem,0.8fr)_minmax(18rem,1.2fr)]">
+        <Input
+          value={name}
+          readOnly={!canEdit}
+          onChange={(e) => onNameChange(e.target.value)}
+          placeholder={t(($) => $.detail.name_placeholder)}
+          className="h-9 min-w-0 border-0 bg-transparent px-0 text-lg font-semibold shadow-none focus-visible:ring-0 read-only:cursor-default dark:bg-transparent"
+          aria-label={t(($) => $.detail.name_aria)}
+        />
+        <div className="min-w-0 space-y-1">
+          <Label
+            htmlFor="skill-description"
+            className="flex items-center gap-1 text-[11px] text-muted-foreground"
+          >
+            <Pencil className="h-3 w-3" />
+            {t(($) => $.detail.description_label)}
+          </Label>
+          <Textarea
+            id="skill-description"
+            value={description}
+            readOnly={!canEdit}
+            onChange={(e) => onDescriptionChange(e.target.value)}
+            placeholder={t(($) => $.detail.description_placeholder)}
+            rows={2}
+            className="max-h-16 min-h-0 resize-none overflow-y-auto break-words text-sm leading-relaxed read-only:cursor-default"
+          />
+        </div>
       </div>
-      {runtime && (
-        <div className="mt-1 break-all text-xs text-foreground">
-          {runtime.name}
-        </div>
-      )}
-      {origin.source_path && (
-        <div className="mt-1 break-all font-mono text-xs text-foreground">
-          {origin.source_path}
-        </div>
-      )}
-      {origin.source_url && (
-        <div className="mt-1 break-all font-mono text-xs text-foreground">
-          {origin.source_url}
-        </div>
-      )}
-      {origin.provider && (
-        <div className="mt-1 font-mono text-xs text-muted-foreground">
-          {t(($) => $.detail.origin_card.provider, { provider: origin.provider })}
-        </div>
-      )}
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        {originLabel && (
+          <MetadataChip>
+            {originType === "runtime_local" ? (
+              <HardDrive className="h-3 w-3 shrink-0" />
+            ) : (
+              <Sparkles className="h-3 w-3 shrink-0" />
+            )}
+            <span className="min-w-0 truncate">{originLabel}</span>
+          </MetadataChip>
+        )}
+        <MetadataChip>{updatedLabel}</MetadataChip>
+        <MetadataChip>{createdLabel}</MetadataChip>
+        {creatorName && (
+          <MetadataChip>
+            <ActorAvatar
+              name={creatorName}
+              initials={creatorName.slice(0, 2).toUpperCase()}
+              avatarUrl={creatorAvatarUrl}
+              size={14}
+            />
+            <span className="min-w-0 truncate">{creatorName}</span>
+          </MetadataChip>
+        )}
+        <MetadataChip>{fileCountLabel}</MetadataChip>
+        <MetadataChip title={idTitle}>{idLabel}</MetadataChip>
+      </div>
     </div>
   );
 }
@@ -285,6 +303,7 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
   const [addingFile, setAddingFile] = useState(false);
   const [conflictPending, setConflictPending] = useState(false);
   const [activeTab, setActiveTab] = useState<"content" | "workflow">("content");
+  const [debugStarting, setDebugStarting] = useState(false);
 
   const draftRef = useRef({ name, description, content, files });
   draftRef.current = { name, description, content, files };
@@ -469,8 +488,10 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
 
   const handleDeleteFile = () => {
     if (selectedPath === SKILL_MD) return;
+    const deletedPath = selectedPath;
     setFiles((prev) => prev.filter((f) => f.path !== selectedPath));
     setSelectedPath(SKILL_MD);
+    toast.success(t(($) => $.detail.toast_file_removed, { path: deletedPath }));
   };
 
   const handleWorkflowSaved = (yaml: string) => {
@@ -483,6 +504,26 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
     });
     qc.invalidateQueries({ queryKey: skillDetailOptions(wsId, skillId).queryKey });
     qc.invalidateQueries({ queryKey: workspaceKeys.skills(wsId) });
+  };
+
+  const handleDebugWorkflow = async () => {
+    if (!skill || !fileMap.has("workflow.yaml")) return;
+    setDebugStarting(true);
+    try {
+      const issue = await api.createIssue({
+        title: `Debug workflow: ${skill.name}`,
+        description: `Debug run for skill workflow \`${skill.name}\`.`,
+        status: "todo",
+        priority: "none",
+      });
+      await api.startIssueWorkflowRun(issue.id, { skill_id: skill.id });
+      toast.success(t(($) => $.detail.workflow_debug.toast_started));
+      navigation.push(paths.issueDetail(issue.id));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t(($) => $.detail.workflow_debug.toast_failed));
+    } finally {
+      setDebugStarting(false);
+    }
   };
 
   const handleFileContentChange = (newContent: string) => {
@@ -639,8 +680,8 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
       </div>
 
       {activeTab === "content" ? (
-        <div className="flex flex-1 min-h-0 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
-          <aside className="flex max-h-44 w-full shrink-0 flex-col border-b md:max-h-none md:w-56 md:border-b-0 md:border-r">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+          <aside className="flex max-h-44 w-full shrink-0 flex-col border-b bg-muted/10 md:max-h-none md:w-60 md:border-b-0 md:border-r">
             <div className="flex h-10 shrink-0 items-center justify-between border-b px-3">
               <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {t(($) => $.detail.files_label, { count: totalFileCount(skill) })}
@@ -695,225 +736,117 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
             )}
           </aside>
 
-          <section className="flex min-h-[32rem] min-w-0 shrink-0 flex-col md:min-h-0 md:flex-1 md:shrink">
-          {/* Name + description + subline */}
-          <div className="space-y-2 border-b px-4 py-4 sm:px-5">
-            <Input
-              value={name}
-              readOnly={!canEdit}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t(($) => $.detail.name_placeholder)}
-              className="h-9 border-0 bg-transparent px-0 text-lg font-semibold shadow-none focus-visible:ring-0 read-only:cursor-default dark:bg-transparent"
-              aria-label={t(($) => $.detail.name_aria)}
+          <section className="flex min-h-[32rem] min-w-0 flex-1 flex-col bg-background md:min-h-0">
+            <SkillHeaderCompact
+              name={name}
+              description={description}
+              canEdit={canEdit}
+              originLabel={originLabel}
+              originType={origin?.type}
+              updatedLabel={t(($) => $.detail.subline.updated_label, {
+                when: timeAgo(skill.updated_at),
+              })}
+              createdLabel={`${t(($) => $.detail.sidebar.created)} ${timeAgo(skill.created_at)}`}
+              creatorName={creator?.name}
+              creatorAvatarUrl={creator ? resolvePublicFileUrl(creator.avatar_url) : null}
+              fileCountLabel={`${t(($) => $.detail.sidebar.files)} ${totalFileCount(skill)}`}
+              idLabel={`${t(($) => $.detail.sidebar.id)} ${skill.id.slice(0, 8)}...`}
+              idTitle={skill.id}
+              onNameChange={setName}
+              onDescriptionChange={setDescription}
             />
-            <div className="space-y-1">
-              <Label
-                htmlFor="skill-description"
-                className="text-xs text-muted-foreground"
+
+            {/* Conflict banner */}
+            {conflictPending && canEdit && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="flex shrink-0 items-start gap-2 border-b border-warning/30 bg-warning/10 px-4 py-2 text-xs"
               >
-                <Pencil className="h-3 w-3" />
-                {t(($) => $.detail.description_label)}
-              </Label>
-              <Textarea
-                id="skill-description"
-                value={description}
-                readOnly={!canEdit}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder={t(($) => $.detail.description_placeholder)}
-                rows={2}
-                className="resize-none text-sm read-only:cursor-default"
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+                <div className="flex-1">
+                  <div className="font-medium text-foreground">
+                    {t(($) => $.detail.conflict_banner.title)}
+                  </div>
+                  <div className="mt-0.5 text-muted-foreground">
+                    {t(($) => $.detail.conflict_banner.body)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* File viewer */}
+            <div className="min-h-0 flex-1">
+              <FileViewer
+                key={selectedPath}
+                path={selectedPath}
+                content={selectedContent}
+                onChange={handleFileContentChange}
+                canEdit={canEdit}
               />
             </div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              {originLabel && (
-                <span className="inline-flex items-center gap-1">
-                  {origin?.type === "runtime_local" ? (
-                    <HardDrive className="h-3 w-3" />
-                  ) : (
-                    <Sparkles className="h-3 w-3" />
-                  )}
-                  {originLabel}
-                </span>
-              )}
-              <span className="inline-flex items-center gap-2">
-                <span aria-hidden>·</span>
-                <span>
-                  {t(($) => $.detail.subline.updated_label, {
-                    when: timeAgo(skill.updated_at),
-                  })}
-                </span>
-              </span>
-              {creator && (
-                <span className="inline-flex items-center gap-2">
-                  <span aria-hidden>·</span>
-                  <span className="inline-flex items-center gap-1">
-                    <ActorAvatar
-                      name={creator.name}
-                      initials={creator.name.slice(0, 2).toUpperCase()}
-                      avatarUrl={resolvePublicFileUrl(creator.avatar_url)}
-                      size={14}
-                    />
-                    {t(($) => $.detail.subline.by_creator, { name: creator.name })}
-                  </span>
-                </span>
-              )}
-            </div>
-          </div>
 
-          {/* Conflict banner */}
-          {conflictPending && canEdit && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="flex items-start gap-2 border-b border-warning/30 bg-warning/10 px-4 py-2 text-xs"
-            >
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
-              <div className="flex-1">
-                <div className="font-medium text-foreground">
-                  {t(($) => $.detail.conflict_banner.title)}
-                </div>
-                <div className="mt-0.5 text-muted-foreground">
-                  {t(($) => $.detail.conflict_banner.body)}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* File viewer */}
-          <div className="flex-1 min-h-0">
-            <FileViewer
-              key={selectedPath}
-              path={selectedPath}
-              content={selectedContent}
-              onChange={handleFileContentChange}
-            />
-          </div>
-
-          {/* Save bar */}
-          {isDirty && canEdit && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="flex flex-wrap items-center gap-2 border-t bg-muted/30 px-4 py-2"
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-brand" />
-              <span className="text-xs text-muted-foreground">
-                {t(($) => $.detail.save_bar.unsaved)}
-              </span>
-              <div className="ml-auto flex items-center gap-1.5">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="xs"
-                  onClick={handleDiscard}
-                >
-                  {t(($) => $.detail.save_bar.discard)}
-                </Button>
-                <Button
-                  type="button"
-                  size="xs"
-                  onClick={handleSave}
-                  disabled={saving || !name.trim()}
-                >
-                  {saving ? (
-                    <>
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      {t(($) => $.detail.save_bar.saving)}
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-3 w-3" />
-                      {t(($) => $.detail.save_bar.save)}
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
-          </section>
-
-          <aside className="flex w-full shrink-0 flex-col gap-4 border-t bg-muted/20 px-4 py-4 md:w-72 md:overflow-y-auto md:border-l md:border-t-0">
-          <div>
-            <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              {t(($) => $.detail.sidebar.metadata)}
-            </h3>
-            <dl className="space-y-1.5 text-xs">
-              <div className="flex gap-2">
-                <dt className="min-w-20 text-muted-foreground">
-                  {t(($) => $.detail.sidebar.created)}
-                </dt>
-                <dd className="min-w-0 flex-1">
-                  {timeAgo(skill.created_at)}
-                </dd>
-              </div>
-              <div className="flex gap-2">
-                <dt className="min-w-20 text-muted-foreground">
-                  {t(($) => $.detail.sidebar.updated)}
-                </dt>
-                <dd className="min-w-0 flex-1">
-                  {timeAgo(skill.updated_at)}
-                </dd>
-              </div>
-              {creator && (
-                <div className="flex gap-2">
-                  <dt className="min-w-20 text-muted-foreground">
-                    {t(($) => $.detail.sidebar.created_by)}
-                  </dt>
-                  <dd className="min-w-0 flex-1">{creator.name}</dd>
-                </div>
-              )}
-              <div className="flex gap-2">
-                <dt className="min-w-20 text-muted-foreground">
-                  {t(($) => $.detail.sidebar.files)}
-                </dt>
-                <dd className="min-w-0 flex-1">{totalFileCount(skill)}</dd>
-              </div>
+            {/* Save bar */}
+            {isDirty && canEdit && (
               <div
-                className="flex gap-2"
-                title={skill.id}
+                role="status"
+                aria-live="polite"
+                className="flex shrink-0 flex-wrap items-center gap-2 border-t bg-muted/30 px-4 py-2"
               >
-                <dt className="min-w-20 text-muted-foreground">
-                  {t(($) => $.detail.sidebar.id)}
-                </dt>
-                <dd className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
-                  {skill.id.slice(0, 8)}…
-                </dd>
+                <span className="h-1.5 w-1.5 rounded-full bg-brand" />
+                <span className="text-xs text-muted-foreground">
+                  {t(($) => $.detail.save_bar.unsaved)}
+                </span>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    onClick={handleDiscard}
+                  >
+                    {t(($) => $.detail.save_bar.discard)}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="xs"
+                    onClick={handleSave}
+                    disabled={saving || !name.trim()}
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        {t(($) => $.detail.save_bar.saving)}
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-3 w-3" />
+                        {t(($) => $.detail.save_bar.save)}
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
-            </dl>
-          </div>
-
-          {origin && origin.type !== "manual" && (
-            <div>
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                {t(($) => $.detail.sidebar.origin)}
-              </h3>
-              <OriginSidebarCard origin={origin} runtime={originRuntime} />
-            </div>
-          )}
-
-          <div>
-            <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              {t(($) => $.detail.sidebar.used_by, { count: skillAgents.length })}
-            </h3>
-            <UsedBySection agents={skillAgents} />
-          </div>
-
-          <div>
-            <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              {t(($) => $.detail.sidebar.permissions)}
-            </h3>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              {canEdit
-                ? t(($) => $.detail.sidebar.permissions_owner)
-                : creator
-                  ? t(($) => $.detail.sidebar.permissions_locked_creator, { name: creator.name })
-                  : t(($) => $.detail.sidebar.permissions_locked)}
-            </p>
-          </div>
-          </aside>
+            )}
+          </section>
         </div>
       ) : (
         <div className="flex flex-1 min-h-0 flex-col bg-background">
+          {fileMap.has("workflow.yaml") && (
+            <div className="flex min-h-10 shrink-0 items-center justify-between gap-3 border-b bg-muted/20 px-4 py-1.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="size-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true" />
+                <div className="truncate text-xs font-medium text-foreground">
+                  {t(($) => $.detail.workflow_debug.title)}
+                </div>
+                <div className="hidden truncate text-xs text-muted-foreground sm:block">
+                  {t(($) => $.detail.workflow_debug.description)}
+                </div>
+              </div>
+              <Button type="button" size="xs" variant="secondary" onClick={handleDebugWorkflow} disabled={debugStarting}>
+                {debugStarting ? t(($) => $.detail.workflow_debug.starting) : t(($) => $.detail.workflow_debug.action)}
+              </Button>
+            </div>
+          )}
           <WorkflowEditor
             skillId={skill.id}
             initialYaml={fileMap.get("workflow.yaml")}

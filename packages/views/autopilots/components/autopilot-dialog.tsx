@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -42,18 +42,21 @@ import { useWorkspaceId } from "@multica/core/hooks";
 import { agentListOptions, squadListOptions } from "@multica/core/workspace/queries";
 import { projectListOptions } from "@multica/core/projects/queries";
 import {
-  useCreateAutopilot,
-  useCreateAutopilotTrigger,
-  useUpdateAutopilot,
-  useUpdateAutopilotTrigger,
-} from "@multica/core/autopilots/mutations";
+  useCreateAutomation,
+  useCreateAutomationTrigger,
+  useUpdateAutomation,
+} from "@multica/core/automations";
+import { issueTemplateListOptions } from "@multica/core/issue-templates";
 import { buildAutopilotWebhookUrl } from "@multica/core/autopilots";
 import { api } from "@multica/core/api";
 import type {
   AutopilotAssigneeType,
   AutopilotExecutionMode,
-  AutopilotTrigger,
+  AutomationConcurrencyPolicy,
+  AutomationSourceMode,
+  AutomationTrigger,
 } from "@multica/core/types";
+import type { IssueTemplate } from "@multica/core/types/issue-template";
 import { TitleEditor, ContentEditor } from "../../editor";
 import { ActorAvatar } from "../../common/actor-avatar";
 import { ProjectPicker } from "../../projects/components/project-picker";
@@ -83,6 +86,9 @@ export interface AutopilotInitial {
   assignee_type: AutopilotAssigneeType;
   assignee_id: string;
   execution_mode: AutopilotExecutionMode;
+  source_mode?: AutomationSourceMode;
+  template_id?: string | null;
+  concurrency_policy?: AutomationConcurrencyPolicy;
 }
 
 export type AutopilotDialogProps =
@@ -99,7 +105,7 @@ export type AutopilotDialogProps =
       onOpenChange: (v: boolean) => void;
       autopilotId: string;
       initial: AutopilotInitial;
-      triggers: AutopilotTrigger[];
+      triggers: AutomationTrigger[];
     };
 
 // ---------------------------------------------------------------------------
@@ -151,6 +157,8 @@ const OUTPUT_MODE_ICONS: Record<AutopilotExecutionMode, typeof FilePlus2> = {
   create_issue: FilePlus2,
   run_only: Play,
 };
+
+const CONCURRENCY_POLICY_KEYS: AutomationConcurrencyPolicy[] = ["skip", "queue", "replace"];
 
 // ---------------------------------------------------------------------------
 // Next-run computation (local approximation — server stores the authoritative value)
@@ -230,20 +238,6 @@ function formatNextRunAbsolute(date: Date, timezone: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Webhook event-filter dirty detection
-// ---------------------------------------------------------------------------
-
-// serializeEventFilters returns a stable JSON string so the edit-mode dirty
-// check can compare the current filters against the snapshot taken on open
-// without depending on reference equality. Normalizes empty Actions to []
-// so omitted-vs-explicit-empty doesn't show as a phantom change.
-function serializeEventFilters(filters: WebhookEventFilter[]): string {
-  return JSON.stringify(
-    filters.map((f) => ({ event: f.event, actions: f.actions ?? [] })),
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Live "now" ticker for countdown
 // ---------------------------------------------------------------------------
 
@@ -268,6 +262,7 @@ export function AutopilotDialog(props: AutopilotDialogProps) {
   const { data: agents = [] } = useQuery(agentListOptions(wsId));
   const { data: squads = [] } = useQuery(squadListOptions(wsId));
   const { data: projects = [] } = useQuery(projectListOptions(wsId));
+  const { data: templates = [] } = useQuery(issueTemplateListOptions(wsId));
   const [isExpanded, setIsExpanded] = useState(false);
 
   const isCreate = props.mode === "create";
@@ -284,6 +279,15 @@ export function AutopilotDialog(props: AutopilotDialogProps) {
   const [assigneeId, setAssigneeId] = useState<string>(initial.assignee_id ?? "");
   const [executionMode, setExecutionMode] = useState<AutopilotExecutionMode>(
     initial.execution_mode ?? "create_issue",
+  );
+  const [sourceMode, setSourceMode] = useState<AutomationSourceMode>(
+    initial.source_mode ?? "inline",
+  );
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
+    initial.template_id ?? null,
+  );
+  const [concurrencyPolicy, setConcurrencyPolicy] = useState<AutomationConcurrencyPolicy>(
+    initial.concurrency_policy ?? "skip",
   );
 
   const initialCfg: TriggerConfig = (() => {
@@ -317,19 +321,6 @@ export function AutopilotDialog(props: AutopilotDialogProps) {
     !isCreate && props.triggers[0]?.event_filters ? props.triggers[0].event_filters : [];
   const [eventFilters, setEventFilters] = useState<WebhookEventFilter[]>(initialEventFilters);
 
-  const initialCronRef = useRef(toCronExpression(initialCfg));
-  const initialTimezoneRef = useRef(initialCfg.timezone);
-  const initialEventFiltersRef = useRef(serializeEventFilters(initialEventFilters));
-  const scheduleDirty =
-    toCronExpression(triggerConfig) !== initialCronRef.current ||
-    triggerConfig.timezone !== initialTimezoneRef.current;
-  const eventFiltersDirty =
-    serializeEventFilters(eventFilters) !== initialEventFiltersRef.current;
-
-  const firstTriggerIdRef = useRef(
-    !isCreate && props.triggers[0] ? props.triggers[0].id : null,
-  );
-
   const triggerCount = isCreate ? 0 : props.triggers.length;
   const schedulePillDisabled = !isCreate && triggerCount >= 2;
 
@@ -352,47 +343,66 @@ export function AutopilotDialog(props: AutopilotDialogProps) {
     setAssigneeId(next.id);
   };
 
-  const createAutopilot = useCreateAutopilot();
-  const createTrigger = useCreateAutopilotTrigger();
-  const updateAutopilot = useUpdateAutopilot();
-  const updateTrigger = useUpdateAutopilotTrigger();
+  const createAutomation = useCreateAutomation();
+  const createTrigger = useCreateAutomationTrigger();
+  const updateAutomation = useUpdateAutomation();
   const [submitting, setSubmitting] = useState(false);
 
   // After a successful webhook-kind create, we don't close the dialog —
   // we swap to a confirmation state showing the freshly minted URL with
   // copy / done affordances. This avoids the "now go find your autopilot
   // and click into it to grab the URL" friction.
-  const [createdWebhookTrigger, setCreatedWebhookTrigger] = useState<AutopilotTrigger | null>(null);
+  const [createdWebhookTrigger, setCreatedWebhookTrigger] = useState<AutomationTrigger | null>(null);
 
   const canSubmit =
-    title.trim().length > 0 && assigneeId.length > 0 && !submitting;
+    title.trim().length > 0 &&
+    !submitting &&
+    (sourceMode === "template" ? Boolean(selectedTemplateId) : assigneeId.length > 0);
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     try {
       if (isCreate) {
-        const autopilot = await createAutopilot.mutateAsync({
-          title: title.trim(),
-          description: description.trim() || undefined,
-          project_id: executionMode === "create_issue" ? projectId : null,
-          assignee_type: assigneeType,
-          assignee_id: assigneeId,
-          execution_mode: executionMode,
-        });
+        const automation = await createAutomation.mutateAsync(
+          sourceMode === "template"
+            ? {
+                title: title.trim(),
+                source_mode: "template",
+                template_id: selectedTemplateId,
+                inline_issue_config: null,
+                concurrency_policy: concurrencyPolicy,
+              }
+            : {
+                title: title.trim(),
+                source_mode: "inline",
+                template_id: null,
+                inline_issue_config: {
+                  issue_title_template: title.trim(),
+                  issue_body_template: description.trim() || null,
+                  project_id: executionMode === "create_issue" ? projectId : null,
+                  assignee_type: assigneeType,
+                  assignee_id: assigneeId,
+                  priority: "medium",
+                  execution_mode: executionMode,
+                },
+                concurrency_policy: concurrencyPolicy,
+                execution_mode: executionMode,
+              },
+        );
         let triggerOk = true;
         let triggerErrMessage: string | null = null;
-        let webhookTrigger: AutopilotTrigger | null = null;
+        let webhookTrigger: AutomationTrigger | null = null;
         try {
           if (triggerKind === "webhook") {
             webhookTrigger = await createTrigger.mutateAsync({
-              autopilotId: autopilot.id,
+              automationId: automation.id,
               kind: "webhook",
               event_filters: eventFilters.length > 0 ? eventFilters : undefined,
             });
           } else {
             await createTrigger.mutateAsync({
-              autopilotId: autopilot.id,
+              automationId: automation.id,
               kind: "schedule",
               cron_expression: toCronExpression(triggerConfig),
               timezone: triggerConfig.timezone,
@@ -420,72 +430,34 @@ export function AutopilotDialog(props: AutopilotDialogProps) {
           toast.error(formatSchedulePartialFailureToast(t, "create", triggerErrMessage));
         }
       } else {
-        await updateAutopilot.mutateAsync({
+        await updateAutomation.mutateAsync({
           id: props.autopilotId,
           title: title.trim(),
-          description: description.trim() || null,
-          project_id: executionMode === "create_issue" ? projectId : null,
-          assignee_type: assigneeType,
-          assignee_id: assigneeId,
-          execution_mode: executionMode,
+          ...(sourceMode === "template"
+            ? {
+                source_mode: "template" as const,
+                template_id: selectedTemplateId,
+                inline_issue_config: null,
+                concurrency_policy: concurrencyPolicy,
+              }
+            : {
+                source_mode: "inline" as const,
+                template_id: null,
+                inline_issue_config: {
+                  issue_title_template: title.trim(),
+                  issue_body_template: description.trim() || null,
+                  project_id: executionMode === "create_issue" ? projectId : null,
+                  assignee_type: assigneeType,
+                  assignee_id: assigneeId,
+                  priority: "medium",
+                  execution_mode: executionMode,
+                },
+                concurrency_policy: concurrencyPolicy,
+                execution_mode: executionMode,
+              }),
         });
-        let triggerOk = true;
-        let triggerErrMessage: string | null = null;
-        // Skip the schedule sync when the autopilot's first trigger is a
-        // webhook — there's no cron to update there, and the schedule
-        // panel isn't even rendered for webhook autopilots.
-        if (triggerKind === "schedule" && scheduleDirty && !schedulePillDisabled) {
-          const snapshottedTriggerId = firstTriggerIdRef.current;
-          try {
-            if (snapshottedTriggerId) {
-              await updateTrigger.mutateAsync({
-                autopilotId: props.autopilotId,
-                triggerId: snapshottedTriggerId,
-                cron_expression: toCronExpression(triggerConfig),
-                timezone: triggerConfig.timezone,
-              });
-            } else {
-              await createTrigger.mutateAsync({
-                autopilotId: props.autopilotId,
-                kind: "schedule",
-                cron_expression: toCronExpression(triggerConfig),
-                timezone: triggerConfig.timezone,
-              });
-            }
-          } catch (err) {
-            triggerOk = false;
-            triggerErrMessage =
-              err instanceof Error && err.message ? err.message : null;
-          }
-        }
-        // Webhook autopilots have no schedule, but the user can still edit
-        // event_filters from the same dialog. PATCH only when the snapshot
-        // taken on open differs from the live state. Sending an explicit
-        // empty array clears filters server-side (tri-state semantics — see
-        // UpdateAutopilotTriggerRequest in autopilot.go).
-        if (
-          triggerKind === "webhook" &&
-          eventFiltersDirty &&
-          firstTriggerIdRef.current
-        ) {
-          try {
-            await updateTrigger.mutateAsync({
-              autopilotId: props.autopilotId,
-              triggerId: firstTriggerIdRef.current,
-              event_filters: eventFilters,
-            });
-          } catch (err) {
-            triggerOk = false;
-            triggerErrMessage =
-              err instanceof Error && err.message ? err.message : null;
-          }
-        }
         onOpenChange(false);
-        if (triggerOk) {
-          toast.success(t(($) => $.dialog.toast_updated));
-        } else {
-          toast.error(formatSchedulePartialFailureToast(t, "update", triggerErrMessage));
-        }
+        toast.success(t(($) => $.dialog.toast_updated));
       }
     } catch (err) {
       toast.error(
@@ -603,69 +575,108 @@ export function AutopilotDialog(props: AutopilotDialogProps) {
               />
             </div>
 
-            <div className="px-6 pb-2 shrink-0 flex items-baseline gap-2">
-              <span className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-                {t(($) => $.dialog.runbook_label)}
-              </span>
-              <span className="text-xs text-muted-foreground/80">
-                {t(($) => $.dialog.runbook_hint)}
-              </span>
-            </div>
-
-            <div className="flex-1 min-h-0 px-6 pb-6 flex flex-col lg:h-full">
-              <div className="min-h-[200px] lg:min-h-0 lg:h-full overflow-y-auto rounded-lg border border-border bg-background transition-colors focus-within:border-input px-4 py-3">
-                <ContentEditor
-                  defaultValue={initial.description ?? ""}
-                  placeholder={t(($) => $.dialog.description_placeholder)}
-                  onUpdate={setDescription}
-                  debounceMs={300}
-                  showBubbleMenu={false}
+            {sourceMode === "template" ? (
+              <div className="flex-1 min-h-0 px-6 pb-6">
+                <TemplateSummaryPanel
+                  templates={templates}
+                  selectedTemplateId={selectedTemplateId}
                 />
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="px-6 pb-2 shrink-0 flex items-baseline gap-2">
+                  <span className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+                    {t(($) => $.dialog.runbook_label)}
+                  </span>
+                  <span className="text-xs text-muted-foreground/80">
+                    {t(($) => $.dialog.runbook_hint)}
+                  </span>
+                </div>
+
+                <div className="flex-1 min-h-0 px-6 pb-6 flex flex-col lg:h-full">
+                  <div className="min-h-[200px] lg:min-h-0 lg:h-full overflow-y-auto rounded-lg border border-border bg-background transition-colors focus-within:border-input px-4 py-3">
+                    <ContentEditor
+                      defaultValue={initial.description ?? ""}
+                      placeholder={t(($) => $.dialog.description_placeholder)}
+                      onUpdate={setDescription}
+                      debounceMs={300}
+                      showBubbleMenu={false}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Right: Configuration */}
           <aside className="w-full lg:w-[340px] shrink-0 overflow-visible lg:overflow-y-auto px-5 py-5 space-y-5 bg-muted/30">
-            <AgentSection
-              selectedType={assigneeType}
-              selectedId={assigneeId}
-              onChange={handleAssigneeChange}
-              selectedName={selectedAssignee?.name}
-              selectedDescription={selectedAssignee?.description}
+            <SourceModeSection
+              mode={sourceMode}
+              onChange={(mode) => {
+                setSourceMode(mode);
+                if (mode === "template") setExecutionMode("create_issue");
+              }}
+              disabled={!isCreate}
             />
 
-            <OutputModeSection mode={executionMode} onChange={setExecutionMode} />
-
-            {executionMode === "create_issue" && (
-              <ProjectSection
-                projectId={projectId}
-                selectedProject={selectedProject}
-                onChange={setProjectId}
-              />
-            )}
-
-            {isCreate && (
-              <TriggerKindSection kind={triggerKind} onChange={setTriggerKind} />
-            )}
-
-            {triggerKind === "schedule" ? (
-              <ScheduleSection
-                config={triggerConfig}
-                onChange={setTriggerConfig}
-                disabled={schedulePillDisabled}
-                disabledReason={
-                  schedulePillDisabled
-                    ? t(($) => $.dialog.schedule_disabled_reason)
-                    : undefined
-                }
+            {sourceMode === "template" ? (
+              <TemplatePickerSection
+                templates={templates}
+                selectedTemplateId={selectedTemplateId}
+                onChange={setSelectedTemplateId}
               />
             ) : (
-              <WebhookSection
-                isCreate={isCreate}
-                eventFilters={eventFilters}
-                onEventFiltersChange={setEventFilters}
-              />
+              <>
+                <AgentSection
+                  selectedType={assigneeType}
+                  selectedId={assigneeId}
+                  onChange={handleAssigneeChange}
+                  selectedName={selectedAssignee?.name}
+                  selectedDescription={selectedAssignee?.description}
+                />
+
+                <OutputModeSection mode={executionMode} onChange={setExecutionMode} />
+
+                {executionMode === "create_issue" && (
+                  <ProjectSection
+                    projectId={projectId}
+                    selectedProject={selectedProject}
+                    onChange={setProjectId}
+                  />
+                )}
+              </>
+            )}
+
+            <ConcurrencyPolicySection
+              policy={concurrencyPolicy}
+              onChange={setConcurrencyPolicy}
+            />
+
+            {isCreate ? (
+              <>
+                <TriggerKindSection kind={triggerKind} onChange={setTriggerKind} />
+
+                {triggerKind === "schedule" ? (
+                  <ScheduleSection
+                    config={triggerConfig}
+                    onChange={setTriggerConfig}
+                    disabled={schedulePillDisabled}
+                    disabledReason={
+                      schedulePillDisabled
+                        ? t(($) => $.dialog.schedule_disabled_reason)
+                        : undefined
+                    }
+                  />
+                ) : (
+                  <WebhookSection
+                    isCreate={isCreate}
+                    eventFilters={eventFilters}
+                    onEventFiltersChange={setEventFilters}
+                  />
+                )}
+              </>
+            ) : (
+              <TriggerReadOnlySection kind={triggerKind} />
             )}
           </aside>
         </div>
@@ -706,6 +717,187 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase mb-2">
       {children}
+    </div>
+  );
+}
+
+function SourceModeSection({
+  mode,
+  onChange,
+  disabled,
+}: {
+  mode: AutomationSourceMode;
+  onChange: (mode: AutomationSourceMode) => void;
+  disabled?: boolean;
+}) {
+  const { t } = useT("autopilots");
+  const modes: { key: AutomationSourceMode; icon: typeof FilePlus2 }[] = [
+    { key: "inline", icon: FilePlus2 },
+    { key: "template", icon: Copy },
+  ];
+  return (
+    <div>
+      <SectionLabel>{t(($) => $.dialog.section_source_mode)}</SectionLabel>
+      <div className="space-y-1.5">
+        {modes.map(({ key, icon: Icon }) => {
+          const selected = key === mode;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => !disabled && onChange(key)}
+              disabled={disabled}
+              className={cn(
+                "w-full flex items-start gap-2.5 rounded-md border px-3 py-2 text-left transition-colors",
+                disabled ? "cursor-default opacity-80" : "cursor-pointer",
+                selected
+                  ? "border-primary bg-primary/5"
+                  : "bg-background hover:bg-accent/40",
+              )}
+            >
+              <span
+                className={cn(
+                  "mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-full border",
+                  selected
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-muted-foreground/40 bg-background",
+                )}
+              >
+                {selected ? (
+                  <Check className="size-2.5" strokeWidth={3} />
+                ) : (
+                  <Icon className="size-2.5 opacity-0" />
+                )}
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-medium">
+                  {t(($) => $.dialog.source_modes[key].label)}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {t(($) => $.dialog.source_modes[key].description)}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {disabled && (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          {t(($) => $.dialog.source_mode_locked_after_create)}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function TemplatePickerSection({
+  templates,
+  selectedTemplateId,
+  onChange,
+}: {
+  templates: IssueTemplate[];
+  selectedTemplateId: string | null;
+  onChange: (id: string | null) => void;
+}) {
+  const { t } = useT("autopilots");
+  const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) ?? null;
+  return (
+    <div className="space-y-3">
+      <div>
+        <SectionLabel>{t(($) => $.dialog.section_template)}</SectionLabel>
+        <Select value={selectedTemplateId ?? ""} onValueChange={(value) => onChange(value || null)}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder={t(($) => $.dialog.template_select_placeholder)} />
+          </SelectTrigger>
+          <SelectContent>
+            {templates.map((template) => (
+              <SelectItem key={template.id} value={template.id}>
+                {template.title}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {selectedTemplate ? (
+        <TemplateSummaryCard template={selectedTemplate} />
+      ) : (
+        <p className="rounded-md border bg-background px-3 py-2 text-xs text-muted-foreground leading-relaxed">
+          {t(($) => $.dialog.template_select_hint)}
+        </p>
+      )}
+      <p className="text-[11px] text-muted-foreground leading-relaxed">
+        {t(($) => $.dialog.template_mode_locked)}
+      </p>
+    </div>
+  );
+}
+
+function TemplateSummaryPanel({
+  templates,
+  selectedTemplateId,
+}: {
+  templates: IssueTemplate[];
+  selectedTemplateId: string | null;
+}) {
+  const { t } = useT("autopilots");
+  const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) ?? null;
+  return (
+    <div className="h-full min-h-[260px] rounded-lg border bg-muted/20 p-4">
+      <div className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+        {t(($) => $.dialog.template_summary_label)}
+      </div>
+      {selectedTemplate ? (
+        <div className="mt-3">
+          <TemplateSummaryCard template={selectedTemplate} expanded />
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-muted-foreground">
+          {t(($) => $.dialog.template_summary_empty)}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function TemplateSummaryCard({
+  template,
+  expanded,
+}: {
+  template: IssueTemplate;
+  expanded?: boolean;
+}) {
+  const { t } = useT("autopilots");
+  return (
+    <div className="rounded-md border bg-background px-3 py-3 text-sm">
+      <div className="font-medium">{template.title}</div>
+      <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+        <div>
+          <dt className="text-muted-foreground">{t(($) => $.dialog.template_issue_title)}</dt>
+          <dd className="mt-0.5 truncate text-foreground">{template.issue_title_template}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">{t(($) => $.dialog.template_priority)}</dt>
+          <dd className="mt-0.5 text-foreground">{template.priority}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">{t(($) => $.dialog.template_project)}</dt>
+          <dd className="mt-0.5 text-foreground">
+            {template.project_id ? t(($) => $.dialog.template_project_bound) : t(($) => $.dialog.template_project_none)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">{t(($) => $.dialog.template_assignee)}</dt>
+          <dd className="mt-0.5 text-foreground">{template.assignee_type}</dd>
+        </div>
+      </dl>
+      {expanded && template.issue_body_template && (
+        <div className="mt-3 border-t pt-3">
+          <div className="text-xs text-muted-foreground">{t(($) => $.dialog.template_body)}</div>
+          <div className="mt-1 max-h-52 overflow-y-auto text-xs leading-relaxed text-foreground whitespace-pre-wrap">
+            {template.issue_body_template}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -823,6 +1015,41 @@ function OutputModeSection({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function ConcurrencyPolicySection({
+  policy,
+  onChange,
+}: {
+  policy: AutomationConcurrencyPolicy;
+  onChange: (policy: AutomationConcurrencyPolicy) => void;
+}) {
+  const { t } = useT("autopilots");
+  return (
+    <div>
+      <SectionLabel>{t(($) => $.dialog.section_run_policy)}</SectionLabel>
+      <div className="grid grid-cols-3 gap-1 rounded-md bg-muted p-1">
+        {CONCURRENCY_POLICY_KEYS.map((key) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onChange(key)}
+            className={cn(
+              "rounded px-2 py-1.5 text-xs transition-colors",
+              key === policy
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t(($) => $.dialog.concurrency_policy[key].label)}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1.5 text-[11px] text-muted-foreground">
+        {t(($) => $.dialog.concurrency_policy[policy].description)}
+      </p>
     </div>
   );
 }
@@ -1061,6 +1288,29 @@ function TriggerKindButton({
   );
 }
 
+function TriggerReadOnlySection({ kind }: { kind: "schedule" | "webhook" }) {
+  const { t } = useT("autopilots");
+  const Icon = kind === "webhook" ? Webhook : Clock;
+  return (
+    <div>
+      <SectionLabel>{t(($) => $.dialog.section_trigger_kind)}</SectionLabel>
+      <div className="flex items-start gap-2.5 rounded-md border bg-background px-3 py-2">
+        <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0">
+          <div className="text-sm font-medium">
+            {kind === "webhook"
+              ? t(($) => $.dialog.trigger_kind_webhook)
+              : t(($) => $.dialog.trigger_kind_schedule)}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {t(($) => $.dialog.trigger_edit_readonly)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WebhookSection({
   isCreate,
   eventFilters,
@@ -1098,7 +1348,7 @@ function WebhookCreatedPanel({
   trigger,
   onClose,
 }: {
-  trigger: AutopilotTrigger;
+  trigger: AutomationTrigger;
   onClose: () => void;
 }) {
   const { t } = useT("autopilots");

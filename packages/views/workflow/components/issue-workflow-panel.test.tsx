@@ -69,11 +69,12 @@ describe("IssueWorkflowPanel", () => {
     renderPanel();
 
     expect(await screen.findByText("Runtime workflow")).toBeInTheDocument();
-    expect(await screen.findByText("Running")).toBeInTheDocument();
-    expect(screen.getByText("Workflow managed")).toBeInTheDocument();
-    expect(screen.getByText("Node implement")).toBeInTheDocument();
-    expect(screen.getByText("Planner task-123")).toBeInTheDocument();
-    expect(screen.getByText("Source implementation")).toBeInTheDocument();
+    expect(await screen.findByTestId("workflow-canvas")).toBeInTheDocument();
+    expect(screen.queryByText("Workflow managed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Node implement")).not.toBeInTheDocument();
+    expect(screen.queryByText("Planner task-123")).not.toBeInTheDocument();
+    expect(screen.queryByText("Source implementation")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Node and child issue status/i }));
     expect(screen.getByText("agent · subissue")).toBeInTheDocument();
     expect(screen.queryByText("Run workflow")).not.toBeInTheDocument();
 
@@ -102,12 +103,12 @@ describe("IssueWorkflowPanel", () => {
 
       renderPanel();
 
-      expect(await screen.findByText(statusLabel(status))).toBeInTheDocument();
+      expect(await screen.findByText("Runtime workflow")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Stop workflow" })).not.toBeInTheDocument();
     },
   );
 
-  it("keeps manual skill execution behind the debug disclosure", async () => {
+  it("does not expose manual workflow debug execution from the issue panel", async () => {
     mocks.getIssueWorkflowRun.mockResolvedValue(null);
     mocks.listSkills.mockResolvedValue([
       { id: "skill-1", name: "Debug skill", config: { has_workflow: true } },
@@ -117,7 +118,7 @@ describe("IssueWorkflowPanel", () => {
 
     expect(await screen.findByText("Waiting for the main agent to plan this issue.")).toBeInTheDocument();
     expect(screen.getByText("Native issue mode")).toBeInTheDocument();
-    expect(screen.getByText("Debug run skill workflow")).toBeInTheDocument();
+    expect(screen.queryByText("Debug run skill workflow")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Run workflow" })).not.toBeInTheDocument();
   });
 
@@ -160,6 +161,7 @@ describe("IssueWorkflowPanel", () => {
 
     expect(await screen.findByText("Workflow stopped")).toBeInTheDocument();
     expect(screen.getByText(/Active child tasks were cancelled/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Node and child issue status/i }));
     expect(screen.getByText("Child task cancelled")).toBeInTheDocument();
     expect(screen.getByText("Child issue kept as record")).toBeInTheDocument();
     expect(screen.getByText("Skipped after stop")).toBeInTheDocument();
@@ -199,6 +201,7 @@ describe("IssueWorkflowPanel", () => {
 
     renderPanel();
 
+    fireEvent.click(await screen.findByRole("button", { name: /Node and child issue status/i }));
     expect(await screen.findByText("agent · direct")).toBeInTheDocument();
     expect(screen.getByText("main agent · main issue")).toBeInTheDocument();
     expect(screen.getByText("TraeX session traex-se")).toBeInTheDocument();
@@ -242,6 +245,7 @@ describe("IssueWorkflowPanel", () => {
 
     renderPanel();
 
+    fireEvent.click(await screen.findByRole("button", { name: /Node and child issue status/i }));
     expect(await screen.findByText("Route stabilize_run")).toBeInTheDocument();
     expect(screen.getByText("Condition true")).toBeInTheDocument();
     expect(screen.getByText('workflow_status == "fixable_auto" && revisionCount < 3')).toBeInTheDocument();
@@ -270,6 +274,7 @@ describe("IssueWorkflowPanel", () => {
 
     renderPanel();
 
+    fireEvent.click(await screen.findByRole("button", { name: /Node and child issue status/i }));
     const button = await screen.findByRole("button", { name: "Continue workflow" });
     fireEvent.click(button);
 
@@ -335,25 +340,4 @@ function makeRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
     updated_at: "2026-06-27T01:00:00Z",
     ...overrides,
   };
-}
-
-function statusLabel(status: WorkflowRun["status"]): string {
-  switch (status) {
-    case "planning":
-      return "Planning";
-    case "running":
-      return "Running";
-    case "finalizing":
-      return "Finalizing";
-    case "done":
-      return "Done";
-    case "failed":
-      return "Failed";
-    case "cancelling":
-      return "Cancelling";
-    case "cancelled":
-      return "Cancelled";
-    case "pending":
-      return "Pending";
-  }
 }

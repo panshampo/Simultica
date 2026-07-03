@@ -1,0 +1,85 @@
+{
+  "page": {
+    "title": "テンプレート",
+    "new_template": "新規テンプレート",
+    "search_placeholder": "テンプレートを検索...",
+    "empty": "テンプレートはまだありません",
+    "empty_search": "一致するテンプレートがありません"
+  },
+  "table": {
+    "template": "テンプレート",
+    "assignee": "担当",
+    "priority": "優先度",
+    "updated": "更新日",
+    "actions": "操作"
+  },
+  "detail": {
+    "back": "テンプレートに戻る",
+    "not_found": "テンプレートが見つかりません",
+    "issue_title": "イシュータイトル",
+    "issue_body": "イシュー本文",
+    "empty_body": "本文テンプレートなし",
+    "properties": "プロパティ",
+    "references": "参照",
+    "issue_refs": "イシュー",
+    "automation_refs": "自動化"
+  },
+  "dialog": {
+    "create_title": "テンプレートを作成",
+    "edit_title": "テンプレートを編集",
+    "description": "再利用できるイシュー形式と既定の担当、優先度を保存します。",
+    "assignee_note": "このテンプレートから作成したイシューはこの担当に割り当てられます。"
+  },
+  "delete_dialog": {
+    "title": "テンプレートを削除しますか？",
+    "description": "「{{name}}」を削除します。既存のイシューには影響しません。"
+  },
+  "fields": {
+    "name": "名前",
+    "name_placeholder": "週次リリースレビュー",
+    "issue_title": "イシュータイトルテンプレート",
+    "issue_title_placeholder": "リリース前に {{release}} をレビュー",
+    "issue_body": "イシュー本文テンプレート",
+    "issue_body_placeholder": "背景、チェックリスト、受け入れ条件...",
+    "project": "プロジェクト",
+    "no_project": "プロジェクトなし",
+    "assignee": "担当",
+    "assignee_placeholder": "エージェントまたはスクワッドを選択",
+    "assignee_empty": "テンプレート保存前にエージェントまたはスクワッドを作成してください。",
+    "priority": "優先度",
+    "updated": "更新日",
+    "created": "作成日"
+  },
+  "priority": {
+    "none": "なし",
+    "low": "低",
+    "medium": "中",
+    "high": "高",
+    "urgent": "緊急"
+  },
+  "actions": {
+    "use": "使用",
+    "edit": "編集",
+    "delete": "削除",
+    "cancel": "キャンセル",
+    "create": "作成",
+    "save": "保存",
+    "saving": "保存中...",
+    "deleting": "削除中..."
+  },
+  "quick_create": {
+    "trigger": "テンプレートを使用",
+    "empty": "テンプレートはまだありません",
+    "loading": "テンプレートを読み込み中...",
+    "created": "テンプレートからイシューを作成しました"
+  },
+  "toast": {
+    "created": "テンプレートを作成しました",
+    "updated": "テンプレートを更新しました",
+    "deleted": "テンプレートを削除しました",
+    "save_failed": "テンプレートを保存できませんでした",
+    "delete_failed": "テンプレートを削除できませんでした",
+    "instantiated": "テンプレートからイシューを作成しました",
+    "instantiate_failed": "テンプレートからイシューを作成できませんでした"
+  }
+}

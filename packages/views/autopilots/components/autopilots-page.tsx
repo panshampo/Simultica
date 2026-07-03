@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Zap, Play, Pause, AlertCircle, Newspaper, GitPullRequest, Bug, BarChart3, Shield, FileSearch } from "lucide-react";
+import { Plus, Zap, Play, Pause, AlertCircle, Newspaper, GitPullRequest, Bug, BarChart3, Shield, FileSearch, Copy } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { autopilotListOptions } from "@multica/core/autopilots/queries";
+import { automationListOptions } from "@multica/core/automations";
+import { issueTemplateListOptions } from "@multica/core/issue-templates";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { useActorName } from "@multica/core/workspace/hooks";
@@ -14,7 +15,8 @@ import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { Button } from "@multica/ui/components/ui/button";
 import { cn } from "@multica/ui/lib/utils";
 import { AutopilotDialog } from "./autopilot-dialog";
-import type { Autopilot, AutopilotStatus, AutopilotExecutionMode } from "@multica/core/types";
+import type { Automation, AutopilotStatus, AutopilotExecutionMode, InlineIssueConfig } from "@multica/core/types";
+import type { IssueTemplate } from "@multica/core/types/issue-template";
 import type { TriggerFrequency } from "./trigger-config";
 import { useT } from "../../i18n";
 
@@ -127,53 +129,77 @@ const STATUS_VISUAL: Record<AutopilotStatus, { color: string; icon: typeof Zap }
   archived: { color: "text-muted-foreground", icon: AlertCircle },
 };
 
-function AutopilotRow({ autopilot }: { autopilot: Autopilot }) {
+function getInlineIssueConfig(automation: Automation): InlineIssueConfig | null {
+  return automation.source_mode === "inline" ? automation.inline_issue_config ?? null : null;
+}
+
+function AutopilotRow({
+  automation,
+  template,
+}: {
+  automation: Automation;
+  template?: IssueTemplate;
+}) {
   const { t } = useT("autopilots");
   const { getActorName } = useActorName();
   const wsPaths = useWorkspacePaths();
   const formatRelativeDate = useFormatRelativeDate();
-  const visual = STATUS_VISUAL[autopilot.status as AutopilotStatus] ?? STATUS_VISUAL.active;
+  const visual = STATUS_VISUAL[automation.status as AutopilotStatus] ?? STATUS_VISUAL.active;
   const StatusIcon = visual.icon;
+  const inlineConfig = getInlineIssueConfig(automation);
+  const executionMode = inlineConfig?.execution_mode ?? "create_issue";
 
   return (
     <div className="group/row flex flex-col gap-2 border-b px-4 py-3 text-sm transition-colors hover:bg-accent/40 sm:h-11 sm:flex-row sm:items-center sm:gap-2 sm:border-b-0 sm:px-5 sm:py-0">
       <AppLink
-        href={wsPaths.autopilotDetail(autopilot.id)}
+        href={wsPaths.autopilotDetail(automation.id)}
         className="flex min-w-0 items-center gap-2 sm:flex-1"
       >
-        <Zap className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate font-medium">{autopilot.title}</span>
+        {automation.source_mode === "template" ? (
+          <Copy className="h-4 w-4 shrink-0 text-muted-foreground" />
+        ) : (
+          <Zap className="h-4 w-4 shrink-0 text-muted-foreground" />
+        )}
+        <span className="min-w-0 flex-1 truncate font-medium">{automation.title}</span>
       </AppLink>
 
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 pl-6 text-xs sm:contents sm:pl-0">
         {/* Assignee — agent or squad */}
         <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground sm:w-32 sm:shrink-0">
-          <ActorAvatar
-            actorType={autopilot.assignee_type}
-            actorId={autopilot.assignee_id}
-            size={18}
-            enableHoverCard={autopilot.assignee_type === "agent"}
-            showStatusDot={autopilot.assignee_type === "agent"}
-          />
+          {inlineConfig ? (
+            <ActorAvatar
+              actorType={inlineConfig.assignee_type}
+              actorId={inlineConfig.assignee_id}
+              size={18}
+              enableHoverCard={inlineConfig.assignee_type === "agent"}
+              showStatusDot={inlineConfig.assignee_type === "agent"}
+            />
+          ) : (
+            <Copy className="h-4 w-4 text-muted-foreground" />
+          )}
           <span className="truncate">
-            {getActorName(autopilot.assignee_type, autopilot.assignee_id)}
+            {inlineConfig
+              ? getActorName(inlineConfig.assignee_type, inlineConfig.assignee_id)
+              : template?.title ?? t(($) => $.source_mode.template)}
           </span>
         </span>
 
         {/* Mode */}
         <span className="text-muted-foreground sm:w-24 sm:shrink-0 sm:text-center">
-          {t(($) => $.execution_mode[autopilot.execution_mode as AutopilotExecutionMode])}
+          {automation.source_mode === "template"
+            ? t(($) => $.source_mode.template)
+            : t(($) => $.execution_mode[executionMode as AutopilotExecutionMode])}
         </span>
 
         {/* Status */}
         <span className={cn("flex items-center gap-1 sm:w-20 sm:shrink-0 sm:justify-center", visual.color)}>
           <StatusIcon className="h-3 w-3" />
-          {t(($) => $.status[autopilot.status as AutopilotStatus])}
+          {t(($) => $.status[automation.status as AutopilotStatus])}
         </span>
 
         {/* Last run */}
         <span className="text-muted-foreground tabular-nums sm:w-20 sm:shrink-0 sm:text-right">
-          {autopilot.last_run_at ? formatRelativeDate(autopilot.last_run_at) : t(($) => $.page.last_run_empty)}
+          {automation.last_run_at ? formatRelativeDate(automation.last_run_at) : t(($) => $.page.last_run_empty)}
         </span>
       </div>
     </div>
@@ -183,9 +209,11 @@ function AutopilotRow({ autopilot }: { autopilot: Autopilot }) {
 export function AutopilotsPage() {
   const { t } = useT("autopilots");
   const wsId = useWorkspaceId();
-  const { data: autopilots = [], isLoading } = useQuery(autopilotListOptions(wsId));
+  const { data: automations = [], isLoading } = useQuery(automationListOptions(wsId));
+  const { data: templates = [] } = useQuery(issueTemplateListOptions(wsId));
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<AutopilotTemplate | null>(null);
+  const templatesById = new Map(templates.map((template) => [template.id, template]));
 
   const openCreate = (template?: AutopilotTemplate) => {
     setSelectedTemplate(template ?? null);
@@ -199,8 +227,8 @@ export function AutopilotsPage() {
         <div className="flex items-center gap-2">
           <Zap className="h-4 w-4 text-muted-foreground" />
           <h1 className="text-sm font-medium">{t(($) => $.page.title)}</h1>
-          {!isLoading && autopilots.length > 0 && (
-            <span className="text-xs text-muted-foreground tabular-nums">{autopilots.length}</span>
+          {!isLoading && automations.length > 0 && (
+            <span className="text-xs text-muted-foreground tabular-nums">{automations.length}</span>
           )}
         </div>
         <Button size="sm" variant="outline" onClick={() => openCreate()}>
@@ -227,7 +255,7 @@ export function AutopilotsPage() {
               ))}
             </div>
           </>
-        ) : autopilots.length === 0 ? (
+        ) : automations.length === 0 ? (
           <div className="flex flex-col items-center py-16 px-5">
             <Zap className="h-10 w-10 mb-3 text-muted-foreground opacity-30" />
             <p className="text-sm text-muted-foreground">{t(($) => $.page.empty.title)}</p>
@@ -273,8 +301,12 @@ export function AutopilotsPage() {
               <span className="w-20 text-center shrink-0">{t(($) => $.page.table.status)}</span>
               <span className="w-20 text-right shrink-0">{t(($) => $.page.table.last_run)}</span>
             </div>
-            {autopilots.map((autopilot) => (
-              <AutopilotRow key={autopilot.id} autopilot={autopilot} />
+            {automations.map((automation) => (
+              <AutopilotRow
+                key={automation.id}
+                automation={automation}
+                template={automation.template_id ? templatesById.get(automation.template_id) : undefined}
+              />
             ))}
           </>
         )}

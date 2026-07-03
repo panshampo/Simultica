@@ -1,0 +1,85 @@
+{
+  "page": {
+    "title": "템플릿",
+    "new_template": "새 템플릿",
+    "search_placeholder": "템플릿 검색...",
+    "empty": "아직 템플릿이 없습니다",
+    "empty_search": "검색과 일치하는 템플릿이 없습니다"
+  },
+  "table": {
+    "template": "템플릿",
+    "assignee": "담당",
+    "priority": "우선순위",
+    "updated": "업데이트",
+    "actions": "작업"
+  },
+  "detail": {
+    "back": "템플릿으로 돌아가기",
+    "not_found": "템플릿을 찾을 수 없습니다",
+    "issue_title": "이슈 제목",
+    "issue_body": "이슈 본문",
+    "empty_body": "본문 템플릿 없음",
+    "properties": "속성",
+    "references": "참조",
+    "issue_refs": "이슈",
+    "automation_refs": "자동화"
+  },
+  "dialog": {
+    "create_title": "템플릿 만들기",
+    "edit_title": "템플릿 편집",
+    "description": "재사용 가능한 이슈 형태와 기본 담당자, 우선순위를 저장합니다.",
+    "assignee_note": "이 템플릿으로 만든 새 이슈는 이 대상에게 배정됩니다."
+  },
+  "delete_dialog": {
+    "title": "템플릿을 삭제할까요?",
+    "description": "\"{{name}}\"을 삭제합니다. 기존 이슈에는 영향이 없습니다."
+  },
+  "fields": {
+    "name": "이름",
+    "name_placeholder": "주간 릴리스 리뷰",
+    "issue_title": "이슈 제목 템플릿",
+    "issue_title_placeholder": "출시 전 {{release}} 리뷰",
+    "issue_body": "이슈 본문 템플릿",
+    "issue_body_placeholder": "배경, 체크리스트, 승인 기준...",
+    "project": "프로젝트",
+    "no_project": "프로젝트 없음",
+    "assignee": "담당",
+    "assignee_placeholder": "에이전트 또는 스쿼드 선택",
+    "assignee_empty": "템플릿을 저장하기 전에 에이전트 또는 스쿼드를 만드세요.",
+    "priority": "우선순위",
+    "updated": "업데이트",
+    "created": "생성"
+  },
+  "priority": {
+    "none": "없음",
+    "low": "낮음",
+    "medium": "중간",
+    "high": "높음",
+    "urgent": "긴급"
+  },
+  "actions": {
+    "use": "사용",
+    "edit": "편집",
+    "delete": "삭제",
+    "cancel": "취소",
+    "create": "생성",
+    "save": "저장",
+    "saving": "저장 중...",
+    "deleting": "삭제 중..."
+  },
+  "quick_create": {
+    "trigger": "템플릿 사용",
+    "empty": "아직 템플릿이 없습니다",
+    "loading": "템플릿 로딩 중...",
+    "created": "템플릿에서 이슈를 만들었습니다"
+  },
+  "toast": {
+    "created": "템플릿을 만들었습니다",
+    "updated": "템플릿을 업데이트했습니다",
+    "deleted": "템플릿을 삭제했습니다",
+    "save_failed": "템플릿을 저장하지 못했습니다",
+    "delete_failed": "템플릿을 삭제하지 못했습니다",
+    "instantiated": "템플릿에서 이슈를 만들었습니다",
+    "instantiate_failed": "템플릿에서 이슈를 만들지 못했습니다"
+  }
+}

@@ -370,7 +370,7 @@ export function useRealtimeSync(
   useEffect(() => {
     if (!ws) return;
 
-    const refreshMap: Record<string, () => void> = {
+    const refreshMap: Record<string, (payload?: unknown) => void> = {
       inbox: () => {
         const wsId = getCurrentWsId();
         if (wsId) onInboxInvalidate(qc, wsId);
@@ -462,7 +462,7 @@ export function useRealtimeSync(
       // workspace-wide agent-task-snapshot query so per-agent presence
       // reflects the change. task:message is NOT in this prefix path — it
       // stays in specificEvents to avoid an invalidate storm during long runs.
-      task: () => {
+      task: (payload?: unknown) => {
         const wsId = getCurrentWsId();
         if (!wsId) return;
         qc.invalidateQueries({ queryKey: agentTaskSnapshotKeys.list(wsId) });
@@ -479,15 +479,17 @@ export function useRealtimeSync(
         // catches every agent's list — the per-agent detail key sits
         // under agentTasks/<wsId>/<agentId>.
         qc.invalidateQueries({ queryKey: agentTasksKeys.all(wsId) });
-        // Per-issue task list (issue-detail Execution log). Prefix match
-        // across all issues — keeps the contract "any task: event makes
-        // every list-of-tasks query stale" so cache stays fresh even
-        // when the relevant component isn't currently mounted.
-        qc.invalidateQueries({ queryKey: ["issues", "tasks"] });
-        // Per-issue token usage card (issue-detail right rail). Same
-        // shape as the tasks invalidation above — any task lifecycle
-        // event shifts the aggregated usage numbers.
-        qc.invalidateQueries({ queryKey: ["issues", "usage"] });
+        // Per-issue task list and token usage. Task lifecycle payloads carry
+        // issue_id, so keep the common path targeted; fall back to the broad
+        // prefix only for malformed/older events.
+        const issueId = (payload as { issue_id?: string } | null)?.issue_id;
+        if (issueId) {
+          qc.invalidateQueries({ queryKey: issueKeys.tasks(issueId) });
+          qc.invalidateQueries({ queryKey: issueKeys.usage(issueId) });
+        } else {
+          qc.invalidateQueries({ queryKey: issueKeys.tasksAll() });
+          qc.invalidateQueries({ queryKey: ["issues", "usage"] });
+        }
         // Squad members-status reads the same task lifecycle to flip
         // working ↔ idle for each agent member.
         invalidateSquadMemberStatusQueries(qc, wsId);
@@ -537,7 +539,7 @@ export function useRealtimeSync(
       if (specificEvents.has(msg.type)) return;
       const prefix = msg.type.split(":")[0] ?? "";
       const refresh = refreshMap[prefix];
-      if (refresh) debouncedRefresh(prefix, refresh);
+      if (refresh) debouncedRefresh(prefix, () => refresh(msg.payload));
     });
 
     // --- Specific event handlers (granular cache updates) ---

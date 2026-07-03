@@ -61,7 +61,9 @@
     "source_runtime_unknown": "来自某个运行时",
     "source_clawhub": "来自 ClawHub",
     "source_skills_sh": "来自 Skills.sh",
-    "source_github": "来自 GitHub"
+    "source_github": "来自 GitHub",
+    "workflow_yes": "包含 workflow",
+    "workflow_no": "不包含 workflow"
   },
   "detail": {
     "all_skills": "全部 skill",
@@ -114,6 +116,14 @@
       "permissions_locked": "只有创建者或工作区管理员能编辑这个 skill。",
       "used_by_empty": "还未分配给任何智能体。打开某个智能体的 Skills 标签页进行分配。"
     },
+    "workflow_debug": {
+      "title": "调试 workflow",
+      "description": "创建一条临时 issue，并立即启动当前 skill workflow。",
+      "action": "调试运行",
+      "starting": "启动中...",
+      "toast_started": "已启动 workflow 调试 issue",
+      "toast_failed": "启动 workflow 调试 issue 失败"
+    },
     "origin_card": {
       "imported_runtime": "从本地运行时导入",
       "imported_clawhub": "从 ClawHub 导入",
@@ -128,6 +138,9 @@
     },
     "toast_saved": "已保存 skill",
     "toast_save_failed": "保存 skill 失败",
+    "toast_file_removed": "已从草稿中移除 {{path}}",
+    "toast_workflow_saved": "已保存 workflow",
+    "toast_workflow_save_failed": "保存 workflow 失败",
     "toast_deleted": "已删除 skill",
     "toast_delete_failed": "删除 skill 失败",
     "delete_dialog": {

@@ -114,6 +114,162 @@ describe("ApiClient", () => {
     ]);
   });
 
+  it("uses the expected HTTP contract for issue template endpoints", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new ApiClient("https://api.example.test");
+
+    await client.listIssueTemplates({ project_id: "project-1" });
+    await client.getIssueTemplate("tpl-1");
+    await client.createIssueTemplate({
+      title: "Daily triage",
+      issue_title_template: "Daily triage",
+      issue_body_template: "Review incoming issues",
+      assignee_type: "agent",
+      assignee_id: "agent-1",
+      priority: "medium",
+    });
+    await client.updateIssueTemplate("tpl-1", { title: "Updated triage", project_id: null });
+    await client.instantiateIssueTemplate("tpl-1");
+    await client.deleteIssueTemplate("tpl-1");
+
+    const calls = fetchMock.mock.calls.map(([url, init]) => ({
+      url,
+      method: init?.method ?? "GET",
+      body: init?.body,
+    }));
+
+    expect(calls).toMatchObject([
+      { url: "https://api.example.test/api/issue-templates?project_id=project-1", method: "GET" },
+      { url: "https://api.example.test/api/issue-templates/tpl-1", method: "GET" },
+      {
+        url: "https://api.example.test/api/issue-templates",
+        method: "POST",
+        body: JSON.stringify({
+          title: "Daily triage",
+          issue_title_template: "Daily triage",
+          issue_body_template: "Review incoming issues",
+          assignee_type: "agent",
+          assignee_id: "agent-1",
+          priority: "medium",
+        }),
+      },
+      {
+        url: "https://api.example.test/api/issue-templates/tpl-1",
+        method: "PATCH",
+        body: JSON.stringify({ title: "Updated triage", project_id: null }),
+      },
+      { url: "https://api.example.test/api/issue-templates/tpl-1/instantiate", method: "POST" },
+      { url: "https://api.example.test/api/issue-templates/tpl-1", method: "DELETE" },
+    ]);
+  });
+
+  it("uses the expected HTTP contract for automation endpoints", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify({ automations: [], runs: [], deliveries: [], total: 0 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new ApiClient("https://api.example.test");
+
+    await client.listAutomations({ status: "active", source_mode: "template" });
+    await client.getAutomation("auto-1");
+    await client.createAutomation({
+      title: "Template automation",
+      source_mode: "template",
+      template_id: "tpl-1",
+      concurrency_policy: "skip",
+    });
+    await client.updateAutomation("auto-1", {
+      source_mode: "inline",
+      inline_issue_config: {
+        issue_title_template: "Inline task",
+        issue_body_template: "Investigate payload",
+        assignee_type: "agent",
+        assignee_id: "agent-1",
+        project_id: null,
+        priority: "high",
+        execution_mode: "create_issue",
+      },
+    });
+    await client.deleteAutomation("auto-1");
+    await client.triggerAutomation("auto-1");
+    await client.listAutomationRuns("auto-1", { limit: 10, offset: 20 });
+    await client.getAutomationRun("auto-1", "run-1");
+    await client.createAutomationTrigger("auto-1", {
+      kind: "webhook",
+      label: "GitHub",
+      provider: "github",
+      event_filters: [{ event: "pull_request", actions: ["opened"] }],
+    });
+    await client.listAutomationDeliveries("auto-1", { limit: 5, offset: 10 });
+    await client.getAutomationDelivery("auto-1", "del-1");
+    await client.replayAutomationDelivery("auto-1", "del-1");
+
+    const calls = fetchMock.mock.calls.map(([url, init]) => ({
+      url,
+      method: init?.method ?? "GET",
+      body: init?.body,
+    }));
+
+    expect(calls).toMatchObject([
+      { url: "https://api.example.test/api/automations?status=active&source_mode=template", method: "GET" },
+      { url: "https://api.example.test/api/automations/auto-1", method: "GET" },
+      {
+        url: "https://api.example.test/api/automations",
+        method: "POST",
+        body: JSON.stringify({
+          title: "Template automation",
+          source_mode: "template",
+          template_id: "tpl-1",
+          concurrency_policy: "skip",
+        }),
+      },
+      {
+        url: "https://api.example.test/api/automations/auto-1",
+        method: "PATCH",
+        body: JSON.stringify({
+          source_mode: "inline",
+          inline_issue_config: {
+            issue_title_template: "Inline task",
+            issue_body_template: "Investigate payload",
+            assignee_type: "agent",
+            assignee_id: "agent-1",
+            project_id: null,
+            priority: "high",
+            execution_mode: "create_issue",
+          },
+        }),
+      },
+      { url: "https://api.example.test/api/automations/auto-1", method: "DELETE" },
+      { url: "https://api.example.test/api/automations/auto-1/trigger", method: "POST" },
+      { url: "https://api.example.test/api/automations/auto-1/runs?limit=10&offset=20", method: "GET" },
+      { url: "https://api.example.test/api/automations/auto-1/runs/run-1", method: "GET" },
+      {
+        url: "https://api.example.test/api/automations/auto-1/triggers",
+        method: "POST",
+        body: JSON.stringify({
+          kind: "webhook",
+          label: "GitHub",
+          provider: "github",
+          event_filters: [{ event: "pull_request", actions: ["opened"] }],
+        }),
+      },
+      { url: "https://api.example.test/api/automations/auto-1/deliveries?limit=5&offset=10", method: "GET" },
+      { url: "https://api.example.test/api/automations/auto-1/deliveries/del-1", method: "GET" },
+      { url: "https://api.example.test/api/automations/auto-1/deliveries/del-1/replay", method: "POST" },
+    ]);
+  });
+
   it("uses the workflow-run cancel endpoint with a default reason", async () => {
     const run = {
       id: "run-1",

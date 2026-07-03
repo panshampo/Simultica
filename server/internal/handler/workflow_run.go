@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -82,6 +83,88 @@ func workflowRunToResponse(run db.WorkflowRun) WorkflowRunResponse {
 	return resp
 }
 
+func (h *Handler) workflowRunToResponseWithSubIssueStatus(ctx context.Context, run db.WorkflowRun) (WorkflowRunResponse, error) {
+	resp := workflowRunToResponse(run)
+
+	subIssues, err := h.Queries.ListIssuesByOrigin(ctx, db.ListIssuesByOriginParams{
+		WorkspaceID: run.WorkspaceID,
+		OriginType:  pgtype.Text{String: "workflow_node", Valid: true},
+		OriginID:    run.ID,
+	})
+	if err != nil {
+		return resp, fmt.Errorf("list sub-issues: %w", err)
+	}
+	if len(subIssues) == 0 {
+		return resp, nil
+	}
+
+	statusByIssueID := make(map[string]string, len(subIssues))
+	for _, iss := range subIssues {
+		statusByIssueID[uuidToString(iss.ID)] = iss.Status
+	}
+
+	var nodesState map[string]json.RawMessage
+	if err := json.Unmarshal(resp.NodesState, &nodesState); err != nil {
+		return resp, fmt.Errorf("unmarshal nodes_state: %w", err)
+	}
+
+	changed := false
+	for nodeID, rawNode := range nodesState {
+		var node map[string]any
+		if err := json.Unmarshal(rawNode, &node); err != nil {
+			continue
+		}
+		subIssueID, _ := node["sub_issue_id"].(string)
+		if subIssueID == "" {
+			subIssueID, _ = node["subIssueId"].(string)
+		}
+		if subIssueID == "" {
+			continue
+		}
+		issueStatus, ok := statusByIssueID[subIssueID]
+		if !ok {
+			continue
+		}
+		mapped := issueStatusToNodeStatus(issueStatus)
+		if current, _ := node["status"].(string); current == mapped {
+			continue
+		}
+		node["status"] = mapped
+		updated, err := json.Marshal(node)
+		if err != nil {
+			continue
+		}
+		nodesState[nodeID] = updated
+		changed = true
+	}
+
+	if changed {
+		merged, err := json.Marshal(nodesState)
+		if err == nil {
+			resp.NodesState = merged
+		}
+	}
+
+	return resp, nil
+}
+
+func issueStatusToNodeStatus(issueStatus string) string {
+	switch issueStatus {
+	case "backlog", "todo":
+		return "pending"
+	case "in_progress":
+		return "running"
+	case "in_review", "done":
+		return "done"
+	case "blocked":
+		return "blocked"
+	case "cancelled":
+		return "cancelled"
+	default:
+		return "pending"
+	}
+}
+
 func (h *Handler) GetIssueWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	workspaceID, ok := h.workflowWorkspaceID(w, r)
 	if !ok {
@@ -105,7 +188,14 @@ func (h *Handler) GetIssueWorkflowRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "workflow run is outside workspace")
 		return
 	}
-	writeJSON(w, http.StatusOK, workflowRunToResponse(run))
+
+	resp, err := h.workflowRunToResponseWithSubIssueStatus(r.Context(), run)
+	if err != nil {
+		slog.Warn("overlay sub-issue status failed", "run_id", uuidToString(run.ID), "error", err)
+		writeJSON(w, http.StatusOK, workflowRunToResponse(run))
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 type createWorkflowRunRequest struct {
@@ -187,7 +277,7 @@ func (h *Handler) CreateWorkflowRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.publishWorkflowRunUpdated(workspaceID, run)
+	h.publishWorkflowRunUpdated(r.Context(), workspaceID, run)
 	writeJSON(w, http.StatusCreated, workflowRunToResponse(run))
 }
 
@@ -248,7 +338,7 @@ func (h *Handler) UpdateWorkflowRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.publishWorkflowRunUpdated(workspaceID, run)
+	h.publishWorkflowRunUpdated(r.Context(), workspaceID, run)
 	writeJSON(w, http.StatusOK, workflowRunToResponse(run))
 }
 
@@ -393,7 +483,7 @@ func (h *Handler) CancelWorkflowRun(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.publishWorkflowRunUpdated(workspaceID, run)
+	h.publishWorkflowRunUpdated(r.Context(), workspaceID, run)
 	writeJSON(w, http.StatusOK, workflowRunToResponse(run))
 }
 
@@ -505,9 +595,35 @@ func (h *Handler) workflowWorkspaceID(w http.ResponseWriter, r *http.Request) (p
 	return parseUUIDOrBadRequest(w, workspaceID, "workspace_id")
 }
 
-func (h *Handler) publishWorkflowRunUpdated(workspaceID pgtype.UUID, run db.WorkflowRun) {
+func (h *Handler) publishWorkflowRunUpdated(ctx context.Context, workspaceID pgtype.UUID, run db.WorkflowRun) {
+	resp, err := h.workflowRunToResponseWithSubIssueStatus(ctx, run)
+	if err != nil {
+		slog.Warn("publish workflow run: overlay status failed", "run_id", uuidToString(run.ID), "error", err)
+		resp = workflowRunToResponse(run)
+	}
 	h.publish(protocol.EventWorkflowRunUpdated, uuidToString(workspaceID), "system", "", map[string]any{
-		"workflow_run": workflowRunToResponse(run),
+		"workflow_run": resp,
+	})
+}
+
+func (h *Handler) notifyWorkflowRunOfSubIssueStatus(ctx context.Context, workspaceIDStr string, runID pgtype.UUID) {
+	workspaceID := parseUUID(workspaceIDStr)
+	if !workspaceID.Valid {
+		slog.Warn("notify workflow run: invalid workspace id", "workspace_id", workspaceIDStr)
+		return
+	}
+	run, err := h.Queries.GetWorkflowRun(ctx, runID)
+	if err != nil {
+		slog.Warn("notify workflow run: load run failed", "run_id", uuidToString(runID), "error", err)
+		return
+	}
+	resp, err := h.workflowRunToResponseWithSubIssueStatus(ctx, run)
+	if err != nil {
+		slog.Warn("notify workflow run: overlay status failed", "run_id", uuidToString(runID), "error", err)
+		return
+	}
+	h.publish(protocol.EventWorkflowRunUpdated, uuidToString(workspaceID), "system", "", map[string]any{
+		"workflow_run": resp,
 	})
 }
 
@@ -660,6 +776,6 @@ func (h *Handler) startIssueWorkflowRunFromSkill(w http.ResponseWriter, r *http.
 		writeError(w, http.StatusBadGateway, fmt.Sprintf("workflow sidecar returned %d: %s", resp.StatusCode, string(body)))
 		return
 	}
-	h.publishWorkflowRunUpdated(workspaceID, run)
+	h.publishWorkflowRunUpdated(r.Context(), workspaceID, run)
 	writeJSON(w, http.StatusAccepted, workflowRunToResponse(run))
 }

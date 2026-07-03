@@ -1,43 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pencil, Eye } from "lucide-react";
 import { Button } from "@multica/ui/components/ui/button";
-import { Textarea } from "@multica/ui/components/ui/textarea";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@multica/ui/components/ui/tooltip";
-import {
-  parseFrontmatter,
-  type SkillFrontmatter,
-} from "@multica/core/skills/frontmatter";
-import { Markdown } from "../../common/markdown";
 import { useT } from "../../i18n";
-
-function isMarkdown(path: string) {
-  return path.endsWith(".md") || path.endsWith(".mdx");
-}
-
-// ---------------------------------------------------------------------------
-// Frontmatter display
-// ---------------------------------------------------------------------------
-
-function FrontmatterCard({ data }: { data: SkillFrontmatter }) {
-  return (
-    <div className="mb-4 rounded-lg border bg-muted/30 px-4 py-3">
-      <div className="grid gap-1.5">
-        {Object.entries(data).map(([key, value]) => (
-          <div key={key} className="flex gap-2 text-xs">
-            <span className="shrink-0 font-medium text-muted-foreground min-w-[80px]">
-              {key}
-            </span>
-            <span className="text-foreground whitespace-pre-wrap break-words">
-              {value.trimEnd()}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+import { getSkillFileRenderer, type SkillFileMode } from "./skill-file-renderers";
 
 // ---------------------------------------------------------------------------
 // File viewer
@@ -47,39 +15,60 @@ export function FileViewer({
   path,
   content,
   onChange,
+  canEdit = true,
 }: {
   path: string;
   content: string;
   onChange: (content: string) => void;
+  canEdit?: boolean;
 }) {
   const { t } = useT("skills");
-  const [editing, setEditing] = useState(false);
-  const isMd = isMarkdown(path);
+  const renderer = useMemo(() => getSkillFileRenderer(path), [path]);
+  const [mode, setMode] = useState<SkillFileMode>(renderer.defaultMode);
+  const isEditing = mode === "edit";
+  const canPreview = renderer.canPreview && Boolean(renderer.Preview);
 
-  const { frontmatter, body } = useMemo(
-    () => (isMd ? parseFrontmatter(content) : { frontmatter: null, body: content }),
-    [content, isMd],
-  );
+  useEffect(() => {
+    setMode(renderer.defaultMode);
+  }, [path, renderer.defaultMode]);
+
+  useEffect(() => {
+    if (!canEdit && mode === "edit") setMode("preview");
+  }, [canEdit, mode]);
+
+  const Preview = renderer.Preview;
+  const Body = isEditing || !Preview ? renderer.Editor : Preview;
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       {/* File header */}
-      <div className="flex h-10 items-center justify-between gap-3 border-b px-4">
-        <span className="text-xs font-mono text-muted-foreground truncate">
-          {path}
-        </span>
+      <div className="flex min-h-10 shrink-0 items-center justify-between gap-3 border-b bg-muted/15 px-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-mono text-xs text-muted-foreground">
+            {path}
+          </span>
+          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {renderer.label}
+          </span>
+        </div>
         <div className="flex items-center gap-1">
-          {isMd && (
+          {canPreview && (
             <Tooltip>
               <TooltipTrigger
                 render={
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    onClick={() => setEditing(!editing)}
+                    onClick={() => setMode(isEditing ? "preview" : "edit")}
+                    disabled={!canEdit && !isEditing}
                     className="text-muted-foreground"
+                    aria-label={
+                      isEditing
+                        ? t(($) => $.file_viewer.preview_tooltip)
+                        : t(($) => $.file_viewer.edit_tooltip)
+                    }
                   >
-                    {editing ? (
+                    {isEditing ? (
                       <Eye className="h-3.5 w-3.5" />
                     ) : (
                       <Pencil className="h-3.5 w-3.5" />
@@ -88,7 +77,7 @@ export function FileViewer({
                 }
               />
               <TooltipContent>
-                {editing
+                {isEditing
                   ? t(($) => $.file_viewer.preview_tooltip)
                   : t(($) => $.file_viewer.edit_tooltip)}
               </TooltipContent>
@@ -98,26 +87,8 @@ export function FileViewer({
       </div>
 
       {/* File content */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        {isMd && !editing ? (
-          <div className="p-4 sm:p-6">
-            {frontmatter && <FrontmatterCard data={frontmatter} />}
-            <Markdown mode="full">
-              {body || t(($) => $.file_viewer.no_content)}
-            </Markdown>
-          </div>
-        ) : (
-          <Textarea
-            value={content}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={
-              isMd
-                ? t(($) => $.file_viewer.markdown_placeholder)
-                : t(($) => $.file_viewer.raw_placeholder)
-            }
-            className="h-full min-h-full resize-none rounded-none border-0 font-mono text-sm leading-relaxed focus-visible:ring-0"
-          />
-        )}
+      <div className="min-h-0 flex-1">
+        <Body path={path} content={content} canEdit={canEdit} onChange={onChange} />
       </div>
     </div>
   );

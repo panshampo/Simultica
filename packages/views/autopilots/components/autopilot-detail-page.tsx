@@ -4,19 +4,18 @@ import { useState } from "react";
 import {
   Zap, Play, Clock, Plus, Trash2, CheckCircle2, XCircle, Loader2, Pencil,
   Ban, ChevronDown, ChevronRight,
-  Webhook, Copy, Check, RotateCw,
+  Webhook, Copy, Check, RotateCw, FileText,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { autopilotDetailOptions, autopilotRunsOptions, autopilotRunOptions } from "@multica/core/autopilots/queries";
+import { automationDetailOptions, automationRunsOptions, automationRunOptions } from "@multica/core/automations";
+import { issueTemplateDetailOptions } from "@multica/core/issue-templates";
 import { projectDetailOptions } from "@multica/core/projects/queries";
 import {
-  useUpdateAutopilot,
-  useDeleteAutopilot,
-  useTriggerAutopilot,
-  useCreateAutopilotTrigger,
-  useDeleteAutopilotTrigger,
-  useRotateAutopilotTriggerWebhookToken,
-} from "@multica/core/autopilots/mutations";
+  useUpdateAutomation,
+  useDeleteAutomation,
+  useTriggerAutomation,
+  useCreateAutomationTrigger,
+} from "@multica/core/automations";
 import { buildAutopilotWebhookUrl } from "@multica/core/autopilots";
 import { api } from "@multica/core/api";
 import { useWorkspaceId } from "@multica/core/hooks";
@@ -52,7 +51,6 @@ import {
   toCronExpression,
 } from "./trigger-config";
 import type { TriggerConfig } from "./trigger-config";
-import type { AutopilotExecutionMode, AutopilotRun, AutopilotTrigger } from "@multica/core/types";
 import type { AgentTask } from "@multica/core/types/agent";
 import { ReadonlyContent } from "../../editor";
 import { TranscriptButton } from "../../common/task-transcript";
@@ -61,6 +59,7 @@ import { WebhookPayloadPreview } from "./webhook-payload-preview";
 import { WebhookDeliveriesSection } from "./webhook-deliveries-section";
 import { ProjectIcon } from "../../projects/components/project-icon";
 import { useT } from "../../i18n";
+import type { AutomationRun, AutomationTrigger, AutopilotExecutionMode } from "@multica/core/types";
 
 function formatDate(date: string): string {
   return new Date(date).toLocaleString(undefined, {
@@ -88,10 +87,10 @@ const RUN_VISUAL: Record<RunStatus, { color: string; icon: typeof CheckCircle2; 
 // the parent dialog actually mounts this slot. The list endpoint omits
 // trigger_payload to keep responses small (worst case 256 KiB × N runs),
 // so the detail-on-demand fetch lives here.
-function WebhookPayloadSlot({ autopilotId, runId }: { autopilotId: string; runId: string }) {
+function WebhookPayloadSlot({ automationId, runId }: { automationId: string; runId: string }) {
   const wsId = useWorkspaceId();
   const { data, isLoading } = useQuery(
-    autopilotRunOptions(wsId, autopilotId, runId),
+    automationRunOptions(wsId, automationId, runId),
   );
   if (isLoading) {
     return <Skeleton className="h-9 w-full" />;
@@ -102,7 +101,7 @@ function WebhookPayloadSlot({ autopilotId, runId }: { autopilotId: string; runId
   return <WebhookPayloadPreview payload={data.trigger_payload} />;
 }
 
-function RunRow({ run, agentId, agentName }: { run: AutopilotRun; agentId: string; agentName: string }) {
+function RunRow({ run, agentId, agentName }: { run: AutomationRun; agentId: string; agentName: string }) {
   const { t } = useT("autopilots");
   const wsPaths = useWorkspacePaths();
   const status = (RUN_VISUAL[run.status as RunStatus] ? (run.status as RunStatus) : "issue_created");
@@ -159,7 +158,7 @@ function RunRow({ run, agentId, agentName }: { run: AutopilotRun; agentId: strin
           title={t(($) => $.run.view_log)}
           headerSlot={
             run.source === "webhook" ? (
-              <WebhookPayloadSlot autopilotId={run.autopilot_id} runId={run.id} />
+              <WebhookPayloadSlot automationId={run.automation_id} runId={run.id} />
             ) : undefined
           }
         />
@@ -185,7 +184,7 @@ function RunHistoryList({
   agentId,
   agentName,
 }: {
-  runs: AutopilotRun[];
+  runs: AutomationRun[];
   agentId: string;
   agentName: string;
 }) {
@@ -209,7 +208,7 @@ function SkippedRunsGroup({
   agentId,
   agentName,
 }: {
-  runs: AutopilotRun[];
+  runs: AutomationRun[];
   agentId: string;
   agentName: string;
 }) {
@@ -251,31 +250,9 @@ function SkippedRunsGroup({
   );
 }
 
-function TriggerRow({ trigger, autopilotId }: { trigger: AutopilotTrigger; autopilotId: string }) {
+function TriggerRow({ trigger }: { trigger: AutomationTrigger }) {
   const { t } = useT("autopilots");
-  const deleteTrigger = useDeleteAutopilotTrigger();
-  const rotateToken = useRotateAutopilotTriggerWebhookToken();
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [rotateOpen, setRotateOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [copied, setCopied] = useState(false);
-
-  const handleDelete = async () => {
-    setDeleting(true);
-    try {
-      await deleteTrigger.mutateAsync({ autopilotId, triggerId: trigger.id });
-      toast.success(t(($) => $.trigger_row.toast_deleted));
-      setConfirmOpen(false);
-    } catch (err) {
-      toast.error(
-        err instanceof Error && err.message
-          ? err.message
-          : t(($) => $.trigger_row.toast_delete_failed),
-      );
-    } finally {
-      setDeleting(false);
-    }
-  };
 
   const isWebhook = trigger.kind === "webhook";
   const isApi = trigger.kind === "api";
@@ -301,40 +278,8 @@ function TriggerRow({ trigger, autopilotId }: { trigger: AutopilotTrigger; autop
     }
   };
 
-  const handleRotate = async () => {
-    try {
-      await rotateToken.mutateAsync({ autopilotId, triggerId: trigger.id });
-      toast.success(t(($) => $.trigger_row.toast_rotated));
-      setRotateOpen(false);
-    } catch (err) {
-      toast.error(
-        err instanceof Error && err.message
-          ? err.message
-          : t(($) => $.trigger_row.toast_rotate_failed),
-      );
-    }
-  };
-
   const Icon = isWebhook ? Webhook : isApi ? Zap : Clock;
   const showWebhookUrlRow = isWebhook && webhookUrl;
-
-  // Delete control extracted so a webhook trigger can render it inline
-  // with Copy / Rotate on the URL action row (where the other action
-  // buttons live), while schedule / api triggers — which have no URL row
-  // — keep it pinned to the row's top-right corner. Without this the
-  // trash icon visually floats above the URL action buttons because the
-  // outer flex uses `items-start`.
-  const deleteButton = (
-    <Button
-      size="icon"
-      variant="ghost"
-      className="h-7 w-7 shrink-0"
-      onClick={() => setConfirmOpen(true)}
-      title={t(($) => $.trigger_row.delete_dialog.confirm)}
-    >
-      <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-    </Button>
-  );
 
   return (
     <div className="flex items-start gap-3 rounded-md border px-3 py-2">
@@ -385,61 +330,14 @@ function TriggerRow({ trigger, autopilotId }: { trigger: AutopilotTrigger; autop
               size="icon"
               variant="ghost"
               className="h-7 w-7 shrink-0"
-              onClick={() => setRotateOpen(true)}
-              title={t(($) => $.trigger_row.rotate_url)}
-              disabled={rotateToken.isPending}
+              title={t(($) => $.trigger_row.rotate_unavailable)}
+              disabled
             >
-              <RotateCw className={cn("h-3.5 w-3.5 text-muted-foreground", rotateToken.isPending && "animate-spin")} />
+              <RotateCw className="h-3.5 w-3.5 text-muted-foreground" />
             </Button>
-            {deleteButton}
           </div>
         )}
       </div>
-      {!showWebhookUrlRow && deleteButton}
-      <AlertDialog open={confirmOpen} onOpenChange={(v) => { if (!v && !deleting) setConfirmOpen(false); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t(($) => $.trigger_row.delete_dialog.title)}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t(($) => $.trigger_row.delete_dialog.description)}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>
-              {t(($) => $.trigger_row.delete_dialog.cancel)}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              disabled={deleting}
-              className="bg-destructive text-white hover:bg-destructive/90"
-            >
-              {deleting
-                ? t(($) => $.trigger_row.delete_dialog.deleting)
-                : t(($) => $.trigger_row.delete_dialog.confirm)}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog open={rotateOpen} onOpenChange={(v) => { if (!v && !rotateToken.isPending) setRotateOpen(false); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t(($) => $.trigger_row.rotate_confirm_title)}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t(($) => $.trigger_row.rotate_confirm_description)}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={rotateToken.isPending}>
-              {t(($) => $.trigger_row.rotate_confirm_cancel)}
-            </AlertDialogCancel>
-            <AlertDialogAction onClick={handleRotate} disabled={rotateToken.isPending}>
-              {rotateToken.isPending
-                ? t(($) => $.trigger_row.rotate_in_progress)
-                : t(($) => $.trigger_row.rotate_confirm_action)}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
@@ -447,14 +345,14 @@ function TriggerRow({ trigger, autopilotId }: { trigger: AutopilotTrigger; autop
 function AddTriggerDialog({
   open,
   onOpenChange,
-  autopilotId,
+  automationId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  autopilotId: string;
+  automationId: string;
 }) {
   const { t } = useT("autopilots");
-  const createTrigger = useCreateAutopilotTrigger();
+  const createTrigger = useCreateAutomationTrigger();
   const [kind, setKind] = useState<"schedule" | "webhook">("schedule");
   const [config, setConfig] = useState<TriggerConfig>(getDefaultTriggerConfig);
   const [label, setLabel] = useState("");
@@ -471,7 +369,7 @@ function AddTriggerDialog({
           return;
         }
         await createTrigger.mutateAsync({
-          autopilotId,
+          automationId,
           kind: "schedule",
           cron_expression: cronExpr,
           timezone: config.timezone || undefined,
@@ -480,7 +378,7 @@ function AddTriggerDialog({
         toast.success(t(($) => $.add_trigger_dialog.toast_added_schedule));
       } else {
         await createTrigger.mutateAsync({
-          autopilotId,
+          automationId,
           kind: "webhook",
           label: label.trim() || undefined,
         });
@@ -580,12 +478,18 @@ export function AutopilotDetailPage({ autopilotId }: { autopilotId: string }) {
   const router = useNavigation();
   const { getActorName } = useActorName();
 
-  const { data, isLoading } = useQuery(autopilotDetailOptions(wsId, autopilotId));
-  const { data: runs = [], isLoading: runsLoading } = useQuery(autopilotRunsOptions(wsId, autopilotId));
-  const updateAutopilot = useUpdateAutopilot();
-  const deleteAutopilot = useDeleteAutopilot();
-  const triggerAutopilot = useTriggerAutopilot();
-  const projectId = data?.autopilot.project_id ?? null;
+  const { data, isLoading } = useQuery(automationDetailOptions(wsId, autopilotId));
+  const { data: runs = [], isLoading: runsLoading } = useQuery(automationRunsOptions(wsId, autopilotId));
+  const updateAutomation = useUpdateAutomation();
+  const deleteAutomation = useDeleteAutomation();
+  const triggerAutomation = useTriggerAutomation();
+  const automation = data?.automation;
+  const inlineConfig = automation?.source_mode === "inline" ? automation.inline_issue_config ?? null : null;
+  const projectId = inlineConfig?.project_id ?? null;
+  const { data: template, isLoading: templateLoading } = useQuery({
+    ...issueTemplateDetailOptions(wsId, automation?.template_id ?? ""),
+    enabled: Boolean(automation?.template_id),
+  });
   const { data: project, isLoading: projectLoading } = useQuery({
     ...projectDetailOptions(wsId, projectId ?? ""),
     enabled: Boolean(projectId),
@@ -643,11 +547,14 @@ export function AutopilotDetailPage({ autopilotId }: { autopilotId: string }) {
     );
   }
 
-  const { autopilot, triggers } = data;
+  const { automation: loadedAutomation, triggers } = data;
+  const loadedInlineConfig = loadedAutomation.source_mode === "inline"
+    ? loadedAutomation.inline_issue_config ?? null
+    : null;
 
   const handleRunNow = async () => {
     try {
-      await triggerAutopilot.mutateAsync(autopilotId);
+      await triggerAutomation.mutateAsync(autopilotId);
       toast.success(t(($) => $.detail.toast_triggered));
     } catch (e: any) {
       toast.error(e?.message || t(($) => $.detail.toast_trigger_failed));
@@ -657,7 +564,7 @@ export function AutopilotDetailPage({ autopilotId }: { autopilotId: string }) {
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      await deleteAutopilot.mutateAsync(autopilotId);
+      await deleteAutomation.mutateAsync(autopilotId);
       toast.success(t(($) => $.detail.toast_deleted));
       router.push(wsPaths.autopilots());
     } catch (err) {
@@ -671,7 +578,7 @@ export function AutopilotDetailPage({ autopilotId }: { autopilotId: string }) {
   };
 
   const handleToggleStatus = (checked: boolean) => {
-    updateAutopilot.mutate({ id: autopilotId, status: checked ? "active" : "paused" });
+    updateAutomation.mutate({ id: autopilotId, status: checked ? "active" : "paused" });
   };
 
   return (
@@ -681,26 +588,26 @@ export function AutopilotDetailPage({ autopilotId }: { autopilotId: string }) {
         segments={[{ href: wsPaths.autopilots(), label: t(($) => $.page.title) }]}
         leaf={
           <>
-            <h1 className="min-w-0 truncate text-sm font-medium text-foreground">{autopilot.title}</h1>
+            <h1 className="min-w-0 truncate text-sm font-medium text-foreground">{loadedAutomation.title}</h1>
             <div className="ml-1 flex items-center gap-1.5 shrink-0">
               <Switch
                 size="sm"
-                checked={autopilot.status === "active"}
+                checked={loadedAutomation.status === "active"}
                 onCheckedChange={handleToggleStatus}
-                disabled={autopilot.status === "archived"}
+                disabled={loadedAutomation.status === "archived"}
                 aria-label={
-                  autopilot.status === "active"
+                  loadedAutomation.status === "active"
                     ? t(($) => $.detail.pause_aria)
                     : t(($) => $.detail.activate_aria)
                 }
               />
               <span className={cn(
                 "text-xs font-medium hidden sm:inline",
-                autopilot.status === "active" ? "text-emerald-500" :
-                autopilot.status === "paused" ? "text-amber-500" :
+                loadedAutomation.status === "active" ? "text-emerald-500" :
+                loadedAutomation.status === "paused" ? "text-amber-500" :
                 "text-muted-foreground",
               )}>
-                {t(($) => $.status[autopilot.status])}
+                {t(($) => $.status[loadedAutomation.status])}
               </span>
             </div>
           </>
@@ -714,17 +621,17 @@ export function AutopilotDetailPage({ autopilotId }: { autopilotId: string }) {
             <Button
               size="sm"
               onClick={handleRunNow}
-              disabled={autopilot.status !== "active" || triggerAutopilot.isPending}
+              disabled={loadedAutomation.status !== "active" || triggerAutomation.isPending}
               className="px-2 sm:px-2.5"
-              aria-label={triggerAutopilot.isPending ? t(($) => $.detail.running) : t(($) => $.detail.run_now)}
+              aria-label={triggerAutomation.isPending ? t(($) => $.detail.running) : t(($) => $.detail.run_now)}
             >
-              {triggerAutopilot.isPending ? (
+              {triggerAutomation.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 sm:mr-1 animate-spin" />
               ) : (
                 <Play className="h-3.5 w-3.5 sm:mr-1" />
               )}
               <span className="hidden sm:inline">
-                {triggerAutopilot.isPending
+                {triggerAutomation.isPending
                   ? t(($) => $.detail.running)
                   : t(($) => $.detail.run_now)}
               </span>
@@ -742,31 +649,69 @@ export function AutopilotDetailPage({ autopilotId }: { autopilotId: string }) {
             </h2>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <label className="text-xs text-muted-foreground">{t(($) => $.detail.field_agent)}</label>
+                <label className="text-xs text-muted-foreground">{t(($) => $.detail.field_source_mode)}</label>
                 <div className="mt-1 flex items-center gap-2">
-                  <ActorAvatar
-                    actorType={autopilot.assignee_type}
-                    actorId={autopilot.assignee_id}
-                    size={20}
-                    enableHoverCard={autopilot.assignee_type === "agent"}
-                    showStatusDot={autopilot.assignee_type === "agent"}
-                  />
-                  <span className="cursor-pointer">
-                    {getActorName(autopilot.assignee_type, autopilot.assignee_id)}
-                  </span>
+                  {loadedAutomation.source_mode === "template" ? (
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Zap className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  <span>{t(($) => $.source_mode[loadedAutomation.source_mode])}</span>
                 </div>
               </div>
-              <div>
-                <label className="text-xs text-muted-foreground">{t(($) => $.detail.field_output_mode)}</label>
-                <div className="mt-1">
-                  {t(($) => $.execution_mode[autopilot.execution_mode as AutopilotExecutionMode])}
+              {loadedInlineConfig ? (
+                <div>
+                  <label className="text-xs text-muted-foreground">{t(($) => $.detail.field_agent)}</label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <ActorAvatar
+                      actorType={loadedInlineConfig.assignee_type}
+                      actorId={loadedInlineConfig.assignee_id}
+                      size={20}
+                      enableHoverCard={loadedInlineConfig.assignee_type === "agent"}
+                      showStatusDot={loadedInlineConfig.assignee_type === "agent"}
+                    />
+                    <span className="cursor-pointer">
+                      {getActorName(loadedInlineConfig.assignee_type, loadedInlineConfig.assignee_id)}
+                    </span>
+                  </div>
                 </div>
-              </div>
-              {autopilot.execution_mode === "create_issue" && (
+              ) : null}
+              {loadedInlineConfig ? (
+                <div>
+                  <label className="text-xs text-muted-foreground">{t(($) => $.detail.field_output_mode)}</label>
+                  <div className="mt-1">
+                    {t(($) => $.execution_mode[(loadedInlineConfig.execution_mode ?? "create_issue") as AutopilotExecutionMode])}
+                  </div>
+                </div>
+              ) : null}
+              {loadedAutomation.source_mode === "template" && (
+                <div className="col-span-2 rounded-md border px-4 py-3">
+                  <div className="text-xs text-muted-foreground">{t(($) => $.detail.template_mode)}</div>
+                  {templateLoading ? (
+                    <Skeleton className="mt-2 h-5 w-48" />
+                  ) : template ? (
+                    <div className="mt-1 space-y-1">
+                      <AppLink
+                        href={wsPaths.templateDetail(template.id)}
+                        className="inline-flex items-center gap-1.5 font-medium hover:underline"
+                      >
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        {template.title}
+                      </AppLink>
+                      <div className="text-xs text-muted-foreground">
+                        {template.issue_title_template}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-1 text-muted-foreground">{t(($) => $.detail.template_unavailable)}</div>
+                  )}
+                </div>
+              )}
+              {loadedInlineConfig && (loadedInlineConfig.execution_mode ?? "create_issue") === "create_issue" && (
                 <div>
                   <label className="text-xs text-muted-foreground">{t(($) => $.detail.field_project)}</label>
                   <div className="mt-1 min-w-0">
-                    {!autopilot.project_id ? (
+                    {!loadedInlineConfig?.project_id ? (
                       <span className="text-muted-foreground">{t(($) => $.detail.no_project)}</span>
                     ) : projectLoading ? (
                       <Skeleton className="h-5 w-32" />
@@ -784,11 +729,11 @@ export function AutopilotDetailPage({ autopilotId }: { autopilotId: string }) {
                   </div>
                 </div>
               )}
-              {autopilot.description && (
+              {loadedInlineConfig?.issue_body_template && (
                 <div className="col-span-2">
                   <label className="text-xs text-muted-foreground">{t(($) => $.detail.field_prompt)}</label>
                   <div className="mt-1">
-                    <ReadonlyContent content={autopilot.description} />
+                    <ReadonlyContent content={loadedInlineConfig.issue_body_template} />
                   </div>
                 </div>
               )}
@@ -813,7 +758,7 @@ export function AutopilotDetailPage({ autopilotId }: { autopilotId: string }) {
             ) : (
               <div className="space-y-2">
                 {triggers.map((trig) => (
-                  <TriggerRow key={trig.id} trigger={trig} autopilotId={autopilotId} />
+                  <TriggerRow key={trig.id} trigger={trig} />
                 ))}
               </div>
             )}
@@ -823,7 +768,7 @@ export function AutopilotDetailPage({ autopilotId }: { autopilotId: string }) {
               trigger is configured. The component does its own fetch so
               schedule-only autopilots don't pay for an empty list query. */}
           <WebhookDeliveriesSection
-            autopilotId={autopilotId}
+            automationId={autopilotId}
             hasWebhookTrigger={triggers.some((trig) => trig.kind === "webhook")}
           />
 
@@ -845,8 +790,12 @@ export function AutopilotDetailPage({ autopilotId }: { autopilotId: string }) {
             ) : (
               <RunHistoryList
                 runs={runs}
-                agentId={autopilot.assignee_id}
-                agentName={getActorName(autopilot.assignee_type, autopilot.assignee_id)}
+                agentId={loadedInlineConfig?.assignee_id ?? ""}
+                agentName={
+                  loadedInlineConfig
+                    ? getActorName(loadedInlineConfig.assignee_type, loadedInlineConfig.assignee_id)
+                    : template?.title ?? t(($) => $.source_mode.template)
+                }
               />
             )}
           </section>
@@ -867,21 +816,24 @@ export function AutopilotDetailPage({ autopilotId }: { autopilotId: string }) {
       <AddTriggerDialog
         open={triggerDialogOpen}
         onOpenChange={setTriggerDialogOpen}
-        autopilotId={autopilotId}
+        automationId={autopilotId}
       />
       {editDialogOpen && (
         <AutopilotDialog
           mode="edit"
           open={editDialogOpen}
           onOpenChange={setEditDialogOpen}
-          autopilotId={autopilot.id}
+          autopilotId={loadedAutomation.id}
           initial={{
-            title: autopilot.title,
-            description: autopilot.description ?? "",
-            project_id: autopilot.project_id ?? null,
-            assignee_type: autopilot.assignee_type,
-            assignee_id: autopilot.assignee_id,
-            execution_mode: autopilot.execution_mode as AutopilotExecutionMode,
+            title: loadedAutomation.title,
+            description: loadedInlineConfig?.issue_body_template ?? "",
+            project_id: loadedInlineConfig?.project_id ?? null,
+            assignee_type: loadedInlineConfig?.assignee_type ?? "agent",
+            assignee_id: loadedInlineConfig?.assignee_id ?? "",
+            execution_mode: (loadedInlineConfig?.execution_mode ?? "create_issue") as AutopilotExecutionMode,
+            source_mode: loadedAutomation.source_mode,
+            template_id: loadedAutomation.template_id,
+            concurrency_policy: loadedAutomation.concurrency_policy,
           }}
           triggers={triggers}
         />
@@ -894,7 +846,7 @@ export function AutopilotDetailPage({ autopilotId }: { autopilotId: string }) {
           <AlertDialogHeader>
             <AlertDialogTitle>{t(($) => $.detail.delete_dialog.title)}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t(($) => $.detail.delete_dialog.description, { title: autopilot.title })}
+              {t(($) => $.detail.delete_dialog.description, { title: loadedAutomation.title })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

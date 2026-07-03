@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { codeToHtml, bundledLanguages, type BundledLanguage } from 'shiki'
-import { Copy, Check } from "lucide-react"
+import mermaid from 'mermaid'
+import { Copy, Check, AlertTriangle } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@multica/ui/components/ui/button"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@multica/ui/components/ui/tooltip"
@@ -71,12 +72,18 @@ export function CodeBlock({
   const [highlighted, setHighlighted] = React.useState<string | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
   const [copied, setCopied] = React.useState(false)
+  const [mermaidSvg, setMermaidSvg] = React.useState<string | null>(null)
+  const [mermaidError, setMermaidError] = React.useState<string | null>(null)
+  const mermaidIdRef = React.useRef(`mermaid-${Math.random().toString(36).slice(2, 10)}`)
 
   // Resolve language alias - keep as string to allow 'text' fallback
   const langLower = language.toLowerCase()
   const resolvedLang: string = LANGUAGE_ALIASES[langLower] || langLower
+  const isMermaid = resolvedLang === 'mermaid'
 
   React.useEffect(() => {
+    if (isMermaid) return
+
     let cancelled = false
 
     async function highlight(): Promise<void> {
@@ -132,7 +139,37 @@ export function CodeBlock({
     return () => {
       cancelled = true
     }
-  }, [code, resolvedLang])
+  }, [code, resolvedLang, isMermaid])
+
+  React.useEffect(() => {
+    if (!isMermaid) return
+
+    let cancelled = false
+
+    async function renderMermaid(): Promise<void> {
+      try {
+        const { svg } = await mermaid.render(mermaidIdRef.current, code)
+        if (!cancelled) {
+          setMermaidSvg(svg)
+          setMermaidError(null)
+          setIsLoading(false)
+        }
+      } catch (error) {
+        console.warn('Mermaid rendering failed:', error)
+        if (!cancelled) {
+          setMermaidError(error instanceof Error ? error.message : String(error))
+          setMermaidSvg(null)
+          setIsLoading(false)
+        }
+      }
+    }
+
+    renderMermaid()
+
+    return () => {
+      cancelled = true
+    }
+  }, [code, isMermaid])
 
   const handleCopy = React.useCallback(async () => {
     if (await copyText(code)) {
@@ -143,6 +180,11 @@ export function CodeBlock({
 
   // Terminal mode: raw monospace with minimal styling
   if (mode === 'terminal') {
+    if (isMermaid && mermaidSvg) {
+      return (
+        <div className="overflow-x-auto" dangerouslySetInnerHTML={{ __html: mermaidSvg }} />
+      )
+    }
     return (
       <pre className={cn('font-mono text-sm whitespace-pre-wrap', CODE_LIGATURE_CLASS, className)}>
         <code className={cn('font-mono', CODE_LIGATURE_CLASS)}>{code}</code>
@@ -152,6 +194,28 @@ export function CodeBlock({
 
   // Minimal mode: just syntax highlighting, no chrome
   if (mode === 'minimal') {
+    if (isMermaid) {
+      if (mermaidError) {
+        return (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+            <div className="flex items-center gap-2 font-medium">
+              <AlertTriangle className="size-3.5" />
+              Mermaid diagram error
+            </div>
+            <pre className="mt-2 whitespace-pre-wrap font-mono text-[11px] opacity-80">{mermaidError}</pre>
+          </div>
+        )
+      }
+      if (isLoading || !mermaidSvg) {
+        return (
+          <pre className={cn('font-mono text-sm whitespace-pre-wrap', CODE_LIGATURE_CLASS, className)}>
+            <code className={cn('font-mono', CODE_LIGATURE_CLASS)}>{code}</code>
+          </pre>
+        )
+      }
+      return <div className="overflow-x-auto" dangerouslySetInnerHTML={{ __html: mermaidSvg }} />
+    }
+
     if (isLoading || !highlighted) {
       return (
         <pre className={cn('font-mono text-sm whitespace-pre-wrap', CODE_LIGATURE_CLASS, className)}>
@@ -184,7 +248,7 @@ export function CodeBlock({
       {/* Language label + copy button */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-muted/50 border-b text-xs">
         <span className="text-muted-foreground font-medium uppercase tracking-wide">
-          {resolvedLang !== 'text' ? resolvedLang : t(($) => $.plain_text)}
+          {isMermaid ? 'Mermaid' : resolvedLang !== 'text' ? resolvedLang : t(($) => $.plain_text)}
         </span>
         <Tooltip>
           <TooltipTrigger
@@ -210,7 +274,23 @@ export function CodeBlock({
 
       {/* Code content */}
       <div className="p-3 overflow-x-auto">
-        {isLoading || !highlighted ? (
+        {isMermaid ? (
+          mermaidError ? (
+            <div className="text-xs text-destructive">
+              <div className="flex items-center gap-2 font-medium">
+                <AlertTriangle className="size-3.5" />
+                Mermaid diagram error
+              </div>
+              <pre className="mt-2 whitespace-pre-wrap font-mono text-[11px] opacity-80">{mermaidError}</pre>
+            </div>
+          ) : isLoading || !mermaidSvg ? (
+            <pre className={cn('font-mono text-sm whitespace-pre-wrap break-all', CODE_LIGATURE_CLASS)}>
+              <code className={cn('font-mono', CODE_LIGATURE_CLASS)}>{code}</code>
+            </pre>
+          ) : (
+            <div className="[&_svg]:w-auto [&_svg]:max-w-full [&_svg]:h-auto" dangerouslySetInnerHTML={{ __html: mermaidSvg }} />
+          )
+        ) : isLoading || !highlighted ? (
           <pre className={cn('font-mono text-sm whitespace-pre-wrap break-all', CODE_LIGATURE_CLASS)}>
             <code className={cn('font-mono', CODE_LIGATURE_CLASS)}>{code}</code>
           </pre>

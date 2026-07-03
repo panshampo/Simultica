@@ -986,7 +986,10 @@ func TestInjectRuntimeConfigNoSkills(t *testing.T) {
 	if !strings.Contains(s, "multica issue get") {
 		t.Error("should reference multica CLI even without skills")
 	}
-	if strings.Contains(s, "## Skills") {
+	// Match the H2 skills-listing heading only. The Available Commands block
+	// always emits an H3 `### Skills` CLI reference, whose text contains the
+	// substring "## Skills"; the H2 listing section is always newline-preceded.
+	if strings.Contains(s, "\n## Skills") {
 		t.Error("should not have Skills section when there are no skills")
 	}
 }

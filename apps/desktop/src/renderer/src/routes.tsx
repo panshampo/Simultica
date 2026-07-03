@@ -4,6 +4,7 @@ import {
   Navigate,
   Outlet,
   useMatches,
+  useParams,
 } from "react-router-dom";
 import type { RouteObject } from "react-router-dom";
 import { IssueDetailPage } from "./pages/issue-detail-page";
@@ -16,6 +17,7 @@ import { RuntimeDetailPage } from "./pages/runtime-detail-page";
 import { AttachmentPreviewRoute } from "./pages/attachment-preview-page";
 import { IssuesPage } from "@multica/views/issues/components";
 import { ProjectsPage } from "@multica/views/projects/components";
+import { TemplatesPage, TemplateDetailPage } from "@multica/views/templates";
 import { DashboardPage } from "@multica/views/dashboard";
 import { AutopilotsPage } from "@multica/views/autopilots/components";
 import { MyIssuesPage } from "@multica/views/my-issues";
@@ -64,6 +66,11 @@ function DesktopSettingsRoute() {
       ]}
     />
   );
+}
+
+function DesktopTemplateDetailRoute() {
+  const { id = "" } = useParams();
+  return <TemplateDetailPage templateId={id} />;
 }
 
 /**
@@ -145,14 +152,24 @@ export const appRoutes: RouteObject[] = [
             handle: { title: "Project" },
           },
           {
+            path: "templates",
+            element: <TemplatesPage />,
+            handle: { title: "Templates" },
+          },
+          {
+            path: "templates/:id",
+            element: <DesktopTemplateDetailRoute />,
+            handle: { title: "Template" },
+          },
+          {
             path: "autopilots",
             element: <AutopilotsPage />,
-            handle: { title: "Autopilot" },
+            handle: { title: "Automation" },
           },
           {
             path: "autopilots/:id",
             element: <AutopilotDetailPage />,
-            handle: { title: "Autopilot" },
+            handle: { title: "Automation" },
           },
           {
             path: "my-issues",

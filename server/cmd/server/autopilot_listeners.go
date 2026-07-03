@@ -69,6 +69,9 @@ func syncRunFromTaskEvent(ctx context.Context, svc *service.AutopilotService, e 
 		return
 	}
 	if !task.AutopilotRunID.Valid {
+		if task.AutomationRunID.Valid {
+			svc.SyncAutomationRunFromTask(ctx, task)
+		}
 		return
 	}
 	svc.SyncRunFromTask(ctx, task)
