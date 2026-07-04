@@ -26,7 +26,16 @@ describe("NodeInspector", () => {
     const onChange = vi.fn();
     render(<NodeInspector node={{ id: "review", type: "llm", outputs: ["task"], config: {} }} stateFields={fields} agents={[]} onChange={onChange} onRemove={vi.fn()} />);
 
-    fireEvent.change(screen.getByLabelText("Outputs"), { target: { value: "result" } });
+    fireEvent.click(screen.getByLabelText("Output result"));
+
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ outputs: ["task", "result"] }));
+  });
+
+  it("preserves multiple outputs while editing", () => {
+    const onChange = vi.fn();
+    render(<NodeInspector node={{ id: "review", type: "llm", outputs: ["task", "result"], config: {} }} stateFields={fields} agents={[]} onChange={onChange} onRemove={vi.fn()} />);
+
+    fireEvent.click(screen.getByLabelText("Output task"));
 
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ outputs: ["result"] }));
   });

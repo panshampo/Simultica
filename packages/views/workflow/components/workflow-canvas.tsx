@@ -67,7 +67,7 @@ export function WorkflowCanvas({
   const activeSelectedNodeId = selectedNodeId ?? localSelectedNodeId;
   const activeSelectedEdgeId = selectedEdgeId ?? localSelectedEdgeId;
   const { nodes: baseNodes, edges: baseEdges } = useMemo(
-    () => workflowToReactFlow(definition, runState ?? {}, { selectableEdges: true }),
+    () => workflowToReactFlow(definition, runState ?? {}, { draggable: editable, selectableEdges: true }),
     [definition, editable, runState],
   );
   const selectedNode = useMemo(() => baseNodes.find((node) => node.id === activeSelectedNodeId), [activeSelectedNodeId, baseNodes]);
@@ -455,9 +455,9 @@ function WorkflowCanvasInnerInner({
       nodeTypes={nodeTypes}
       fitView
       fitViewOptions={{ padding: 0.25 }}
-      nodesDraggable
+      nodesDraggable={editable}
       nodesConnectable={editable}
-      elementsSelectable
+      elementsSelectable={editable}
       elevateEdgesOnSelect
       onConnect={onConnect}
       onNodeClick={(_, node: Node<WorkflowCanvasNodeData>) => {

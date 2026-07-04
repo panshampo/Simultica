@@ -14,6 +14,7 @@ import { Input } from "@multica/ui/components/ui/input";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { AppLink, useNavigation } from "../../navigation";
 import { ActorAvatar } from "../../common/actor-avatar";
+import { managementActionButtonClass } from "../../common/management-action-button";
 import { PageHeader } from "../../layout/page-header";
 import { useT } from "../../i18n";
 import { matchesPinyin } from "../../editor/extensions/pinyin-match";
@@ -79,7 +80,7 @@ export function TemplatesPage() {
             </span>
           )}
         </div>
-        <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)}>
+        <Button size="sm" variant="outline" className={managementActionButtonClass("create")} onClick={() => setCreateOpen(true)}>
           <Plus className="mr-1 size-3.5" />
           {t(($) => $.page.new_template)}
         </Button>
@@ -107,7 +108,7 @@ export function TemplatesPage() {
           <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
             <FileText className="size-10 text-muted-foreground/50" />
             <p className="text-sm text-muted-foreground">{t(($) => $.page.empty)}</p>
-            <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)}>
+            <Button size="sm" variant="outline" className={managementActionButtonClass("create")} onClick={() => setCreateOpen(true)}>
               <Plus className="mr-1 size-3.5" />
               {t(($) => $.page.new_template)}
             </Button>
@@ -162,7 +163,8 @@ export function TemplatesPage() {
                 <div className="flex justify-start sm:justify-end">
                   <Button
                     size="sm"
-                    variant="ghost"
+                    variant="outline"
+                    className={managementActionButtonClass("execute")}
                     onClick={() => handleInstantiate(template)}
                     disabled={instantiate.isPending}
                   >

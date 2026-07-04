@@ -58,3 +58,13 @@ WHERE template_id = $1;
 -- name: CountIssueTemplateIssueReferences :one
 SELECT count(*) FROM issue
 WHERE issue_template_id = $1;
+
+-- name: ListIssueTemplateIssues :many
+SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority,
+       i.assignee_type, i.assignee_id, i.creator_type, i.creator_id,
+       i.parent_issue_id, i.position, i.start_date, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.metadata
+FROM issue i
+WHERE i.workspace_id = sqlc.arg('workspace_id')
+  AND i.issue_template_id = sqlc.arg('issue_template_id')
+ORDER BY i.created_at DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');

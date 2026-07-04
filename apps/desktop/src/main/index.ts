@@ -6,6 +6,7 @@ import fixPath from "fix-path";
 import { setupAutoUpdater } from "./updater";
 import { setupDaemonManager } from "./daemon-manager";
 import { setupLocalDirectory } from "./local-directory";
+import { ensureDocsDevServer, stopDocsDevServer } from "./docs-dev-server";
 import { openExternalSafely, downloadURLSafely } from "./external-url";
 import { installContextMenu } from "./context-menu";
 import { handleAppShortcut } from "./keyboard-shortcuts";
@@ -476,6 +477,10 @@ if (!gotTheLock) {
       }
     });
 
+    await ensureDocsDevServer().catch((err) => {
+      console.warn("[docs] failed to start dev server:", err);
+    });
+
     createWindow();
 
     setupAutoUpdater(() => mainWindow);
@@ -507,4 +512,8 @@ if (!gotTheLock) {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", () => {
+  stopDocsDevServer();
 });

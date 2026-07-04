@@ -24,6 +24,7 @@ import { useActorName } from "@multica/core/workspace/hooks";
 import { useNavigation, AppLink } from "../../navigation";
 import { BreadcrumbHeader } from "../../layout/breadcrumb-header";
 import { ActorAvatar } from "../../common/actor-avatar";
+import { managementActionButtonClass } from "../../common/management-action-button";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { Button } from "@multica/ui/components/ui/button";
 import { Switch } from "@multica/ui/components/ui/switch";
@@ -614,7 +615,7 @@ export function AutopilotDetailPage({ autopilotId }: { autopilotId: string }) {
         }
         actions={
           <>
-            <Button size="sm" variant="outline" onClick={() => setEditDialogOpen(true)} className="px-2 sm:px-2.5" aria-label={t(($) => $.detail.edit)}>
+            <Button size="sm" variant="outline" onClick={() => setEditDialogOpen(true)} className={managementActionButtonClass("configure", "px-2 sm:px-2.5")} aria-label={t(($) => $.detail.edit)}>
               <Pencil className="h-3.5 w-3.5 sm:mr-1" />
               <span className="hidden sm:inline">{t(($) => $.detail.edit)}</span>
             </Button>
@@ -622,7 +623,7 @@ export function AutopilotDetailPage({ autopilotId }: { autopilotId: string }) {
               size="sm"
               onClick={handleRunNow}
               disabled={loadedAutomation.status !== "active" || triggerAutomation.isPending}
-              className="px-2 sm:px-2.5"
+              className={managementActionButtonClass("execute", "px-2 sm:px-2.5")}
               aria-label={triggerAutomation.isPending ? t(($) => $.detail.running) : t(($) => $.detail.run_now)}
             >
               {triggerAutomation.isPending ? (
@@ -746,7 +747,7 @@ export function AutopilotDetailPage({ autopilotId }: { autopilotId: string }) {
               <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
                 {t(($) => $.detail.section_triggers)}
               </h2>
-              <Button size="sm" variant="outline" onClick={() => setTriggerDialogOpen(true)}>
+              <Button size="sm" variant="outline" className={managementActionButtonClass("create")} onClick={() => setTriggerDialogOpen(true)}>
                 <Plus className="h-3.5 w-3.5 mr-1" />
                 {t(($) => $.detail.add_trigger)}
               </Button>

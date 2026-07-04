@@ -22,7 +22,10 @@
     "properties": "Properties",
     "references": "References",
     "issue_refs": "Issues",
-    "automation_refs": "Automations"
+    "automation_refs": "Automations",
+    "issue_refs_empty": "No issues use this template",
+    "issue_refs_failed": "Could not load referenced issues",
+    "issue_refs_showing": "Showing {{shown}} of {{total}}"
   },
   "dialog": {
     "create_title": "Create template",

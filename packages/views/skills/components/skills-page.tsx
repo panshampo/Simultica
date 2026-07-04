@@ -35,6 +35,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@multica/ui/components/ui/tooltip";
+import { managementActionButtonClass } from "../../common/management-action-button";
 import { useNavigation } from "../../navigation";
 import { PageHeader } from "../../layout/page-header";
 import { canEditSkill } from "../hooks/use-can-edit-skill";
@@ -46,6 +47,7 @@ import { useT } from "../../i18n";
 type FilterKey = "all" | "used" | "unused" | "mine";
 
 const SCOPE_KEYS: FilterKey[] = ["all", "used", "unused", "mine"];
+const LOCAL_DOCS_ORIGIN = "http://localhost:4000";
 
 // ---------------------------------------------------------------------------
 // Page header bar — uses shared PageHeader so the mobile sidebar trigger and
@@ -59,7 +61,15 @@ function PageHeaderBar({
   totalCount: number;
   onCreate: () => void;
 }) {
-  const { t } = useT("skills");
+  const { t, i18n } = useT("skills");
+  const skillsDocsHref = i18n.language?.startsWith("zh")
+    ? `${LOCAL_DOCS_ORIGIN}/docs/zh/skills`
+    : i18n.language?.startsWith("ko")
+      ? `${LOCAL_DOCS_ORIGIN}/docs/ko/skills`
+      : i18n.language?.startsWith("ja")
+        ? `${LOCAL_DOCS_ORIGIN}/docs/ja/skills`
+        : `${LOCAL_DOCS_ORIGIN}/docs/skills`;
+
   return (
     <PageHeader className="justify-between px-5">
       <div className="flex items-center gap-2">
@@ -73,7 +83,7 @@ function PageHeaderBar({
         <p className="ml-2 hidden text-xs text-muted-foreground md:block">
           {t(($) => $.page.tagline)}{" "}
           <a
-            href="https://multica.ai/docs/skills"
+            href={skillsDocsHref}
             target="_blank"
             rel="noopener noreferrer"
             className="underline decoration-muted-foreground/30 underline-offset-4 transition-colors hover:text-foreground"
@@ -82,7 +92,7 @@ function PageHeaderBar({
           </a>
         </p>
       </div>
-      <Button type="button" size="sm" onClick={onCreate}>
+      <Button type="button" size="sm" variant="outline" className={managementActionButtonClass("create")} onClick={onCreate}>
         <Plus className="h-3 w-3" />
         {t(($) => $.page.new_skill)}
       </Button>
@@ -161,7 +171,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
       <p className="mt-1 max-w-md text-sm text-muted-foreground">
         {t(($) => $.page.empty.description)}
       </p>
-      <Button type="button" onClick={onCreate} size="sm" className="mt-5">
+      <Button type="button" onClick={onCreate} size="sm" variant="outline" className={managementActionButtonClass("create", "mt-5")}>
         <Plus className="h-3 w-3" />
         {t(($) => $.page.new_skill)}
       </Button>
@@ -174,11 +184,14 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
 // ---------------------------------------------------------------------------
 
 export default function SkillsPage() {
-  const { t } = useT("skills");
   const wsId = useWorkspaceId();
   const paths = useWorkspacePaths();
   const navigation = useNavigation();
+  const { t, i18n } = useT("skills");
   const currentUserId = useAuthStore((s) => s.user?.id ?? null);
+  const workflowGuideHref = i18n.language?.startsWith("zh")
+    ? `${LOCAL_DOCS_ORIGIN}/docs/zh/workflow-issues`
+    : `${LOCAL_DOCS_ORIGIN}/docs/workflow-issues`;
 
   const {
     data: skills = [],
@@ -364,14 +377,33 @@ export default function SkillsPage() {
 
       <div className="flex flex-1 min-h-0 flex-col gap-4 p-3 sm:p-6">
         {!showEmpty && (
-          <div className="max-w-3xl rounded-r-md border-l-2 border-l-brand bg-brand/5 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
-            <span className="font-medium text-foreground">
-              {t(($) => $.page.intro_banner.title)}
-            </span>{" "}
-            {t(($) => $.page.intro_banner.body)}{" "}
-            <span className="font-semibold text-brand">
-              {t(($) => $.page.intro_banner.highlight)}
-            </span>
+          <div className="grid max-w-4xl gap-2">
+            <div className="rounded-r-md border-l-2 border-l-brand bg-brand/5 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+              <span className="font-medium text-foreground">
+                {t(($) => $.page.intro_banner.title)}
+              </span>{" "}
+              {t(($) => $.page.intro_banner.body)}{" "}
+              <span className="font-semibold text-brand">
+                {t(($) => $.page.intro_banner.highlight)}
+              </span>
+            </div>
+            <div className="flex items-start gap-2 rounded-r-md border-l-2 border-l-muted-foreground/30 bg-muted/40 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+              <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <div>
+                <span className="font-medium text-foreground">
+                  {t(($) => $.page.workflow_guide.title)}
+                </span>{" "}
+                {t(($) => $.page.workflow_guide.body)}{" "}
+                <a
+                  href={workflowGuideHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-brand underline decoration-brand/30 underline-offset-4 transition-colors hover:text-brand/80"
+                >
+                  {t(($) => $.page.workflow_guide.link)}
+                </a>
+              </div>
+            </div>
           </div>
         )}
         {showEmpty ? (

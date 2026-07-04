@@ -41,6 +41,7 @@ import { Textarea } from "@multica/ui/components/ui/textarea";
 import { ProjectPicker } from "../../projects/components/project-picker";
 import { PillButton } from "../../common/pill-button";
 import { ActorAvatar } from "../../common/actor-avatar";
+import { managementActionButtonClass } from "../../common/management-action-button";
 import { useT } from "../../i18n";
 
 type AssigneeValue = `${IssueTemplateAssigneeType}:${string}`;
@@ -129,6 +130,12 @@ export function TemplateDialog({
   }, [assignee, firstAssignee, open, template]);
 
   const decodedAssignee = decodeAssignee(assignee);
+  const selectedAssignee =
+    decodedAssignee?.type === "agent"
+      ? activeAgents.find((agent) => agent.id === decodedAssignee.id)
+      : decodedAssignee?.type === "squad"
+        ? activeSquads.find((squad) => squad.id === decodedAssignee.id)
+        : null;
   const canSubmit =
     title.trim().length > 0 &&
     issueTitle.trim().length > 0 &&
@@ -230,7 +237,18 @@ export function TemplateDialog({
                 onValueChange={(value) => setAssignee(value ?? "")}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder={t(($) => $.fields.assignee_placeholder)} />
+                  <SelectValue placeholder={t(($) => $.fields.assignee_placeholder)}>
+                    {selectedAssignee ? (
+                      <>
+                        {decodedAssignee?.type === "squad" ? (
+                          <Users className="size-3.5 text-muted-foreground" />
+                        ) : (
+                          <Bot className="size-3.5 text-muted-foreground" />
+                        )}
+                        <span className="truncate">{selectedAssignee.name}</span>
+                      </>
+                    ) : null}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent align="start" className="max-h-72">
                   {activeAgents.map((agent) => (
@@ -267,7 +285,7 @@ export function TemplateDialog({
                 onValueChange={(value) => setPriority(value as IssuePriority)}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <SelectValue>{priorityLabels[priority]}</SelectValue>
                 </SelectTrigger>
                 <SelectContent align="start">
                   {PRIORITIES.map((value) => (
@@ -304,6 +322,7 @@ export function TemplateDialog({
           </Button>
           <Button
             type="button"
+            className={managementActionButtonClass("save")}
             onClick={handleSubmit}
             disabled={!canSubmit || submitting}
           >

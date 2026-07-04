@@ -32,6 +32,10 @@ func createSkillWithFilesInTx(ctx context.Context, qtx *db.Queries, input skillC
 	if input.Config == nil {
 		config = []byte("{}")
 	}
+	config, err = skillConfigWithWorkflowFromFiles(config, input.Files)
+	if err != nil {
+		return SkillWithFilesResponse{}, err
+	}
 
 	skill, err := qtx.CreateSkill(ctx, db.CreateSkillParams{
 		WorkspaceID: input.WorkspaceID,

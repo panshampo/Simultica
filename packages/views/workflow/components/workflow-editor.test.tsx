@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { api } from "@multica/core/api";
 import { WorkflowEditor } from "./workflow-editor";
 
 vi.mock("@multica/core/api", () => ({
@@ -17,16 +18,42 @@ vi.mock("./workflow-canvas", () => ({
 }));
 
 describe("WorkflowEditor structured editing", () => {
+  beforeEach(() => {
+    vi.mocked(api.upsertSkillFile).mockClear();
+  });
+
+  it("keeps state fields hidden until the toolbar toggle is opened", () => {
+    render(<WorkflowEditor skillId="skill-1" agents={[]} />);
+
+    expect(screen.queryByLabelText("New field name")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "State fields" }));
+
+    expect(screen.getByLabelText("New field name")).toBeInTheDocument();
+  });
+
   it("adds a state field and uses it as a node output", () => {
     render(<WorkflowEditor skillId="skill-1" agents={[]} />);
 
+    fireEvent.click(screen.getByRole("button", { name: "State fields" }));
     fireEvent.change(screen.getByLabelText("New field name"), { target: { value: "review_result" } });
     fireEvent.change(screen.getByLabelText("New field type"), { target: { value: "string" } });
     fireEvent.click(screen.getByRole("button", { name: "Add field" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Add node" }));
-    fireEvent.change(screen.getByLabelText("Outputs"), { target: { value: "review_result" } });
+    fireEvent.click(screen.getByLabelText("Output review_result"));
 
-    expect(screen.getByLabelText<HTMLSelectElement>("Outputs").value).toBe("review_result");
+    expect(screen.getByLabelText<HTMLInputElement>("Output review_result").checked).toBe(true);
+  });
+
+  it("saves unapplied YAML edits from the YAML tab", async () => {
+    const yaml = "meta:\n  name: changed\nstate:\n  fields: []\nnodes: []\nrouting: []\n";
+    render(<WorkflowEditor skillId="skill-1" agents={[]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "YAML" }));
+    fireEvent.change(screen.getByLabelText("Workflow YAML"), { target: { value: yaml } });
+    fireEvent.click(screen.getByRole("button", { name: "Save workflow" }));
+
+    await vi.waitFor(() => expect(api.upsertSkillFile).toHaveBeenCalledWith("skill-1", { path: "workflow.yaml", content: yaml }));
   });
 });

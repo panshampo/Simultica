@@ -35,4 +35,39 @@ describe("workflow validation", () => {
       }),
     ]);
   });
+
+  it("reports blank and duplicate node ids", () => {
+    const definition: WorkflowDefinition = {
+      meta: { name: "test" },
+      state: { fields: [] },
+      nodes: [
+        { id: "", type: "llm" },
+        { id: "review", type: "llm" },
+        { id: "review", type: "agent" },
+      ],
+      routing: [],
+    };
+
+    expect(validateWorkflowDefinition(definition)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "nodes.0.id", message: "Node id is required." }),
+      expect.objectContaining({ path: "nodes.review.id", message: 'Duplicate node id "review".' }),
+    ]));
+  });
+
+  it("reports invalid else targets", () => {
+    const definition: WorkflowDefinition = {
+      meta: { name: "test" },
+      state: { fields: [{ name: "approved", type: "boolean" }] },
+      nodes: [{ id: "review", type: "llm" }],
+      routing: [{ from: "review", to: "END", condition: "approved == true", else: "missing" }],
+    };
+
+    expect(validateWorkflowDefinition(definition)).toEqual([
+      expect.objectContaining({
+        severity: "error",
+        path: "routing.0.else",
+        message: 'Route else target "missing" does not exist.',
+      }),
+    ]);
+  });
 });

@@ -27,6 +27,11 @@
       "body": "誰でもスキルを作成したり、URL からインポートしたり、ローカルランタイムからコピーしたりでき、すべてのエージェントが使用できます。",
       "highlight": "ローカルランタイムのスキルは、ここにコピーするまで非公開のままです。"
     },
+    "workflow_guide": {
+      "title": "ワークフロー駆動の issue を理解する",
+      "body": "skill が issue workflow になる仕組み、sub-issue が作られる理由、進捗を見る場所を確認できます。",
+      "link": "Workflow and issues"
+    },
     "list_error": {
       "title": "スキルを読み込めませんでした",
       "fallback": "スキル一覧の取得中に問題が発生しました。",

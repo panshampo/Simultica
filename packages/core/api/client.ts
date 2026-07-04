@@ -1993,6 +1993,20 @@ export class ApiClient {
     return this.fetch(`/api/issue-templates/${id}`);
   }
 
+  async listIssueTemplateIssues(
+    id: string,
+    params?: { limit?: number; offset?: number },
+  ): Promise<ListIssuesResponse> {
+    const search = new URLSearchParams();
+    if (params?.limit) search.set("limit", String(params.limit));
+    if (params?.offset !== undefined) search.set("offset", String(params.offset));
+    const suffix = search.toString() ? `?${search}` : "";
+    const raw = await this.fetch<unknown>(`/api/issue-templates/${id}/issues${suffix}`);
+    return parseWithFallback(raw, ListIssuesResponseSchema, EMPTY_LIST_ISSUES_RESPONSE, {
+      endpoint: "GET /api/issue-templates/:id/issues",
+    });
+  }
+
   async createIssueTemplate(data: CreateIssueTemplateRequest): Promise<IssueTemplate> {
     return this.fetch("/api/issue-templates", {
       method: "POST",

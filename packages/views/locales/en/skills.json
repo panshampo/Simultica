@@ -27,6 +27,11 @@
       "body": "Anyone can create a skill, import one from a URL, or copy one from their local runtime — and every agent can use it.",
       "highlight": "Local runtime skills stay private until you copy one here."
     },
+    "workflow_guide": {
+      "title": "New to workflow-driven issues?",
+      "body": "Read how skills become issue workflows, why sub-issues appear, and where to track progress.",
+      "link": "Workflow and issues"
+    },
     "list_error": {
       "title": "Couldn't load skills",
       "fallback": "Something went wrong fetching the skill list.",

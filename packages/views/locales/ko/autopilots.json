@@ -25,6 +25,10 @@
     "create_issue": "이슈 생성",
     "run_only": "실행만"
   },
+  "source_mode": {
+    "inline": "사용자 지정 자동화",
+    "template": "이슈 템플릿"
+  },
   "relative_date": {
     "today": "오늘",
     "one_day_ago": "1일 전",
@@ -71,8 +75,11 @@
     "section_run_history": "실행 기록",
     "section_danger": "위험 영역",
     "field_agent": "에이전트",
+    "field_source_mode": "소스",
     "field_output_mode": "출력 모드",
     "field_project": "프로젝트",
+    "template_mode": "템플릿 기반 자동화",
+    "template_unavailable": "템플릿을 사용할 수 없습니다",
     "no_project": "프로젝트 없음",
     "project_unavailable": "프로젝트를 사용할 수 없습니다",
     "field_prompt": "프롬프트",
@@ -133,6 +140,7 @@
     "next_label": "다음: {{date}}",
     "webhook_url_label": "Webhook URL",
     "copy_url": "URL 복사",
+    "rotate_unavailable": "자동화 Webhook은 아직 URL 재발급을 지원하지 않습니다",
     "url_copied": "Webhook URL을 복사했습니다",
     "url_copy_failed": "URL을 복사하지 못했습니다",
     "rotate_url": "URL 재발급",
@@ -245,11 +253,52 @@
     "select_assignee": "에이전트 또는 스쿼드 선택",
     "section_project": "프로젝트",
     "no_project": "프로젝트 없음",
+    "section_source_mode": "소스",
+    "section_template": "이슈 템플릿",
+    "source_modes": {
+      "inline": {
+        "label": "사용자 지정 자동화",
+        "description": "이 자동화 안에서 이슈 내용을 정의합니다"
+      },
+      "template": {
+        "label": "이슈 템플릿 사용",
+        "description": "워크스페이스 템플릿을 재사용하고 실행 방식만 설정합니다"
+      }
+    },
+    "source_mode_locked_after_create": "소스 모드는 생성 후 잠깁니다.",
+    "template_select_placeholder": "이슈 템플릿 선택",
+    "template_select_hint": "이 자동화의 이슈 정의를 고정할 템플릿을 선택하세요.",
+    "template_mode_locked": "템플릿 모드는 실행 시 최신 템플릿을 사용합니다. 이슈 제목, 본문, 담당자, 프로젝트, 우선순위 또는 출력 동작을 바꾸려면 템플릿을 수정하세요.",
+    "template_summary_label": "템플릿 요약",
+    "template_summary_empty": "이슈 정의를 미리 보려면 이슈 템플릿을 선택하세요.",
+    "template_issue_title": "이슈 제목",
+    "template_priority": "우선순위",
+    "template_project": "프로젝트",
+    "template_project_bound": "템플릿 프로젝트",
+    "template_project_none": "프로젝트 없음",
+    "template_assignee": "담당자",
+    "template_body": "본문",
     "section_output_mode": "출력 모드",
+    "section_run_policy": "실행 정책",
+    "concurrency_policy": {
+      "skip": {
+        "label": "건너뛰기",
+        "description": "이전 실행이 아직 활성 상태이면 새 트리거를 무시합니다."
+      },
+      "queue": {
+        "label": "대기열",
+        "description": "트리거를 보관하고 활성 실행이 끝난 뒤 실행합니다."
+      },
+      "replace": {
+        "label": "교체",
+        "description": "가장 최근 트리거가 활성 실행을 대체하게 합니다."
+      }
+    },
     "section_schedule": "일정",
     "section_trigger_kind": "트리거",
     "trigger_kind_schedule": "일정",
     "trigger_kind_webhook": "Webhook",
+    "trigger_edit_readonly": "트리거는 상세 페이지에서 관리하세요.",
     "section_webhook": "Webhook",
     "webhook_help_create": "이 오토파일럿을 만들면 Multica가 Webhook URL을 생성합니다. 해당 URL로 JSON을 POST하면 실행됩니다.",
     "webhook_help_edit": "이 오토파일럿은 Webhook으로 실행됩니다. URL 복사와 재발급은 오토파일럿 상세 페이지에서 관리하세요.",

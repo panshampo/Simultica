@@ -25,6 +25,10 @@
     "create_issue": "イシューを作成",
     "run_only": "実行のみ"
   },
+  "source_mode": {
+    "inline": "カスタム自動化",
+    "template": "イシューテンプレート"
+  },
   "relative_date": {
     "today": "今日",
     "one_day_ago": "1 日前",
@@ -71,8 +75,11 @@
     "section_run_history": "実行履歴",
     "section_danger": "危険な操作",
     "field_agent": "エージェント",
+    "field_source_mode": "ソース",
     "field_output_mode": "出力モード",
     "field_project": "プロジェクト",
+    "template_mode": "テンプレートベースの自動化",
+    "template_unavailable": "テンプレートを利用できません",
     "no_project": "プロジェクトなし",
     "project_unavailable": "プロジェクトを利用できません",
     "field_prompt": "プロンプト",
@@ -133,6 +140,7 @@
     "next_label": "次回: {{date}}",
     "webhook_url_label": "Webhook URL",
     "copy_url": "URL をコピー",
+    "rotate_unavailable": "自動化 Webhook ではまだ URL の再生成を利用できません",
     "url_copied": "Webhook URL をコピーしました",
     "url_copy_failed": "URL をコピーできませんでした",
     "rotate_url": "URL を再生成",
@@ -245,11 +253,52 @@
     "select_assignee": "エージェントまたはスクワッドを選択",
     "section_project": "プロジェクト",
     "no_project": "プロジェクトなし",
+    "section_source_mode": "ソース",
+    "section_template": "イシューテンプレート",
+    "source_modes": {
+      "inline": {
+        "label": "カスタム自動化",
+        "description": "この自動化内でイシュー内容を定義します"
+      },
+      "template": {
+        "label": "イシューテンプレートを使用",
+        "description": "ワークスペースのテンプレートを再利用し、実行方法だけを設定します"
+      }
+    },
+    "source_mode_locked_after_create": "ソースモードは作成後に固定されます。",
+    "template_select_placeholder": "イシューテンプレートを選択",
+    "template_select_hint": "この自動化のイシュー定義を固定するテンプレートを選択してください。",
+    "template_mode_locked": "テンプレートモードは実行時に最新テンプレートを使用します。イシューのタイトル、本文、担当者、プロジェクト、優先度、出力動作を変えるにはテンプレートを編集してください。",
+    "template_summary_label": "テンプレート概要",
+    "template_summary_empty": "イシュー定義をプレビューするにはテンプレートを選択してください。",
+    "template_issue_title": "イシュータイトル",
+    "template_priority": "優先度",
+    "template_project": "プロジェクト",
+    "template_project_bound": "テンプレートのプロジェクト",
+    "template_project_none": "プロジェクトなし",
+    "template_assignee": "担当者",
+    "template_body": "本文",
     "section_output_mode": "出力モード",
+    "section_run_policy": "実行ポリシー",
+    "concurrency_policy": {
+      "skip": {
+        "label": "スキップ",
+        "description": "前回の実行がまだアクティブな場合、新しいトリガーを無視します。"
+      },
+      "queue": {
+        "label": "キュー",
+        "description": "トリガーを保持し、アクティブな実行が終わってから実行します。"
+      },
+      "replace": {
+        "label": "置換",
+        "description": "最新のトリガーでアクティブな実行を置き換えます。"
+      }
+    },
     "section_schedule": "スケジュール",
     "section_trigger_kind": "トリガー",
     "trigger_kind_schedule": "スケジュール",
     "trigger_kind_webhook": "Webhook",
+    "trigger_edit_readonly": "トリガーは詳細ページで管理してください。",
     "section_webhook": "Webhook",
     "webhook_help_create": "このオートパイロットを作成すると、Multica が Webhook URL を生成します。その URL に任意の JSON を POST すると実行されます。",
     "webhook_help_edit": "このオートパイロットは Webhook で実行されます。URL の管理(コピー / 再生成)はオートパイロットの詳細ページで行ってください。",

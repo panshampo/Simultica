@@ -183,6 +183,91 @@ func (q *Queries) GetIssueTemplateInWorkspace(ctx context.Context, arg GetIssueT
 	return i, err
 }
 
+const listIssueTemplateIssues = `-- name: ListIssueTemplateIssues :many
+SELECT i.id, i.workspace_id, i.title, i.description, i.status, i.priority,
+       i.assignee_type, i.assignee_id, i.creator_type, i.creator_id,
+       i.parent_issue_id, i.position, i.start_date, i.due_date, i.created_at, i.updated_at, i.number, i.project_id, i.metadata
+FROM issue i
+WHERE i.workspace_id = $1
+  AND i.issue_template_id = $2
+ORDER BY i.created_at DESC
+LIMIT $4 OFFSET $3
+`
+
+type ListIssueTemplateIssuesParams struct {
+	WorkspaceID     pgtype.UUID `json:"workspace_id"`
+	IssueTemplateID pgtype.UUID `json:"issue_template_id"`
+	Offset          int32       `json:"offset"`
+	Limit           int32       `json:"limit"`
+}
+
+type ListIssueTemplateIssuesRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	WorkspaceID   pgtype.UUID        `json:"workspace_id"`
+	Title         string             `json:"title"`
+	Description   pgtype.Text        `json:"description"`
+	Status        string             `json:"status"`
+	Priority      string             `json:"priority"`
+	AssigneeType  pgtype.Text        `json:"assignee_type"`
+	AssigneeID    pgtype.UUID        `json:"assignee_id"`
+	CreatorType   string             `json:"creator_type"`
+	CreatorID     pgtype.UUID        `json:"creator_id"`
+	ParentIssueID pgtype.UUID        `json:"parent_issue_id"`
+	Position      float64            `json:"position"`
+	StartDate     pgtype.Date        `json:"start_date"`
+	DueDate       pgtype.Date        `json:"due_date"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	Number        int32              `json:"number"`
+	ProjectID     pgtype.UUID        `json:"project_id"`
+	Metadata      []byte             `json:"metadata"`
+}
+
+func (q *Queries) ListIssueTemplateIssues(ctx context.Context, arg ListIssueTemplateIssuesParams) ([]ListIssueTemplateIssuesRow, error) {
+	rows, err := q.db.Query(ctx, listIssueTemplateIssues,
+		arg.WorkspaceID,
+		arg.IssueTemplateID,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListIssueTemplateIssuesRow{}
+	for rows.Next() {
+		var i ListIssueTemplateIssuesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.Title,
+			&i.Description,
+			&i.Status,
+			&i.Priority,
+			&i.AssigneeType,
+			&i.AssigneeID,
+			&i.CreatorType,
+			&i.CreatorID,
+			&i.ParentIssueID,
+			&i.Position,
+			&i.StartDate,
+			&i.DueDate,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Number,
+			&i.ProjectID,
+			&i.Metadata,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listIssueTemplates = `-- name: ListIssueTemplates :many
 SELECT it.id, it.workspace_id, it.project_id, it.title, it.issue_title_template, it.issue_body_template, it.assignee_type, it.assignee_id, it.priority, it.labels, it.default_metadata, it.execution_spec, it.created_by_type, it.created_by_id, it.created_at, it.updated_at,
        COUNT(a.id)::bigint AS automation_ref_count

@@ -2,6 +2,7 @@ export {
   issueTemplateKeys,
   issueTemplateListOptions,
   issueTemplateDetailOptions,
+  issueTemplateIssuesOptions,
 } from "./queries";
 export {
   useCreateIssueTemplate,

@@ -5,12 +5,41 @@ import { WorkflowYamlEditor } from "./workflow-yaml-editor";
 describe("WorkflowYamlEditor", () => {
   it("emits parsed YAML and shows parse errors", () => {
     const onParsed = vi.fn();
-    render(<WorkflowYamlEditor initialYaml={"meta:\n  name: test\nstate:\n  fields: []\nnodes: []\nrouting: []\n"} onParsed={onParsed} />);
+    const onError = vi.fn();
+    render(
+      <WorkflowYamlEditor
+        yaml="meta: ["
+        error="YAML parse failed: bad shape"
+        onYamlChange={vi.fn()}
+        onError={onError}
+        onParsed={onParsed}
+      />,
+    );
 
-    fireEvent.change(screen.getByLabelText("Workflow YAML"), { target: { value: "meta: [" } });
     fireEvent.click(screen.getByRole("button", { name: "Apply YAML" }));
 
     expect(screen.getByText(/YAML parse failed/)).toBeInTheDocument();
+    expect(onParsed).not.toHaveBeenCalled();
+  });
+
+  it("rejects YAML that is not shaped like a workflow", () => {
+    const onParsed = vi.fn();
+    const onError = vi.fn();
+    render(
+      <WorkflowYamlEditor
+        yaml={`meta:
+  name: bad
+`}
+        error={null}
+        onYamlChange={vi.fn()}
+        onError={onError}
+        onParsed={onParsed}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply YAML" }));
+
+    expect(onError).toHaveBeenCalledWith(expect.stringMatching(/state.fields/));
     expect(onParsed).not.toHaveBeenCalled();
   });
 });

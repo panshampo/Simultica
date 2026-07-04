@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -104,6 +105,32 @@ func issueTemplateToResponseWithRefCount(t db.IssueTemplate, count *int64) Issue
 	}
 }
 
+func issueTemplateIssueRowToResponse(i db.ListIssueTemplateIssuesRow, issuePrefix string) IssueResponse {
+	identifier := issuePrefix + "-" + strconv.Itoa(int(i.Number))
+	return IssueResponse{
+		ID:            uuidToString(i.ID),
+		WorkspaceID:   uuidToString(i.WorkspaceID),
+		Number:        i.Number,
+		Identifier:    identifier,
+		Title:         i.Title,
+		Description:   textToPtr(i.Description),
+		Status:        i.Status,
+		Priority:      i.Priority,
+		AssigneeType:  textToPtr(i.AssigneeType),
+		AssigneeID:    uuidToPtr(i.AssigneeID),
+		CreatorType:   i.CreatorType,
+		CreatorID:     uuidToString(i.CreatorID),
+		ParentIssueID: uuidToPtr(i.ParentIssueID),
+		ProjectID:     uuidToPtr(i.ProjectID),
+		Position:      i.Position,
+		StartDate:     dateToPtr(i.StartDate),
+		DueDate:       dateToPtr(i.DueDate),
+		CreatedAt:     timestampToString(i.CreatedAt),
+		UpdatedAt:     timestampToString(i.UpdatedAt),
+		Metadata:      parseIssueMetadata(i.Metadata),
+	}
+}
+
 func (h *Handler) ListIssueTemplates(w http.ResponseWriter, r *http.Request) {
 	workspaceID := h.resolveWorkspaceID(r)
 	wsUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace_id")
@@ -134,6 +161,68 @@ func (h *Handler) ListIssueTemplates(w http.ResponseWriter, r *http.Request) {
 		resp = append(resp, issueTemplateRowToResponse(template))
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) ListIssueTemplateIssues(w http.ResponseWriter, r *http.Request) {
+	template, ok := h.loadIssueTemplateInWorkspace(w, r)
+	if !ok {
+		return
+	}
+
+	limit := 20
+	offset := 0
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil && v > 0 {
+			limit = v
+		}
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if v, err := strconv.Atoi(o); err == nil && v >= 0 {
+			offset = v
+		}
+	}
+
+	issues, err := h.Queries.ListIssueTemplateIssues(r.Context(), db.ListIssueTemplateIssuesParams{
+		WorkspaceID:     template.WorkspaceID,
+		IssueTemplateID: template.ID,
+		Limit:           int32(limit),
+		Offset:          int32(offset),
+	})
+	if err != nil {
+		slog.Warn("list issue template issues failed", append(logger.RequestAttrs(r), "error", err, "template_id", uuidToString(template.ID))...)
+		writeError(w, http.StatusInternalServerError, "failed to list issue template issues")
+		return
+	}
+	total, err := h.Queries.CountIssueTemplateIssueReferences(r.Context(), template.ID)
+	if err != nil {
+		slog.Warn("count issue template issues failed", append(logger.RequestAttrs(r), "error", err, "template_id", uuidToString(template.ID))...)
+		writeError(w, http.StatusInternalServerError, "failed to list issue template issues")
+		return
+	}
+
+	prefix := h.getIssuePrefix(r.Context(), template.WorkspaceID)
+	ids := make([]pgtype.UUID, len(issues))
+	for i, issue := range issues {
+		ids[i] = issue.ID
+	}
+	labelsMap := h.labelsByIssue(r.Context(), template.WorkspaceID, ids)
+	resp := make([]IssueResponse, len(issues))
+	for i, issue := range issues {
+		resp[i] = issueTemplateIssueRowToResponse(issue, prefix)
+		labels := labelsMap[resp[i].ID]
+		if labels == nil {
+			labels = []LabelResponse{}
+		}
+		resp[i].Labels = &labels
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"issues": resp,
+		"total":  total,
+	})
 }
 
 func (h *Handler) GetIssueTemplate(w http.ResponseWriter, r *http.Request) {

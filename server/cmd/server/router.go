@@ -727,6 +727,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Post("/", h.CreateIssueTemplate)
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/", h.GetIssueTemplate)
+					r.Get("/issues", h.ListIssueTemplateIssues)
 					r.Patch("/", h.UpdateIssueTemplate)
 					r.Delete("/", h.DeleteIssueTemplate)
 					r.Post("/instantiate", h.InstantiateIssueTemplate)

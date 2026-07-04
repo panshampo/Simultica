@@ -229,6 +229,15 @@ func fileListHasWorkflow(files []CreateSkillFileRequest) bool {
 	return false
 }
 
+func workflowValidationFromFiles(files []CreateSkillFileRequest) any {
+	for _, f := range files {
+		if sanitizeNullBytes(f.Path) == workflowFilePath && workflowYAMLHasNodes(f.Content) {
+			return validateSkillWorkflowYAML(f.Content)
+		}
+	}
+	return nil
+}
+
 func workflowYAMLHasNodes(content string) bool {
 	if strings.TrimSpace(content) == "" {
 		return false
@@ -238,6 +247,36 @@ func workflowYAMLHasNodes(content string) bool {
 		return true
 	}
 	return len(def.Nodes) > 0
+}
+
+func preserveWorkflowConfigFields(nextRaw, previousRaw []byte) ([]byte, error) {
+	next := map[string]any{}
+	if len(nextRaw) > 0 {
+		if err := json.Unmarshal(nextRaw, &next); err != nil {
+			return nil, err
+		}
+	}
+	previous := map[string]any{}
+	if len(previousRaw) > 0 {
+		if err := json.Unmarshal(previousRaw, &previous); err != nil {
+			return nil, err
+		}
+	}
+	if value, ok := previous["has_workflow"]; ok {
+		next["has_workflow"] = value
+	} else {
+		delete(next, "has_workflow")
+	}
+	if value, ok := previous["workflow_validation"]; ok {
+		next["workflow_validation"] = value
+	} else {
+		delete(next, "workflow_validation")
+	}
+	return json.Marshal(next)
+}
+
+func skillConfigWithWorkflowFromFiles(raw []byte, files []CreateSkillFileRequest) ([]byte, error) {
+	return mergeSkillConfigWorkflow(raw, fileListHasWorkflow(files), workflowValidationFromFiles(files))
 }
 
 func mergeSkillConfigFlag(raw []byte, hasWorkflow bool) ([]byte, error) {
@@ -667,6 +706,11 @@ func (h *Handler) UpdateSkill(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Config != nil {
 		config, _ := json.Marshal(req.Config)
+		config, err = preserveWorkflowConfigFields(config, skill.Config)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid skill config")
+			return
+		}
 		params.Config = config
 	}
 	if req.Files != nil {
@@ -674,16 +718,7 @@ func (h *Handler) UpdateSkill(w http.ResponseWriter, r *http.Request) {
 		if params.Config != nil {
 			configSource = params.Config
 		}
-		var workflowValidation any
-		for _, f := range req.Files {
-			if sanitizeNullBytes(f.Path) == workflowFilePath {
-				if workflowYAMLHasNodes(f.Content) {
-					workflowValidation = validateSkillWorkflowYAML(f.Content)
-				}
-				break
-			}
-		}
-		config, err := mergeSkillConfigWorkflow(configSource, fileListHasWorkflow(req.Files), workflowValidation)
+		config, err := skillConfigWithWorkflowFromFiles(configSource, req.Files)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid skill config")
 			return
@@ -2159,12 +2194,17 @@ func (h *Handler) DeleteSkillFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to delete skill file")
 		return
 	}
+	updatedSkill := skill
 	if file.Path == workflowFilePath {
-		if _, err := h.setSkillHasWorkflow(r.Context(), skill, false); err != nil {
+		updatedSkill, err = h.setSkillHasWorkflow(r.Context(), skill, false)
+		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to clear workflow skill flag")
 			return
 		}
 	}
+	wsID := uuidToString(updatedSkill.WorkspaceID)
+	actorType, actorID := h.resolveActor(r, requestUserID(r), wsID)
+	h.publish(protocol.EventSkillUpdated, wsID, actorType, actorID, map[string]any{"skill": skillToResponse(updatedSkill)})
 	w.WriteHeader(http.StatusNoContent)
 }
 

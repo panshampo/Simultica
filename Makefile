@@ -14,6 +14,7 @@ POSTGRES_PASSWORD ?= multica
 POSTGRES_PORT ?= 5432
 PORT := $(or $(BACKEND_PORT),$(API_PORT),$(SERVER_PORT),$(PORT),8080)
 FRONTEND_PORT ?= 3000
+DOCS_PORT ?= 4000
 FRONTEND_ORIGIN ?= http://localhost:$(FRONTEND_PORT)
 MULTICA_APP_URL ?= $(FRONTEND_ORIGIN)
 DATABASE_URL ?= postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:$(POSTGRES_PORT)/$(POSTGRES_DB)?sslmode=disable
@@ -179,20 +180,23 @@ start: ## Start backend and frontend for the current checkout and run migrations
 	@echo "Using env file: $(ENV_FILE)"
 	@echo "Backend: http://localhost:$(PORT)"
 	@echo "Frontend: http://localhost:$(FRONTEND_PORT)"
+	@echo "Docs: http://localhost:$(DOCS_PORT)/docs"
 	@bash scripts/ensure-postgres.sh "$(ENV_FILE)"
 	@echo "Running migrations..."
 	cd server && go run ./cmd/migrate up
-	@echo "Starting backend and frontend..."
+	@echo "Starting backend, frontend, and docs..."
 	@trap 'kill 0' EXIT; \
 		(cd server && go run ./cmd/server) & \
 		pnpm dev:web & \
+		pnpm dev:docs & \
 		wait
 
-stop: ## Stop backend and frontend processes for the current checkout
+stop: ## Stop backend, frontend, and docs processes for the current checkout
 	$(REQUIRE_ENV)
 	@echo "Stopping services..."
 	@-lsof -ti:$(PORT) | xargs kill -9 2>/dev/null
 	@-lsof -ti:$(FRONTEND_PORT) | xargs kill -9 2>/dev/null
+	@-lsof -ti:$(DOCS_PORT) | xargs kill -9 2>/dev/null
 	@case "$(DATABASE_URL)" in \
 		""|*@localhost:*|*@localhost/*|*@127.0.0.1:*|*@127.0.0.1/*|*@\[::1\]:*|*@\[::1\]/*) \
 			echo "✓ App processes stopped. Shared PostgreSQL is still running on localhost:$(POSTGRES_PORT)." ;; \

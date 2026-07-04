@@ -106,6 +106,60 @@ func TestDeleteIssueTemplateRefusesIssueReferences(t *testing.T) {
 	}
 }
 
+func TestListIssueTemplateIssuesReturnsOnlyCurrentTemplateReferences(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("handler test database not configured")
+	}
+	agentID := seedIssueTemplateTestAgent(t)
+	templateAID := seedIssueTemplate(t, agentID, "Referenced template A")
+	templateBID := seedIssueTemplate(t, agentID, "Referenced template B")
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM issue WHERE issue_template_id IN ($1, $2)`, templateAID, templateBID)
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM issue_template WHERE id IN ($1, $2)`, templateAID, templateBID)
+	})
+
+	for _, templateID := range []string{templateAID, templateBID} {
+		req := withURLParam(
+			newRequest(http.MethodPost, "/api/issue-templates/"+templateID+"/instantiate?workspace_id="+testWorkspaceID, nil),
+			"id",
+			templateID,
+		)
+		w := httptest.NewRecorder()
+		testHandler.InstantiateIssueTemplate(w, req)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("InstantiateIssueTemplate(%s) status = %d, body = %s", templateID, w.Code, w.Body.String())
+		}
+	}
+
+	req := withURLParam(
+		newRequest(http.MethodGet, "/api/issue-templates/"+templateAID+"/issues?workspace_id="+testWorkspaceID, nil),
+		"id",
+		templateAID,
+	)
+	w := httptest.NewRecorder()
+	testHandler.ListIssueTemplateIssues(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("ListIssueTemplateIssues status = %d, body = %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Issues []IssueResponse `json:"issues"`
+		Total  int64           `json:"total"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode issue reference response: %v", err)
+	}
+	if resp.Total != 1 {
+		t.Fatalf("total = %d, want 1", resp.Total)
+	}
+	if len(resp.Issues) != 1 {
+		t.Fatalf("len(issues) = %d, want 1", len(resp.Issues))
+	}
+	if resp.Issues[0].Title != "Referenced template A issue" {
+		t.Fatalf("issue title = %q, want Referenced template A issue", resp.Issues[0].Title)
+	}
+}
+
 func seedIssueTemplateTestAgent(t *testing.T) string {
 	t.Helper()
 	var id string

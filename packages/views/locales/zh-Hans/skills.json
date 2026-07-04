@@ -39,6 +39,11 @@
       "body": "任何成员都可以创建 skill、从 URL 导入、或从本地运行时复制——之后所有智能体都能用它。",
       "highlight": "本地运行时里的 skill 在你复制过来之前是私有的。"
     },
+    "workflow_guide": {
+      "title": "想了解 workflow 驱动的 issue?",
+      "body": "阅读 skill 如何变成 issue workflow、为什么会出现子 issue、以及应该在哪里看进度。",
+      "link": "Workflow 和 Issue 手册"
+    },
     "list_error": {
       "title": "无法加载 skill",
       "fallback": "拉取 skill 列表时出错。",

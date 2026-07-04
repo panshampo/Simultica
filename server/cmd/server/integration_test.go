@@ -660,6 +660,83 @@ func TestAgentsThroughRouter(t *testing.T) {
 	}
 }
 
+func TestIssueTemplatesThroughRouter(t *testing.T) {
+	resp := authRequest(t, "GET", "/api/agents?workspace_id="+testWorkspaceID, nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("ListAgents: expected 200, got %d", resp.StatusCode)
+	}
+	var agents []map[string]any
+	readJSON(t, resp, &agents)
+	if len(agents) < 1 {
+		t.Fatal("expected at least 1 agent")
+	}
+	agentID := agents[0]["id"].(string)
+
+	resp = authRequest(t, "POST", "/api/issue-templates?workspace_id="+testWorkspaceID, map[string]any{
+		"title":                "Router template",
+		"issue_title_template": "Router-created issue",
+		"issue_body_template":  "Created through the full router",
+		"assignee_type":        "agent",
+		"assignee_id":          agentID,
+		"priority":             "medium",
+	})
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("CreateIssueTemplate: expected 201, got %d: %s", resp.StatusCode, string(body))
+	}
+	var created map[string]any
+	readJSON(t, resp, &created)
+	templateID, _ := created["id"].(string)
+	if templateID == "" {
+		t.Fatalf("CreateIssueTemplate: missing id in response %#v", created)
+	}
+
+	resp = authRequest(t, "POST", "/api/issue-templates/"+templateID+"/instantiate?workspace_id="+testWorkspaceID, nil)
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("InstantiateIssueTemplate: expected 201, got %d: %s", resp.StatusCode, string(body))
+	}
+	var issue map[string]any
+	readJSON(t, resp, &issue)
+	issueID, _ := issue["id"].(string)
+	if issueID == "" {
+		t.Fatalf("InstantiateIssueTemplate: missing issue id in response %#v", issue)
+	}
+
+	resp = authRequest(t, "GET", "/api/issue-templates/"+templateID+"/issues?workspace_id="+testWorkspaceID+"&limit=20&offset=0", nil)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("ListIssueTemplateIssues: expected 200, got %d: %s", resp.StatusCode, string(body))
+	}
+	var refs struct {
+		Issues []map[string]any `json:"issues"`
+		Total  int64            `json:"total"`
+	}
+	readJSON(t, resp, &refs)
+	if refs.Total != 1 || len(refs.Issues) != 1 || refs.Issues[0]["id"] != issueID {
+		t.Fatalf("ListIssueTemplateIssues response = %#v, want issue %s only", refs, issueID)
+	}
+
+	resp = authRequest(t, "DELETE", "/api/issues/"+issueID, nil)
+	if resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("DeleteIssue: expected 204, got %d: %s", resp.StatusCode, string(body))
+	}
+	resp.Body.Close()
+
+	resp = authRequest(t, "DELETE", "/api/issue-templates/"+templateID+"?workspace_id="+testWorkspaceID, nil)
+	if resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("DeleteIssueTemplate: expected 204, got %d: %s", resp.StatusCode, string(body))
+	}
+	resp.Body.Close()
+}
+
 // ---- Workspaces through full router ----
 
 func TestWorkspacesThroughRouter(t *testing.T) {

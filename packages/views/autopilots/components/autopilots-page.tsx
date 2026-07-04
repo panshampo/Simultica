@@ -10,6 +10,7 @@ import { useWorkspacePaths } from "@multica/core/paths";
 import { useActorName } from "@multica/core/workspace/hooks";
 import { AppLink } from "../../navigation";
 import { ActorAvatar } from "../../common/actor-avatar";
+import { managementActionButtonClass } from "../../common/management-action-button";
 import { PageHeader } from "../../layout/page-header";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { Button } from "@multica/ui/components/ui/button";
@@ -231,7 +232,7 @@ export function AutopilotsPage() {
             <span className="text-xs text-muted-foreground tabular-nums">{automations.length}</span>
           )}
         </div>
-        <Button size="sm" variant="outline" onClick={() => openCreate()}>
+        <Button size="sm" variant="outline" className={managementActionButtonClass("create")} onClick={() => openCreate()}>
           <Plus className="h-3.5 w-3.5 mr-1" />
           {t(($) => $.page.new_autopilot)}
         </Button>
@@ -285,7 +286,7 @@ export function AutopilotsPage() {
                 );
               })}
             </div>
-            <Button size="sm" variant="outline" className="mt-4" onClick={() => openCreate()}>
+            <Button size="sm" variant="outline" className={managementActionButtonClass("create", "mt-4")} onClick={() => openCreate()}>
               <Plus className="h-3.5 w-3.5 mr-1" />
               {t(($) => $.page.start_blank)}
             </Button>

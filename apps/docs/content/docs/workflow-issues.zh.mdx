@@ -1,0 +1,188 @@
+---
+title: Workflow 和 Issue 如何协作
+description: 解释 skill、issue、runtime workflow、子 issue 和 workflow_run 之间的关系。
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Mermaid } from "@/components/mermaid";
+
+在 Multica 里，**skill 是能力**，**issue 是目标**，**runtime workflow 是执行计划**，`workflow_run` 是用户可见的执行记录。
+
+这页有两条阅读路径：
+
+- 如果你日常使用智能体，先看生命周期和概念表。
+- 如果你维护 Simultica 或 agent-runtime，再看控制边界和实现地图。
+
+## 先记住一句话
+
+当 issue 分配给智能体后，issue 是用户目标的容器。主 agent 负责规划。它读取 issue 上下文和自己挂载的 skills，提交 runtime workflow draft。Backend 校验 draft，创建 `workflow_run`，然后启动 agent-runtime sidecar。Sidecar 执行校验后的 workflow snapshot，并持续更新 `workflow_run`，让 UI 有唯一清晰的事实源。
+
+<Callout type="info">
+Skill 不是一次运行。Skill 是可复用的知识和 workflow 结构，主 agent 可以在为具体 issue 规划 run 时使用它。
+</Callout>
+
+## 一条 issue 的执行生命周期
+
+<Mermaid chart={`
+flowchart LR
+  User["用户"] --> Issue["主 issue<br/>目标容器"]
+  Issue --> MainAgent["主 agent<br/>规划者和最终负责人"]
+  MainAgent --> Backend["Simultica backend<br/>校验和副作用闸门"]
+  Backend --> Run["workflow_run<br/>用户可见执行记录"]
+  Backend --> Sidecar["agent-runtime sidecar<br/>执行编排层"]
+  Sidecar --> Dispatch{"dispatch"}
+  Dispatch --> SubIssue["subissue<br/>子 issue + task"]
+  Dispatch --> Inline["inline<br/>内部执行"]
+  Dispatch --> MainTask["main_issue_task<br/>主 agent review/final"]
+  SubIssue --> Run
+  Inline --> Run
+  MainTask --> Run
+  Run --> Issue
+`} />
+
+关键边界是：
+
+- **主 agent 规划** 当前 issue 的 workflow。
+- **Backend 校验** workflow，并负责会改变产品状态的副作用。
+- **Sidecar 执行** backend 已校验的 snapshot。
+- **`workflow_run` 记录** 用户在 UI 里看到的状态。
+
+## 心智模型
+
+可以把系统理解成一条从抽象能力到具体执行记录的链路：
+
+| 概念 | 它回答什么问题 | 主要使用者 |
+|---|---|---|
+| Skill | 这个 agent 能反复使用什么能力？ | Agent 作者、主 agent |
+| Skill workflow | 这个 skill 提供什么可复用子图？ | 主 agent、skill 编辑者 |
+| 主 issue | 用户到底想完成什么？ | 用户、operator |
+| Runtime workflow | 针对当前 issue 的最终执行计划是什么？ | 主 agent、backend、sidecar |
+| Workflow node | 执行计划里的某一步是什么？ | Sidecar、workflow UI |
+| Dispatch | 这一步通过什么载体执行？ | Backend 校验、sidecar |
+| 子 issue | 哪个子任务被派给了子 agent？ | Operator、子 agent |
+| `workflow_run` | 这次执行发生了什么？ | UI、operator、developer |
+
+## 概念表
+
+### 主 issue
+
+主 issue 是用户目标容器。它承载原始需求、可见 workflow 进度，以及主 agent 的最终汇总。
+
+### 主 agent
+
+主 agent 是 planner、orchestrator 和 final owner。它读取主 issue 和自己挂载的 skills，然后提交 runtime workflow。它不应该绕过 backend 直接创建 workflow-managed 子 issue。
+
+### Skill
+
+Skill 是可复用能力包。它可以包含指令、示例、工具说明、参考文件和 workflow template。Skill 本身不是一次执行。
+
+### Skill workflow
+
+Skill workflow 是 skill 内的可复用模板或子图。主 agent 可以完整复用、裁剪、和其他 skill workflow 拼接，或按当前 issue 修改。
+
+### Runtime workflow
+
+Runtime workflow 是主 agent 为当前 issue 提交、并由 backend 校验后的最终执行图。一旦写入 `workflow_run.definition_snapshot`，它就是 sidecar 执行的 snapshot。
+
+### Workflow node
+
+Workflow node 是图里的一步。Node 不天然等于子 agent，也不天然等于子 issue。`type` 表示这一步做什么，`dispatch` 表示这一步通过什么载体执行。
+
+### `workflow_run`
+
+`workflow_run` 是用户可见的执行记录。它保存 workflow snapshot、状态、当前节点、节点状态、输出、错误，以及 sub issue id / task id 等引用。
+
+## 原生 issue 模式 vs workflow-managed 模式
+
+Multica 里有两种都合理的执行模型。
+
+### 原生 issue 模式
+
+原生 issue 模式是普通父子 issue 协作。子 issue 完成后可以唤醒父 issue assignee，由父 issue assignee 再判断下一步。
+
+### Workflow-managed 模式
+
+Workflow-managed 模式里，`workflow_run` 是控制器。Workflow-managed 子 issue 只是 `dispatch=subissue` 节点的执行载体。子 issue 完成后，结果回到 workflow run，由图决定下一步。
+
+<Mermaid chart={`
+flowchart TB
+  subgraph Native["原生 issue 模式"]
+    NativeChild["子 issue done"] --> NativeParent["唤醒父 issue assignee"]
+    NativeParent --> NativeMain["父 issue assignee 决定下一步"]
+  end
+
+  subgraph Managed["Workflow-managed 模式"]
+    ManagedChild["Workflow-managed 子 issue done"] --> Sidecar["Sidecar 读取结果"]
+    Sidecar --> Run["更新 workflow_run"]
+    Run --> Next["推进下一个 workflow node"]
+  end
+`} />
+
+<Callout type="warning">
+Workflow-managed 子 issue 不应该同时触发原生 parent auto-wake。否则系统会出现两个控制器：workflow run 和父 issue assignee。
+</Callout>
+
+## Dispatch 和执行载体
+
+| Dispatch | 执行载体 | 是否创建 Simultica 子 issue | 用户看到什么 |
+|---|---|---:|---|
+| `subissue` | 子 issue + task | 是 | 节点状态、输出、子 issue 链接 |
+| `inline` | Sidecar 或 backend 内部执行 | 否 | 节点状态、内部结果 |
+| `main_issue_task` | 主 issue 上的 review/final task | 否 | 主 agent 节点和最终汇总 |
+| `direct_subagent` | 预留给未来 direct subagent session | 否 | 当前不作为产品承诺 |
+
+只有 `dispatch=subissue` 会创建子 issue。其他 workflow node 仍然可以在 workflow 图里展示，但不会创建子 issue。
+
+## 进度事实源在哪里
+
+对用户来说，进度在主 issue 的 workflow panel 里。对开发者来说，用户可见状态在 `workflow_run` 里。
+
+agent-runtime 使用的 LangGraph checkpoint 是另一件事：它是引擎恢复用的内部状态，不是 UI 事实源。
+
+## 停止与重新规划
+
+当前 runtime workflow 是 snapshot。如果计划错了，产品模型是：
+
+1. Stop 或 cancel 当前 run。
+2. 保留旧的 `workflow_run` 记录，方便审计和回看。
+3. 重新规划，并用新的 snapshot 创建新的 run。
+
+这样旧执行不会被原地改写，用户也能理解每次运行发生过什么。
+
+## 开发者实现地图
+
+维护 workflow 和 issue 链路时，从这些文件开始：
+
+| 区域 | 文件 |
+|---|---|
+| 产品设计 | `docs/superpowers/specs/2026-06-27-simultica-runtime-workflow-planning-design.md`, `docs/superpowers/specs/2026-06-27-simultica-workflow-issue-relationship-explainer.md` |
+| Backend submit 和 run API | `server/internal/handler/runtime_workflow_submit.go`, `server/internal/handler/workflow_run.go` |
+| Workflow run 存储 | `server/pkg/db/queries/workflow_run.sql` |
+| 前端类型和查询 | `packages/core/workflow/types.ts`, `packages/core/workflow/queries.ts` |
+| Workflow UI | `packages/views/workflow/components/issue-workflow-panel.tsx`, `packages/views/workflow/components/workflow-canvas.tsx` |
+| Sidecar 执行 | `agent-runtime/lib/sidecarServer.js`, `agent-runtime/lib/orchestrator.js`, `agent-runtime/lib/workflowBuilder.js` |
+| Runtime 校验和节点 | `agent-runtime/lib/schemaValidator.js`, `agent-runtime/lib/nodeRegistry.js`, `agent-runtime/nodes/subIssueNode.js`, `agent-runtime/nodes/mainIssueTaskNode.js` |
+
+## 排障清单
+
+给 operator：
+
+- 先打开主 issue，看 workflow panel。
+- 如果某个节点创建了子 issue，再打开子 issue 看子 agent 细节。
+- 确认 run 是 `running`、`failed`、`cancelled` 还是 `done`。
+- 如果 runtime 离线，去 Runtimes 页面和 daemon status 看本机执行环境。
+
+给 developer：
+
+- 查 `workflow_run.status`、`current_node`、`nodes_state` 和 `error`。
+- 查 runtime workflow submit path 的 backend validation error。
+- 查 sidecar logs，重点看 build、polling、cancel 和 node execution failure。
+- 确认失败节点是 `subissue`、`inline` 还是 `main_issue_task`。
+- UI 状态绑定 `workflow_run`，不要绑定 LangGraph checkpoint。
+
+## 下一步
+
+- [Skills](/skills) - 理解 skill 作为可复用能力包的角色。
+- [Issues and projects](/issues) - 理解普通 issue 协作。
+- [Assigning issues](/assigning-issues) - 把工作交给智能体。
+- [Daemon and runtimes](/daemon-runtimes) - 查看 agent task 实际在哪里执行。

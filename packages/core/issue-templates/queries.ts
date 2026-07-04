@@ -7,6 +7,11 @@ export const issueTemplateKeys = {
     [...issueTemplateKeys.all(wsId), "list", params ?? {}] as const,
   detail: (wsId: string, id: string) =>
     [...issueTemplateKeys.all(wsId), "detail", id] as const,
+  issues: (
+    wsId: string,
+    id: string,
+    params?: { limit?: number; offset?: number },
+  ) => [...issueTemplateKeys.detail(wsId, id), "issues", params ?? {}] as const,
 };
 
 export function issueTemplateListOptions(
@@ -23,5 +28,16 @@ export function issueTemplateDetailOptions(wsId: string, id: string) {
   return queryOptions({
     queryKey: issueTemplateKeys.detail(wsId, id),
     queryFn: () => api.getIssueTemplate(id),
+  });
+}
+
+export function issueTemplateIssuesOptions(
+  wsId: string,
+  id: string,
+  params?: { limit?: number; offset?: number },
+) {
+  return queryOptions({
+    queryKey: issueTemplateKeys.issues(wsId, id, params),
+    queryFn: () => api.listIssueTemplateIssues(id, params),
   });
 }

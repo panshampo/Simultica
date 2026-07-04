@@ -39,12 +39,18 @@ import { api } from "@multica/core/api";
 import { useT } from "../../i18n";
 
 const EXPIRY_KEYS = ["30", "90", "365", "never"] as const;
+type ExpiryKey = (typeof EXPIRY_KEYS)[number];
+const DEFAULT_EXPIRY: ExpiryKey = "90";
+
+function isExpiryKey(value: string | null | undefined): value is ExpiryKey {
+  return EXPIRY_KEYS.some((key) => key === value);
+}
 
 export function TokensTab() {
   const { t } = useT("settings");
   const [tokens, setTokens] = useState<PersonalAccessToken[]>([]);
   const [tokenName, setTokenName] = useState("");
-  const [tokenExpiry, setTokenExpiry] = useState("90");
+  const [tokenExpiry, setTokenExpiry] = useState<ExpiryKey>(DEFAULT_EXPIRY);
   const [tokenCreating, setTokenCreating] = useState(false);
   const [newToken, setNewToken] = useState<string | null>(null);
   const [tokenCopied, setTokenCopied] = useState(false);
@@ -72,7 +78,7 @@ export function TokensTab() {
       const result = await api.createPersonalAccessToken({ name: tokenName, expires_in_days: expiresInDays });
       setNewToken(result.token);
       setTokenName("");
-      setTokenExpiry("90");
+      setTokenExpiry(DEFAULT_EXPIRY);
       await loadTokens();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t(($) => $.tokens.toast_create_failed));
@@ -122,8 +128,10 @@ export function TokensTab() {
                 onChange={(e) => setTokenName(e.target.value)}
                 placeholder={t(($) => $.tokens.name_placeholder)}
               />
-              <Select value={tokenExpiry} onValueChange={(v) => { if (v) setTokenExpiry(v); }}>
-                <SelectTrigger size="sm"><SelectValue /></SelectTrigger>
+              <Select value={tokenExpiry} onValueChange={(v) => { if (isExpiryKey(v)) setTokenExpiry(v); }}>
+                <SelectTrigger size="sm">
+                  <SelectValue>{t(($) => $.tokens.expiry[tokenExpiry])}</SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   {EXPIRY_KEYS.map((key) => (
                     <SelectItem key={key} value={key}>{t(($) => $.tokens.expiry[key])}</SelectItem>

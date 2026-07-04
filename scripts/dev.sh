@@ -60,9 +60,11 @@ echo ""
 echo "✓ Ready. Starting services..."
 echo "  Backend:  http://localhost:${PORT:-8080}"
 echo "  Frontend: http://localhost:${FRONTEND_PORT:-3000}"
+echo "  Docs:     http://localhost:${DOCS_PORT:-4000}/docs"
 echo ""
 
 trap 'kill 0' EXIT
 (cd server && go run ./cmd/server) &
 pnpm dev:web &
+pnpm dev:docs &
 wait

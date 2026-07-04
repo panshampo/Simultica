@@ -59,6 +59,7 @@ import type {
 import type { IssueTemplate } from "@multica/core/types/issue-template";
 import { TitleEditor, ContentEditor } from "../../editor";
 import { ActorAvatar } from "../../common/actor-avatar";
+import { managementActionButtonClass } from "../../common/management-action-button";
 import { ProjectPicker } from "../../projects/components/project-picker";
 import { ProjectIcon } from "../../projects/components/project-icon";
 import { AgentPicker, type AssigneeSelection } from "./pickers/agent-picker";
@@ -691,7 +692,7 @@ export function AutopilotDialog(props: AutopilotDialogProps) {
             <Button size="sm" variant="outline" onClick={() => onOpenChange(false)}>
               {t(($) => $.dialog.cancel)}
             </Button>
-            <Button size="sm" onClick={handleSubmit} disabled={!canSubmit}>
+            <Button size="sm" className={managementActionButtonClass("save")} onClick={handleSubmit} disabled={!canSubmit}>
               {submitting
                 ? isCreate
                   ? t(($) => $.dialog.creating)
@@ -807,7 +808,9 @@ function TemplatePickerSection({
         <SectionLabel>{t(($) => $.dialog.section_template)}</SectionLabel>
         <Select value={selectedTemplateId ?? ""} onValueChange={(value) => onChange(value || null)}>
           <SelectTrigger className="w-full">
-            <SelectValue placeholder={t(($) => $.dialog.template_select_placeholder)} />
+            <SelectValue placeholder={t(($) => $.dialog.template_select_placeholder)}>
+              {selectedTemplate?.title ?? null}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {templates.map((template) => (
@@ -1138,7 +1141,9 @@ function ScheduleSection({
             }
           >
             <SelectTrigger className="w-full">
-              <SelectValue />
+              <SelectValue>
+                {t(($) => $.dialog.frequency_long[config.frequency])}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {FREQUENCY_KEYS.map((freq) => (
@@ -1156,7 +1161,9 @@ function ScheduleSection({
               }
             >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue>
+                  {t(($) => $.dialog.days[DAY_KEYS[selectedDay] ?? "monday"])}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {DAY_KEYS.map((dayKey, i) => (

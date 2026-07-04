@@ -10,6 +10,28 @@ export function validateWorkflowDefinition(definition: WorkflowDefinition): Work
   const issues: WorkflowValidationIssue[] = [];
   const fieldNames = new Set(definition.state.fields.map((field) => field.name));
   const nodeIds = new Set(["START", "END", ...definition.nodes.map((node) => node.id)]);
+  const seenNodeIds = new Set<string>();
+
+  definition.nodes.forEach((node, index) => {
+    const id = node.id.trim();
+    if (!id) {
+      issues.push({
+        severity: "error",
+        path: `nodes.${index}.id`,
+        message: "Node id is required.",
+      });
+      return;
+    }
+    if (seenNodeIds.has(id)) {
+      issues.push({
+        severity: "error",
+        path: `nodes.${id}.id`,
+        message: `Duplicate node id "${id}".`,
+      });
+      return;
+    }
+    seenNodeIds.add(id);
+  });
 
   for (const node of definition.nodes) {
     for (const output of node.outputs ?? []) {
@@ -32,6 +54,9 @@ export function validateWorkflowDefinition(definition: WorkflowDefinition): Work
     }
     if (route.condition && !route.else) {
       issues.push({ severity: "error", path: `routing.${index}.else`, message: "Conditional routes need an else target." });
+    }
+    if (route.else && !nodeIds.has(route.else)) {
+      issues.push({ severity: "error", path: `routing.${index}.else`, message: `Route else target "${route.else}" does not exist.` });
     }
   });
 

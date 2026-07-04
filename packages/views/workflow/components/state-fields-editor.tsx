@@ -2,9 +2,19 @@ import { useState } from "react";
 import type { WorkflowDefinition, WorkflowStateField } from "@multica/core/workflow/types";
 import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
+import { managementActionButtonClass } from "../../common/management-action-button";
 import { addStateField, createStateField, findStateFieldReferences, removeStateField } from "../lib/editor-model";
 
 const FIELD_TYPES: WorkflowStateField["type"][] = ["string", "number", "boolean", "object", "array", "enum"];
+
+const FIELD_TYPE_LABELS: Record<string, string> = {
+  string: "String",
+  number: "Number",
+  boolean: "Boolean",
+  object: "Object",
+  array: "Array",
+  enum: "Enum",
+};
 
 export function StateFieldsEditor({
   definition,
@@ -71,11 +81,13 @@ export function StateFieldsEditor({
           value={type}
           onChange={(event) => setType(event.target.value as WorkflowStateField["type"])}
         >
-          {FIELD_TYPES.map((fieldType) => <option key={fieldType} value={fieldType}>{fieldType}</option>)}
+          {FIELD_TYPES.map((fieldType) => <option key={fieldType} value={fieldType}>{FIELD_TYPE_LABELS[fieldType] ?? fieldType}</option>)}
         </select>
         <Button
           type="button"
           size="sm"
+          variant="outline"
+          className={managementActionButtonClass("create")}
           onClick={() => {
             const field = createStateField(name, type);
             const next = addStateField(definition, field);

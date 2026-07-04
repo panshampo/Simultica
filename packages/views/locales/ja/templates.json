@@ -22,7 +22,10 @@
     "properties": "プロパティ",
     "references": "参照",
     "issue_refs": "イシュー",
-    "automation_refs": "自動化"
+    "automation_refs": "自動化",
+    "issue_refs_empty": "このテンプレートを使用しているイシューはありません",
+    "issue_refs_failed": "参照イシューを読み込めませんでした",
+    "issue_refs_showing": "{{total}} 件中 {{shown}} 件を表示"
   },
   "dialog": {
     "create_title": "テンプレートを作成",

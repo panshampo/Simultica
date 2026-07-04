@@ -22,7 +22,10 @@
     "properties": "属性",
     "references": "引用",
     "issue_refs": "Issues",
-    "automation_refs": "自动化"
+    "automation_refs": "自动化",
+    "issue_refs_empty": "没有 issue 使用这个模板",
+    "issue_refs_failed": "无法加载引用的 issue",
+    "issue_refs_showing": "已显示 {{shown}} / {{total}}"
   },
   "dialog": {
     "create_title": "创建模板",

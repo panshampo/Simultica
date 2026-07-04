@@ -127,6 +127,7 @@ describe("ApiClient", () => {
 
     await client.listIssueTemplates({ project_id: "project-1" });
     await client.getIssueTemplate("tpl-1");
+    await client.listIssueTemplateIssues("tpl-1", { limit: 20, offset: 0 });
     await client.createIssueTemplate({
       title: "Daily triage",
       issue_title_template: "Daily triage",
@@ -148,6 +149,7 @@ describe("ApiClient", () => {
     expect(calls).toMatchObject([
       { url: "https://api.example.test/api/issue-templates?project_id=project-1", method: "GET" },
       { url: "https://api.example.test/api/issue-templates/tpl-1", method: "GET" },
+      { url: "https://api.example.test/api/issue-templates/tpl-1/issues?limit=20&offset=0", method: "GET" },
       {
         url: "https://api.example.test/api/issue-templates",
         method: "POST",

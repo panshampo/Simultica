@@ -43,6 +43,7 @@ import {
 } from "@multica/ui/components/ui/select";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { useScrollFade } from "@multica/ui/hooks/use-scroll-fade";
+import { managementActionButtonClass } from "../../common/management-action-button";
 import { useT } from "../../i18n";
 import { isNameConflictError } from "../lib/utils";
 
@@ -756,6 +757,8 @@ export function RuntimeLocalSkillImportPanel({
             <Button
               type="button"
               size="sm"
+              variant="outline"
+              className={managementActionButtonClass("create")}
               onClick={handleBulkImport}
               disabled={!canImport}
             >

@@ -206,6 +206,61 @@ func TestDeleteWorkflowFileClearsHasWorkflowFlag(t *testing.T) {
 	assertSkillHasWorkflow(t, skillID, false)
 }
 
+func TestDeleteWorkflowFilePublishesSkillUpdated(t *testing.T) {
+	ctx := context.Background()
+	skillID := insertHandlerTestSkill(t, "workflow-delete-event", "# skill")
+	var fileID string
+	if err := testPool.QueryRow(ctx, `
+		INSERT INTO skill_file (skill_id, path, content)
+		VALUES ($1, $2, 'meta: {}')
+		RETURNING id
+	`, skillID, workflowFilePath).Scan(&fileID); err != nil {
+		t.Fatalf("seed workflow file: %v", err)
+	}
+	if _, err := testPool.Exec(ctx, `
+		UPDATE skill SET config='{"has_workflow": true}'::jsonb WHERE id=$1
+	`, skillID); err != nil {
+		t.Fatalf("seed workflow flag: %v", err)
+	}
+	gotEvent := make(chan events.Event, 1)
+	testHandler.Bus.Subscribe(protocol.EventSkillUpdated, func(e events.Event) {
+		select {
+		case gotEvent <- e:
+		default:
+		}
+	})
+
+	req := newRequest("DELETE", "/api/skills/"+skillID+"/files/"+fileID, nil)
+	req = withURLParams(req, "id", skillID, "fileId", fileID)
+	w := httptest.NewRecorder()
+
+	testHandler.DeleteSkillFile(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("DeleteSkillFile: expected 204, got %d: %s", w.Code, w.Body.String())
+	}
+	select {
+	case event := <-gotEvent:
+		payload, ok := event.Payload.(map[string]any)
+		if !ok {
+			t.Fatalf("event payload = %T, want map", event.Payload)
+		}
+		rawSkill, ok := payload["skill"].(SkillResponse)
+		if !ok {
+			t.Fatalf("event skill payload = %T, want SkillResponse", payload["skill"])
+		}
+		config, ok := rawSkill.Config.(map[string]any)
+		if !ok {
+			t.Fatalf("event skill config = %T, want map", rawSkill.Config)
+		}
+		if got, _ := config["has_workflow"].(bool); got {
+			t.Fatalf("event has_workflow = %v, want false (config=%v)", got, config)
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("expected %s event", protocol.EventSkillUpdated)
+	}
+}
+
 func TestUpdateSkillFilesSetsHasWorkflowFlagFromReplacementList(t *testing.T) {
 	skillID := insertHandlerTestSkill(t, "workflow-replace", "# skill")
 
@@ -260,6 +315,56 @@ func TestUpdateSkillFilesDoesNotSetHasWorkflowForWorkflowWithoutNodes(t *testing
 	}
 	assertSkillHasWorkflow(t, skillID, false)
 	assertSkillWorkflowValidationMissing(t, skillID)
+}
+
+func TestCreateSkillWithWorkflowFileSetsWorkflowConfig(t *testing.T) {
+	req := newRequest(http.MethodPost, "/api/workspaces/"+testWorkspaceID+"/skills", CreateSkillRequest{
+		Name:    "workflow-create",
+		Content: "# skill",
+		Files: []CreateSkillFileRequest{
+			{Path: workflowFilePath, Content: validWorkflowYAML()},
+		},
+	})
+	w := httptest.NewRecorder()
+
+	testHandler.CreateSkill(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("CreateSkill: expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp SkillWithFilesResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	assertSkillHasWorkflow(t, resp.ID, true)
+	assertSkillWorkflowValidation(t, resp.ID, true)
+}
+
+func TestUpdateSkillConfigCannotDesyncWorkflowConfig(t *testing.T) {
+	skillID := insertHandlerTestSkill(t, "workflow-config-desync", "# skill")
+	req := newRequest("PUT", "/api/skills/"+skillID+"/files", map[string]any{
+		"path":    workflowFilePath,
+		"content": validWorkflowYAML(),
+	})
+	req = withURLParam(req, "id", skillID)
+	w := httptest.NewRecorder()
+	testHandler.UpsertSkillFile(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("UpsertSkillFile: expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	req = newRequest("PUT", "/api/skills/"+skillID, map[string]any{
+		"config": map[string]any{"has_workflow": false},
+	})
+	req = withURLParam(req, "id", skillID)
+	w = httptest.NewRecorder()
+	testHandler.UpdateSkill(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("UpdateSkill: expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	assertSkillHasWorkflow(t, skillID, true)
+	assertSkillWorkflowValidation(t, skillID, true)
 }
 
 func validWorkflowYAML() string {

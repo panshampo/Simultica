@@ -6,12 +6,13 @@ import { toast } from "sonner";
 import { ArrowLeft, FileText, Play, Trash2 } from "lucide-react";
 import {
   issueTemplateDetailOptions,
+  issueTemplateIssuesOptions,
   useDeleteIssueTemplate,
   useInstantiateIssueTemplate,
 } from "@multica/core/issue-templates";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
-import type { IssueTemplate } from "@multica/core/types";
+import type { Issue, IssueTemplate } from "@multica/core/types";
 import { useActorName } from "@multica/core/workspace/hooks";
 import { Button } from "@multica/ui/components/ui/button";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
@@ -27,11 +28,15 @@ import {
 } from "@multica/ui/components/ui/alert-dialog";
 import { AppLink, useNavigation } from "../../navigation";
 import { ActorAvatar } from "../../common/actor-avatar";
+import { managementActionButtonClass } from "../../common/management-action-button";
 import { PageHeader } from "../../layout/page-header";
+import { StatusIcon } from "../../issues/components/status-icon";
 import { ProjectChip } from "../../projects/components/project-chip";
 import { useT } from "../../i18n";
 import { TemplateDialog } from "./template-dialog";
 import { formatTemplateDate } from "./template-utils";
+
+const TEMPLATE_ISSUE_REFERENCE_LIMIT = 20;
 
 export function TemplateDetailPage({ templateId }: { templateId: string }) {
   const { t } = useT("templates");
@@ -42,6 +47,17 @@ export function TemplateDetailPage({ templateId }: { templateId: string }) {
   const { data: template, isLoading } = useQuery(
     issueTemplateDetailOptions(wsId, templateId),
   );
+  const {
+    data: issueReferences,
+    isLoading: issueReferencesLoading,
+    isError: issueReferencesError,
+  } = useQuery({
+    ...issueTemplateIssuesOptions(wsId, templateId, {
+      limit: TEMPLATE_ISSUE_REFERENCE_LIMIT,
+      offset: 0,
+    }),
+    enabled: !!template,
+  });
   const instantiate = useInstantiateIssueTemplate();
   const deleteTemplate = useDeleteIssueTemplate();
   const [editOpen, setEditOpen] = useState(false);
@@ -121,11 +137,13 @@ export function TemplateDetailPage({ templateId }: { templateId: string }) {
           <h1 className="truncate text-sm font-medium">{template.title}</h1>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+          <Button variant="outline" size="sm" className={managementActionButtonClass("configure")} onClick={() => setEditOpen(true)}>
             {t(($) => $.actions.edit)}
           </Button>
           <Button
             size="sm"
+            variant="outline"
+            className={managementActionButtonClass("execute")}
             onClick={() => handleInstantiate(template)}
             disabled={instantiate.isPending}
           >
@@ -204,6 +222,12 @@ export function TemplateDetailPage({ templateId }: { templateId: string }) {
                 value={template.automation_ref_count ?? 0}
               />
             </div>
+            <IssueReferenceList
+              issues={issueReferences?.issues ?? []}
+              total={issueReferences?.total ?? template.issue_ref_count ?? 0}
+              isLoading={issueReferencesLoading}
+              isError={issueReferencesError}
+            />
           </section>
 
           <Button
@@ -243,6 +267,82 @@ export function TemplateDetailPage({ templateId }: { templateId: string }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+function IssueReferenceList({
+  issues,
+  total,
+  isLoading,
+  isError,
+}: {
+  issues: Issue[];
+  total: number;
+  isLoading: boolean;
+  isError: boolean;
+}) {
+  const { t } = useT("templates");
+  const p = useWorkspacePaths();
+
+  if (isLoading) {
+    return (
+      <div className="mt-3 space-y-2">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="mt-3 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+        {t(($) => $.detail.issue_refs_failed)}
+      </div>
+    );
+  }
+
+  if (issues.length === 0) {
+    return (
+      <div className="mt-3 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+        {t(($) => $.detail.issue_refs_empty)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="space-y-1">
+        {issues.map((issue) => (
+          <AppLink
+            key={issue.id}
+            href={p.issueDetail(issue.id)}
+            className="flex min-h-11 min-w-0 items-start gap-2 rounded-md px-2 py-2 text-xs transition-colors hover:bg-accent"
+          >
+            <StatusIcon status={issue.status} className="mt-0.5 size-3.5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+                  {issue.identifier}
+                </span>
+                <span className="truncate font-medium text-foreground">{issue.title}</span>
+              </div>
+              <div className="mt-0.5 truncate text-muted-foreground">
+                {issue.priority}
+              </div>
+            </div>
+          </AppLink>
+        ))}
+      </div>
+      {total > issues.length && (
+        <div className="px-2 text-[11px] text-muted-foreground">
+          {t(($) => $.detail.issue_refs_showing, {
+            shown: issues.length,
+            total,
+          })}
+        </div>
+      )}
     </div>
   );
 }

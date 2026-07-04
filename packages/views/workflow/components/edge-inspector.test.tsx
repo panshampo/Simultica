@@ -29,4 +29,13 @@ describe("EdgeInspector", () => {
 
     expect(onChange).toHaveBeenCalledWith({ else: "final" });
   });
+
+  it("allows editing entry and terminal routes", () => {
+    const onChange = vi.fn();
+    render(<EdgeInspector edge={{ from: "START", to: "review" }} stateFields={fields} nodeIds={["review"]} onChange={onChange} onRemove={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("To"), { target: { value: "END" } });
+
+    expect(onChange).toHaveBeenCalledWith({ to: "END" });
+  });
 });

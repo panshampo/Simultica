@@ -35,6 +35,12 @@ Skill 导入后需要**挂载到具体的智能体**才会生效。一个智能�
 
 修改 Skill 的内容后，**只有之后新创建的任务会拿到新版本**——正在跑的任务继续用旧版 Skill。
 
+## Issue workflow 里的 Skill
+
+当智能体为一条 issue 规划工作时，Skill 会变得尤其重要。Skill 仍然是可复用能力包；智能体可以使用其中的指令或 workflow template，为当前 issue 生成 runtime workflow。
+
+完整模型见 [Workflow 和 Issue 如何协作](/workflow-issues)：这页解释 skill、主 issue、runtime workflow、子 issue 和 `workflow_run` 如何配合。
+
 ## 第三方 Skill 的安全
 
 从 GitHub 或 ClawHub 导入的 Skill 可能包含脚本和可执行内容。Multica 本身**不做签名验证、不做代码审查、不做沙盒隔离**——Skill 里的内容原封不动交给对应的 AI 编程工具，工具怎么用这些文件（是否当脚本执行）由工具本身决定。

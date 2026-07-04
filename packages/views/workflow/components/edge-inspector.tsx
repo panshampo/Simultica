@@ -4,35 +4,44 @@ import { Button } from "@multica/ui/components/ui/button";
 import { Input } from "@multica/ui/components/ui/input";
 import { tryParseConditionExpression } from "../lib/condition-builder";
 
+function nodeOptionLabel(id: string, nodeLabels: Record<string, string>): string {
+  if (id === "START" || id === "END") return id;
+  return nodeLabels[id] ? `${id} · ${nodeLabels[id]}` : id;
+}
+
 export function EdgeInspector({
   edge,
   stateFields,
   nodeIds,
+  nodeLabels = {},
   onChange,
   onRemove,
 }: {
   edge: WorkflowEdge;
   stateFields: WorkflowStateField[];
   nodeIds: string[];
+  nodeLabels?: Record<string, string>;
   onChange: (patch: Partial<WorkflowEdge>) => void;
   onRemove: () => void;
 }) {
   const [mode, setMode] = useState<"builder" | "raw">(() => (edge.condition && !tryParseConditionExpression(edge.condition) ? "raw" : "builder"));
   const parsed = useMemo(() => (edge.condition ? tryParseConditionExpression(edge.condition) : null), [edge.condition]);
+  const fromTargets = ["START", ...nodeIds];
+  const toTargets = [...nodeIds, "END"];
 
   return (
     <div className="space-y-3">
       <label className="space-y-1 text-xs text-muted-foreground">
         <span>From</span>
-        <select className="h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground" value={edge.from} onChange={(event) => onChange({ from: event.target.value })}>
-          {nodeIds.map((id) => <option key={id} value={id}>{id}</option>)}
+        <select aria-label="From" className="h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground" value={edge.from} onChange={(event) => onChange({ from: event.target.value })}>
+          {fromTargets.map((id) => <option key={id} value={id}>{nodeOptionLabel(id, nodeLabels)}</option>)}
         </select>
       </label>
 
       <label className="space-y-1 text-xs text-muted-foreground">
         <span>To</span>
-        <select className="h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground" value={edge.to} onChange={(event) => onChange({ to: event.target.value })}>
-          {nodeIds.map((id) => <option key={id} value={id}>{id}</option>)}
+        <select aria-label="To" className="h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground" value={edge.to} onChange={(event) => onChange({ to: event.target.value })}>
+          {toTargets.map((id) => <option key={id} value={id}>{nodeOptionLabel(id, nodeLabels)}</option>)}
         </select>
       </label>
 
@@ -76,7 +85,7 @@ export function EdgeInspector({
         <span>Else target</span>
         <select aria-label="Else target" className="h-9 w-full rounded-md border bg-background px-2 text-sm text-foreground" value={edge.else ?? ""} onChange={(event) => onChange({ else: event.target.value || undefined })}>
           <option value="">No else target</option>
-          {nodeIds.map((id) => <option key={id} value={id}>{id}</option>)}
+          {toTargets.map((id) => <option key={id} value={id}>{nodeOptionLabel(id, nodeLabels)}</option>)}
         </select>
       </label>
 
