@@ -1436,8 +1436,13 @@ func TestWorkflowOrchestrationRenderedForIssueTasks(t *testing.T) {
 	}
 	for _, want := range []string{
 		"## Workflow Orchestration",
-		"multica workflow submit",
-		"After submission succeeds",
+		"multica workflow-case create --entry-issue",
+		"multica workflow-case definition upsert",
+		"multica workflow-case definition validate",
+		"multica workflow-case definition publish",
+		"multica workflow-case run start",
+		"Publish online version does not start a run",
+		"After run start succeeds",
 		"Do NOT inspect code",
 		"create fallback sub-issues",
 		"produce a final answer",
@@ -1446,6 +1451,28 @@ func TestWorkflowOrchestrationRenderedForIssueTasks(t *testing.T) {
 	} {
 		if !strings.Contains(content, want) {
 			t.Errorf("brief missing %q", want)
+		}
+	}
+}
+
+func TestWorkflowBriefUsesWorkflowCaseCommands(t *testing.T) {
+	brief := buildMetaSkillContent("claude", TaskContextForEnv{
+		IssueID: "issue-1",
+		AgentSkills: []SkillContextForEnv{{
+			Name:  "workflow skill",
+			Files: []SkillFileContextForEnv{{Path: "workflow.yaml", Content: "meta:\n  name: x\n"}},
+		}},
+	})
+	if strings.Contains(brief, "multica workflow submit <issueId>") {
+		t.Fatalf("brief still contains issue-first workflow submit:\n%s", brief)
+	}
+	for _, want := range []string{
+		"multica workflow-case create --entry-issue",
+		"multica workflow-case definition upsert",
+		"multica workflow-case run start",
+	} {
+		if !strings.Contains(brief, want) {
+			t.Fatalf("brief missing %q:\n%s", want, brief)
 		}
 	}
 }

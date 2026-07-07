@@ -87,6 +87,131 @@ func TestSubmitRuntimeWorkflowAcceptsMainIssueTaskNode(t *testing.T) {
 	}
 }
 
+func TestSubmitRuntimeWorkflowAcceptsCanonicalCarrierAndProjectsCarrierKind(t *testing.T) {
+	issueID := createIssueForTimeline(t, "runtime workflow canonical carrier")
+	var sidecarPayload map[string]any
+	sidecar := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&sidecarPayload); err != nil {
+			t.Fatalf("decode sidecar payload: %v", err)
+		}
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"status":"accepted"}`))
+	}))
+	defer sidecar.Close()
+	t.Setenv("MULTICA_WORKFLOW_SIDECAR_URL", sidecar.URL)
+	body := validRuntimeWorkflowSubmitBody()
+	def := body["definition"].(map[string]any)
+	nodes := def["nodes"].([]map[string]any)
+	delete(nodes[0], "dispatch")
+	nodes[0]["carrier"] = "issue"
+	nodes[0]["carrier_kind"] = "issue"
+	req := newRequest("POST", "/api/issues/"+issueID+"/runtime-workflows?workspace_id="+testWorkspaceID, body)
+	req = withURLParam(req, "id", issueID)
+	w := httptest.NewRecorder()
+
+	testHandler.SubmitRuntimeWorkflow(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp WorkflowRunResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	var dispatch, carrierKind string
+	if err := testPool.QueryRow(context.Background(), `
+		SELECT dispatch, carrier_kind
+		FROM workflow_run_node
+		WHERE run_id = $1 AND node_id = 'implement'
+	`, resp.ID).Scan(&dispatch, &carrierKind); err != nil {
+		t.Fatalf("load workflow run node: %v", err)
+	}
+	if dispatch != "subissue" || carrierKind != "issue" {
+		t.Fatalf("node dispatch/carrier_kind = %s/%s, want subissue/issue", dispatch, carrierKind)
+	}
+	sidecarDef := sidecarPayload["definition"].(map[string]any)
+	sidecarNode := sidecarDef["nodes"].([]any)[0].(map[string]any)
+	if sidecarNode["dispatch"] != "subissue" {
+		t.Fatalf("sidecar node dispatch = %v, want subissue", sidecarNode["dispatch"])
+	}
+}
+
+func TestSubmitRuntimeWorkflowRejectsConflictingCarrierAndDispatch(t *testing.T) {
+	issueID := createIssueForTimeline(t, "runtime workflow conflicting carrier")
+	body := validRuntimeWorkflowSubmitBody()
+	def := body["definition"].(map[string]any)
+	nodes := def["nodes"].([]map[string]any)
+	nodes[0]["dispatch"] = "inline"
+	nodes[0]["carrier"] = "issue"
+	nodes[0]["carrier_kind"] = "issue"
+	req := newRequest("POST", "/api/issues/"+issueID+"/runtime-workflows?workspace_id="+testWorkspaceID, body)
+	req = withURLParam(req, "id", issueID)
+	w := httptest.NewRecorder()
+
+	testHandler.SubmitRuntimeWorkflow(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "conflicting") {
+		t.Fatalf("expected conflicting carrier/dispatch error, got %s", w.Body.String())
+	}
+}
+
+func TestValidateRuntimeWorkflowDefinitionNormalizesCarrierKind(t *testing.T) {
+	raw := json.RawMessage(`{
+		"meta":{"name":"carrier"},
+		"nodes":[{"id":"implement","type":"agent","carrier":"issue","agent":"code"}],
+		"routing":[{"from":"START","to":"implement"},{"from":"implement","to":"END"}]
+	}`)
+
+	def, err := validateRuntimeWorkflowDefinition(raw)
+
+	if err != nil {
+		t.Fatalf("validate definition: %v", err)
+	}
+	if got := def.Nodes[0].Dispatch; got != "subissue" {
+		t.Fatalf("normalized dispatch = %q, want subissue", got)
+	}
+	if got := def.Nodes[0].CarrierKind; got != "issue" {
+		t.Fatalf("normalized carrier_kind = %q, want issue", got)
+	}
+}
+
+func TestValidateRuntimeWorkflowDefinitionRejectsConflictingCarrierAndDispatch(t *testing.T) {
+	raw := json.RawMessage(`{
+		"meta":{"name":"carrier"},
+		"nodes":[{"id":"implement","type":"agent","dispatch":"inline","carrier_kind":"issue","agent":"code"}],
+		"routing":[{"from":"START","to":"implement"},{"from":"implement","to":"END"}]
+	}`)
+
+	_, err := validateRuntimeWorkflowDefinition(raw)
+
+	if err == nil {
+		t.Fatal("expected conflicting carrier_kind and dispatch to fail validation")
+	}
+	if !strings.Contains(err.Error(), "conflicting") {
+		t.Fatalf("expected conflicting error, got %v", err)
+	}
+}
+
+func TestValidateRuntimeWorkflowDefinitionRejectsAgentRuntimeCarrier(t *testing.T) {
+	raw := json.RawMessage(`{
+		"meta":{"name":"carrier"},
+		"nodes":[{"id":"implement","type":"agent","carrier_kind":"agent_runtime","agent":"code"}],
+		"routing":[{"from":"START","to":"implement"},{"from":"implement","to":"END"}]
+	}`)
+
+	_, err := validateRuntimeWorkflowDefinition(raw)
+
+	if err == nil {
+		t.Fatal("expected agent_runtime carrier to fail validation")
+	}
+	if !strings.Contains(err.Error(), "direct_subagent") {
+		t.Fatalf("expected direct_subagent reserved error, got %v", err)
+	}
+}
+
 func TestSubmitRuntimeWorkflowCreatesRunAndStartsSidecar(t *testing.T) {
 	issueID := createIssueForTimeline(t, "runtime workflow valid")
 	var sidecarPayload map[string]any
@@ -128,6 +253,38 @@ func TestSubmitRuntimeWorkflowCreatesRunAndStartsSidecar(t *testing.T) {
 	}
 	if _, ok := sidecarPayload["definition"].(map[string]any); !ok {
 		t.Fatalf("sidecar definition missing or wrong type: %#v", sidecarPayload["definition"])
+	}
+
+	var caseID, definitionVersionID *string
+	if err := testPool.QueryRow(context.Background(), `
+		SELECT case_id::text, definition_version_id::text
+		FROM workflow_run
+		WHERE id = $1
+	`, resp.ID).Scan(&caseID, &definitionVersionID); err != nil {
+		t.Fatalf("load workflow run case/version: %v", err)
+	}
+	if caseID == nil || *caseID == "" {
+		t.Fatalf("workflow_run.case_id = %v, want compatibility-created case id", caseID)
+	}
+	if definitionVersionID == nil || *definitionVersionID == "" {
+		t.Fatalf("workflow_run.definition_version_id = %v, want compatibility-created version id", definitionVersionID)
+	}
+	if got := sidecarPayload["case_id"]; got != *caseID {
+		t.Fatalf("sidecar case_id = %v, want %s", got, *caseID)
+	}
+	var sourceIssueID, currentRunID *string
+	if err := testPool.QueryRow(context.Background(), `
+		SELECT source_issue_id::text, current_run_id::text
+		FROM workflow_case
+		WHERE id = $1
+	`, *caseID).Scan(&sourceIssueID, &currentRunID); err != nil {
+		t.Fatalf("load compatibility workflow case: %v", err)
+	}
+	if sourceIssueID == nil || *sourceIssueID != issueID {
+		t.Fatalf("workflow_case.source_issue_id = %v, want %s", sourceIssueID, issueID)
+	}
+	if currentRunID == nil || *currentRunID != resp.ID {
+		t.Fatalf("workflow_case.current_run_id = %v, want %s", currentRunID, resp.ID)
 	}
 }
 

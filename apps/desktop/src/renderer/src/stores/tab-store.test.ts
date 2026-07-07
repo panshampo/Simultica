@@ -18,6 +18,7 @@ import {
   sanitizeTabPath,
   migrateV1ToV2,
   migrateV2ToV3,
+  resolveRouteIcon,
   useTabStore,
 } from "./tab-store";
 
@@ -43,6 +44,8 @@ describe("sanitizeTabPath", () => {
   it("passes through valid workspace-scoped paths", () => {
     expect(sanitizeTabPath("/acme/issues")).toBe("/acme/issues");
     expect(sanitizeTabPath("/my-team/projects/abc")).toBe("/my-team/projects/abc");
+    expect(sanitizeTabPath("/acme/workflow-cases")).toBe("/acme/workflow-cases");
+    expect(sanitizeTabPath("/acme/workflow-cases/case-1")).toBe("/acme/workflow-cases/case-1");
   });
 
   it("rejects paths whose first segment is a reserved slug (missing workspace prefix)", () => {
@@ -56,6 +59,13 @@ describe("sanitizeTabPath", () => {
   it("passes through user slugs that happen to look path-like but aren't reserved", () => {
     expect(sanitizeTabPath("/acme-issues/issues")).toBe("/acme-issues/issues");
     expect(sanitizeTabPath("/project-x/inbox")).toBe("/project-x/inbox");
+  });
+});
+
+describe("resolveRouteIcon", () => {
+  it("uses a workflow icon for WorkflowCase tab routes", () => {
+    expect(resolveRouteIcon("/acme/workflow-cases")).toBe("Workflow");
+    expect(resolveRouteIcon("/acme/workflow-cases/case-1")).toBe("Workflow");
   });
 });
 

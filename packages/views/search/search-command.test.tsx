@@ -144,6 +144,7 @@ vi.mock("@multica/core/paths", () => ({
     myIssues: () => "/ws-test/my-issues",
     issues: () => "/ws-test/issues",
     projects: () => "/ws-test/projects",
+    workflowCases: () => "/ws-test/workflow-cases",
     agents: () => "/ws-test/agents",
     runtimes: () => "/ws-test/runtimes",
     skills: () => "/ws-test/skills",
@@ -303,6 +304,22 @@ describe("SearchCommand", () => {
     await user.click(settingsItem);
 
     expect(mockPush).toHaveBeenCalledWith("/ws-test/settings");
+    expect(useSearchStore.getState().open).toBe(false);
+  });
+
+  it("navigates to WorkflowCases from page search", async () => {
+    const user = userEvent.setup();
+    renderSearch();
+
+    const input = screen.getByPlaceholderText("Type a command or search...");
+    await user.type(input, "workflow");
+
+    const workflowCasesItem = await screen.findByText(
+      (_, el) => el?.textContent === "WorkflowCases" && el?.tagName === "SPAN",
+    );
+    await user.click(workflowCasesItem);
+
+    expect(mockPush).toHaveBeenCalledWith("/ws-test/workflow-cases");
     expect(useSearchStore.getState().open).toBe(false);
   });
 

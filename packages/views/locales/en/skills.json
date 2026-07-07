@@ -109,14 +109,6 @@
       "permissions_locked": "Only the creator or a workspace admin can edit this skill.",
       "used_by_empty": "Not assigned to any agent yet. Open an agent's Skills tab to assign."
     },
-    "workflow_debug": {
-      "title": "Debug workflow",
-      "description": "Create a temporary issue and start this skill workflow immediately.",
-      "action": "Debug run",
-      "starting": "Starting...",
-      "toast_started": "Workflow debug issue started",
-      "toast_failed": "Failed to start workflow debug issue"
-    },
     "origin_card": {
       "imported_runtime": "Imported from local runtime",
       "imported_clawhub": "Imported from ClawHub",

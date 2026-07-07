@@ -838,24 +838,111 @@ type WebhookDelivery struct {
 	AutomationRunID        pgtype.UUID        `json:"automation_run_id"`
 }
 
+type WorkflowCase struct {
+	ID              pgtype.UUID        `json:"id"`
+	WorkspaceID     pgtype.UUID        `json:"workspace_id"`
+	Title           string             `json:"title"`
+	Description     string             `json:"description"`
+	SourceIssueID   pgtype.UUID        `json:"source_issue_id"`
+	OwnerAgentID    pgtype.UUID        `json:"owner_agent_id"`
+	Status          string             `json:"status"`
+	CurrentRunID    pgtype.UUID        `json:"current_run_id"`
+	CreatedBy       pgtype.Text        `json:"created_by"`
+	UpdatedBy       pgtype.Text        `json:"updated_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	OnlineVersionID pgtype.UUID        `json:"online_version_id"`
+}
+
+type WorkflowDefinition struct {
+	ID              pgtype.UUID        `json:"id"`
+	WorkspaceID     pgtype.UUID        `json:"workspace_id"`
+	CaseID          pgtype.UUID        `json:"case_id"`
+	DraftJson       []byte             `json:"draft_json"`
+	SourceTemplates []byte             `json:"source_templates"`
+	Status          string             `json:"status"`
+	CreatedBy       pgtype.Text        `json:"created_by"`
+	UpdatedBy       pgtype.Text        `json:"updated_by"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type WorkflowDefinitionVersion struct {
+	ID               pgtype.UUID        `json:"id"`
+	WorkspaceID      pgtype.UUID        `json:"workspace_id"`
+	CaseID           pgtype.UUID        `json:"case_id"`
+	DefinitionID     pgtype.UUID        `json:"definition_id"`
+	Version          int32              `json:"version"`
+	SnapshotJson     []byte             `json:"snapshot_json"`
+	SourceSkills     []byte             `json:"source_skills"`
+	ValidationReport []byte             `json:"validation_report"`
+	ConfirmedBy      pgtype.Text        `json:"confirmed_by"`
+	ConfirmedAt      pgtype.Timestamptz `json:"confirmed_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
 type WorkflowRun struct {
-	ID                 pgtype.UUID        `json:"id"`
-	WorkspaceID        pgtype.UUID        `json:"workspace_id"`
-	RootIssueID        pgtype.UUID        `json:"root_issue_id"`
-	SkillID            pgtype.UUID        `json:"skill_id"`
-	PlannerTaskID      pgtype.UUID        `json:"planner_task_id"`
-	Status             string             `json:"status"`
-	CurrentNode        string             `json:"current_node"`
-	NodesState         []byte             `json:"nodes_state"`
-	DefinitionSnapshot []byte             `json:"definition_snapshot"`
-	SourceSkills       []byte             `json:"source_skills"`
-	Error              pgtype.Text        `json:"error"`
-	CancelReason       pgtype.Text        `json:"cancel_reason"`
-	CancelledAt        pgtype.Timestamptz `json:"cancelled_at"`
-	StartedAt          pgtype.Timestamptz `json:"started_at"`
-	CompletedAt        pgtype.Timestamptz `json:"completed_at"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	ID                  pgtype.UUID        `json:"id"`
+	WorkspaceID         pgtype.UUID        `json:"workspace_id"`
+	RootIssueID         pgtype.UUID        `json:"root_issue_id"`
+	SkillID             pgtype.UUID        `json:"skill_id"`
+	PlannerTaskID       pgtype.UUID        `json:"planner_task_id"`
+	Status              string             `json:"status"`
+	CurrentNode         string             `json:"current_node"`
+	NodesState          []byte             `json:"nodes_state"`
+	DefinitionSnapshot  []byte             `json:"definition_snapshot"`
+	SourceSkills        []byte             `json:"source_skills"`
+	Error               pgtype.Text        `json:"error"`
+	CancelReason        pgtype.Text        `json:"cancel_reason"`
+	CancelledAt         pgtype.Timestamptz `json:"cancelled_at"`
+	StartedAt           pgtype.Timestamptz `json:"started_at"`
+	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	CaseID              pgtype.UUID        `json:"case_id"`
+	DefinitionVersionID pgtype.UUID        `json:"definition_version_id"`
+	RunKind             string             `json:"run_kind"`
+	Label               string             `json:"label"`
+}
+
+type WorkflowRunNode struct {
+	ID             pgtype.UUID        `json:"id"`
+	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
+	CaseID         pgtype.UUID        `json:"case_id"`
+	RunID          pgtype.UUID        `json:"run_id"`
+	NodeID         string             `json:"node_id"`
+	NodeType       string             `json:"node_type"`
+	Dispatch       string             `json:"dispatch"`
+	Status         string             `json:"status"`
+	Attempt        int32              `json:"attempt"`
+	InputSnapshot  []byte             `json:"input_snapshot"`
+	OutputSnapshot []byte             `json:"output_snapshot"`
+	Error          []byte             `json:"error"`
+	Logs           []byte             `json:"logs"`
+	CarrierRef     []byte             `json:"carrier_ref"`
+	StartedAt      pgtype.Timestamptz `json:"started_at"`
+	CompletedAt    pgtype.Timestamptz `json:"completed_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	CarrierKind    string             `json:"carrier_kind"`
+}
+
+type WorkflowRunNodeEvent struct {
+	ID             pgtype.UUID        `json:"id"`
+	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
+	CaseID         pgtype.UUID        `json:"case_id"`
+	RunID          pgtype.UUID        `json:"run_id"`
+	NodeID         string             `json:"node_id"`
+	EventType      string             `json:"event_type"`
+	Attempt        int32              `json:"attempt"`
+	InputSnapshot  []byte             `json:"input_snapshot"`
+	OutputSnapshot []byte             `json:"output_snapshot"`
+	Error          []byte             `json:"error"`
+	Logs           []byte             `json:"logs"`
+	CarrierRef     []byte             `json:"carrier_ref"`
+	Sequence       pgtype.Int4        `json:"sequence"`
+	OccurredAt     pgtype.Timestamptz `json:"occurred_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type Workspace struct {

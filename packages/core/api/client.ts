@@ -134,7 +134,16 @@ import type {
   CreateBillingPortalSessionResponse,
 } from "../types";
 import type { OnboardingCompletionPath } from "../onboarding/types";
-import type { WorkflowDefinition, WorkflowRun } from "../workflow/types";
+import type {
+  IssueWorkflowContext,
+  WorkflowCase,
+  WorkflowDefinition,
+  WorkflowDefinitionDraft,
+  WorkflowDefinitionVersion,
+  WorkflowRun,
+  WorkflowRunKind,
+  WorkflowValidationReport,
+} from "../workflow/types";
 import type {
   CloudRuntimeNode,
   CreateCloudRuntimeNodeRequest,
@@ -564,45 +573,113 @@ export class ApiClient {
     return this.fetch(`/api/issues/${id}`);
   }
 
-  async getIssueWorkflowRun(id: string): Promise<WorkflowRun | null> {
+  async getIssueWorkflowContext(issueId: string): Promise<IssueWorkflowContext> {
+    return this.fetch(`/api/issues/${issueId}/workflow-context`);
+  }
+
+  async listWorkflowCases(): Promise<WorkflowCase[]> {
+    const resp = await this.fetch<{ workflow_cases: WorkflowCase[] }>("/api/workflow-cases");
+    return resp.workflow_cases;
+  }
+
+  async createWorkflowCase(data: {
+    title: string;
+    description?: string;
+    source_issue_id?: string | null;
+    owner_agent_id?: string | null;
+  }): Promise<WorkflowCase> {
+    return this.fetch("/api/workflow-cases", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async createWorkflowCaseFromIssue(issueId: string, data?: {
+    owner_agent_id?: string | null;
+    copy_issue_context?: boolean;
+  }): Promise<WorkflowCase> {
+    return this.fetch(`/api/issues/${issueId}/workflow-cases`, {
+      method: "POST",
+      body: JSON.stringify(data ?? {}),
+    });
+  }
+
+  async getWorkflowCase(caseId: string): Promise<WorkflowCase> {
+    return this.fetch(`/api/workflow-cases/${caseId}`);
+  }
+
+  async deleteWorkflowCase(caseId: string): Promise<void> {
+    await this.fetch(`/api/workflow-cases/${caseId}`, { method: "DELETE" });
+  }
+
+  async getWorkflowCaseDefinition(caseId: string): Promise<WorkflowDefinitionDraft | null> {
     try {
-      return await this.fetch<WorkflowRun>(`/api/issues/${id}/workflow-run`);
+      return await this.fetch<WorkflowDefinitionDraft>(`/api/workflow-cases/${caseId}/definition`);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) return null;
       throw err;
     }
   }
 
-  async startWorkflowRun(data: {
-    root_issue_id: string;
-    skill_id?: string;
-    definition_snapshot: WorkflowDefinition;
-    current_node?: string;
+  async listWorkflowCaseDefinitionVersions(caseId: string): Promise<WorkflowDefinitionVersion[]> {
+    const resp = await this.fetch<{ versions: WorkflowDefinitionVersion[] }>(`/api/workflow-cases/${caseId}/definition/versions`);
+    return resp.versions;
+  }
+
+  async upsertWorkflowCaseDefinitionDraft(caseId: string, data: {
+    draft_json: WorkflowDefinition;
+    source_templates?: unknown[];
+  }): Promise<WorkflowDefinitionDraft> {
+    return this.fetch(`/api/workflow-cases/${caseId}/definition/draft`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async validateWorkflowCaseDefinition(caseId: string): Promise<WorkflowValidationReport> {
+    return this.fetch(`/api/workflow-cases/${caseId}/definition/validate`, {
+      method: "POST",
+    });
+  }
+
+  async publishWorkflowCaseDefinition(caseId: string, data?: {
+    note?: string;
+  }): Promise<{ version: WorkflowDefinitionVersion }> {
+    return this.fetch(`/api/workflow-cases/${caseId}/definition/publish`, {
+      method: "POST",
+      body: JSON.stringify(data ?? {}),
+    });
+  }
+
+  async listWorkflowCaseRuns(caseId: string): Promise<WorkflowRun[]> {
+    const resp = await this.fetch<{ runs: WorkflowRun[] }>(`/api/workflow-cases/${caseId}/runs`);
+    return resp.runs;
+  }
+
+  async startWorkflowCaseRun(caseId: string, data?: {
+    run_kind?: WorkflowRunKind;
+    label?: string;
+    initial_state?: Record<string, unknown>;
   }): Promise<WorkflowRun> {
-    return this.fetch("/api/workflow-runs", {
+    return this.fetch(`/api/workflow-cases/${caseId}/runs`, {
       method: "POST",
-      body: JSON.stringify(data),
+      body: JSON.stringify(data ?? {}),
     });
   }
 
-  async startIssueWorkflowRun(issueId: string, data: { skill_id: string; initial_state?: Record<string, unknown> }): Promise<{ status: string }> {
-    return this.fetch(`/api/issues/${issueId}/workflow-run/start`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
+  async getWorkflowCaseCurrentRun(caseId: string): Promise<WorkflowRun | null> {
+    try {
+      return await this.fetch<WorkflowRun>(`/api/workflow-cases/${caseId}/current-run`);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) return null;
+      throw err;
+    }
   }
 
-  async cancelWorkflowRun(runId: string, reason?: string): Promise<WorkflowRun> {
-    return this.fetch(`/api/workflow-runs/${runId}/cancel`, {
+  async cancelWorkflowCaseRun(caseId: string, runId: string, reason?: string): Promise<WorkflowRun> {
+    return this.fetch(`/api/workflow-cases/${caseId}/runs/${runId}/cancel`, {
       method: "POST",
       body: JSON.stringify({ reason: reason ?? "workflow stopped by user" }),
-    });
-  }
-
-  async continueWorkflowRun(runId: string, decision: string): Promise<WorkflowRun> {
-    return this.fetch(`/api/workflow-runs/${runId}/continue`, {
-      method: "POST",
-      body: JSON.stringify({ decision }),
     });
   }
 

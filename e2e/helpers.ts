@@ -19,6 +19,7 @@ export async function loginAsDefault(page: Page): Promise<string> {
     "E2E Workspace",
     DEFAULT_E2E_WORKSPACE,
   );
+  await api.completeOnboarding(workspace.id);
 
   const token = api.getToken();
   await page.goto("/login");
@@ -37,7 +38,8 @@ export async function loginAsDefault(page: Page): Promise<string> {
 export async function createTestApi(): Promise<TestApiClient> {
   const api = new TestApiClient();
   await api.login(DEFAULT_E2E_EMAIL, DEFAULT_E2E_NAME);
-  await api.ensureWorkspace("E2E Workspace", DEFAULT_E2E_WORKSPACE);
+  const workspace = await api.ensureWorkspace("E2E Workspace", DEFAULT_E2E_WORKSPACE);
+  await api.completeOnboarding(workspace.id);
   return api;
 }
 

@@ -1,5 +1,5 @@
 import type { Edge, Node } from "@xyflow/react";
-import type { WorkflowDefinition, WorkflowEdge, WorkflowNodeRunState } from "@multica/core/workflow/types";
+import type { WorkflowDefinition, WorkflowEdge, WorkflowNode, WorkflowNodeRunState } from "@multica/core/workflow/types";
 
 const COLUMN_GAP = 360;
 const ROW_GAP = 180;
@@ -51,6 +51,7 @@ export function workflowToReactFlow(
     if (!node) continue;
     const state = runState[nodeId];
     const dispatch = node.dispatch ?? inferDispatch(node.type);
+    const carrierKind = carrierKindFromNode(node);
     nodes.push({
       id: nodeId,
       type: "workflow",
@@ -62,7 +63,7 @@ export function workflowToReactFlow(
         label: nodeId,
         type: node.type,
         dispatch,
-        carrierLabel: carrierLabel(node.type, dispatch),
+        carrierLabel: carrierLabel(node.type, carrierKind),
         status: state?.status ?? "pending",
         subIssueId: state?.sub_issue_id ?? null,
         traexSessionId: state?.traex_session_id ?? null,
@@ -254,14 +255,31 @@ function inferDispatch(type: string): string {
   }
 }
 
-function carrierLabel(type: string, dispatch: string): string {
-  switch (dispatch) {
+function carrierKindFromNode(node: Pick<WorkflowNode, "carrier_kind" | "dispatch" | "type">): string {
+  if (node.carrier_kind) return node.carrier_kind;
+  switch (node.dispatch) {
     case "subissue":
-      return "agent · subissue";
-    case "direct_subagent":
-      return "agent · direct";
+      return "issue";
     case "main_issue_task":
-      return "main agent · main issue";
+      return "issue_task";
+    case "direct_subagent":
+      return "agent_runtime";
+    case "inline":
+      return "inline";
+    default:
+      return inferDispatch(node.type) === "subissue" ? "issue" : "inline";
+  }
+}
+
+function carrierLabel(type: string, carrierKind: string): string {
+  switch (carrierKind) {
+    case "issue":
+      return "agent · issue";
+    case "issue_task":
+      return "agent · issue task";
+    case "agent_runtime":
+      return "agent · runtime";
+    case "inline":
     default:
       return `${type} · inline`;
   }

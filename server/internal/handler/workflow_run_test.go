@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
 func TestGetIssueWorkflowRun_NotFound(t *testing.T) {
@@ -179,6 +182,66 @@ func TestCreateAndUpdateWorkflowRun(t *testing.T) {
 	}
 	if !json.Valid(updated.NodesState) || string(updated.NodesState) == "{}" {
 		t.Fatalf("expected non-empty valid nodes_state, got %s", string(updated.NodesState))
+	}
+}
+
+func TestUpdateWorkflowRunTerminalStatusUpdatesWorkflowCase(t *testing.T) {
+	ctx := context.Background()
+	queries := db.New(testPool)
+	workspaceID := parseUUID(testWorkspaceID)
+	workflowCase, err := queries.CreateWorkflowCase(ctx, db.CreateWorkflowCaseParams{
+		WorkspaceID: workspaceID,
+		Title:       "Case status follows failed run",
+		Description: "case status follows failed run",
+		Status:      "running",
+		CreatedBy:   pgtype.Text{String: "test", Valid: true},
+		UpdatedBy:   pgtype.Text{String: "test", Valid: true},
+	})
+	if err != nil {
+		t.Fatalf("create workflow_case: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(ctx, `DELETE FROM workflow_case WHERE id = $1`, workflowCase.ID)
+	})
+	run, err := queries.CreateWorkflowRun(ctx, db.CreateWorkflowRunParams{
+		WorkspaceID:        workspaceID,
+		Status:             "running",
+		CurrentNode:        "implement",
+		NodesState:         []byte(`{"implement":{"status":"running"}}`),
+		DefinitionSnapshot: []byte(`{"nodes":[{"id":"implement","type":"llm","dispatch":"inline"}]}`),
+		SourceSkills:       []byte(`[]`),
+		CaseID:             workflowCase.ID,
+	})
+	if err != nil {
+		t.Fatalf("create workflow_run: %v", err)
+	}
+	if _, err := queries.UpdateWorkflowCase(ctx, db.UpdateWorkflowCaseParams{
+		ID:           workflowCase.ID,
+		Status:       pgtype.Text{String: "running", Valid: true},
+		CurrentRunID: run.ID,
+		UpdatedBy:    pgtype.Text{String: "test", Valid: true},
+	}); err != nil {
+		t.Fatalf("set current run: %v", err)
+	}
+
+	updateReq := newRequest("PATCH", "/api/workflow-runs/"+uuidToString(run.ID)+"?workspace_id="+testWorkspaceID, map[string]any{
+		"status": "failed",
+		"error":  "no agent route",
+	})
+	updateReq = withURLParam(updateReq, "runId", uuidToString(run.ID))
+	updateW := httptest.NewRecorder()
+
+	testHandler.UpdateWorkflowRun(updateW, updateReq)
+
+	if updateW.Code != http.StatusOK {
+		t.Fatalf("update: expected 200, got %d: %s", updateW.Code, updateW.Body.String())
+	}
+	updatedCase, err := queries.GetWorkflowCase(ctx, workflowCase.ID)
+	if err != nil {
+		t.Fatalf("load workflow_case: %v", err)
+	}
+	if updatedCase.Status != "failed" {
+		t.Fatalf("workflow_case.status = %q, want failed", updatedCase.Status)
 	}
 }
 

@@ -19,6 +19,7 @@ import {
   ListTodo,
   Bot,
   FileText,
+  Workflow,
   Monitor,
   ChevronDown,
   ChevronRight,
@@ -110,6 +111,7 @@ type NavKey =
   | "issues"
   | "projects"
   | "templates"
+  | "workflowCases"
   | "autopilots"
   | "agents"
   | "squads"
@@ -125,6 +127,7 @@ type NavLabelKey =
   | "issues"
   | "projects"
   | "templates"
+  | "workflow_cases"
   | "autopilots"
   | "agents"
   | "squads"
@@ -142,6 +145,7 @@ const workspaceNav: { key: NavKey; labelKey: NavLabelKey; icon: typeof Inbox }[]
   { key: "issues", labelKey: "issues", icon: ListTodo },
   { key: "projects", labelKey: "projects", icon: FolderKanban },
   { key: "templates", labelKey: "templates", icon: FileText },
+  { key: "workflowCases", labelKey: "workflow_cases", icon: Workflow },
   { key: "autopilots", labelKey: "autopilots", icon: Zap },
   { key: "agents", labelKey: "agents", icon: Bot },
   { key: "squads", labelKey: "squads", icon: Users },

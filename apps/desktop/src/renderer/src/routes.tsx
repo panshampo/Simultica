@@ -5,6 +5,7 @@ import {
   Outlet,
   useMatches,
   useParams,
+  useSearchParams,
 } from "react-router-dom";
 import type { RouteObject } from "react-router-dom";
 import { IssueDetailPage } from "./pages/issue-detail-page";
@@ -18,6 +19,7 @@ import { AttachmentPreviewRoute } from "./pages/attachment-preview-page";
 import { IssuesPage } from "@multica/views/issues/components";
 import { ProjectsPage } from "@multica/views/projects/components";
 import { TemplatesPage, TemplateDetailPage } from "@multica/views/templates";
+import { WorkflowCaseDetailPage, WorkflowCaseListPage, WorkflowRunDetailPage } from "@multica/views/workflow";
 import { DashboardPage } from "@multica/views/dashboard";
 import { AutopilotsPage } from "@multica/views/autopilots/components";
 import { MyIssuesPage } from "@multica/views/my-issues";
@@ -71,6 +73,30 @@ function DesktopSettingsRoute() {
 function DesktopTemplateDetailRoute() {
   const { id = "" } = useParams();
   return <TemplateDetailPage templateId={id} />;
+}
+
+function DesktopWorkflowCaseDetailRoute() {
+  const { caseId = "" } = useParams();
+  const [searchParams] = useSearchParams();
+  return (
+    <WorkflowCaseDetailPage
+      caseId={caseId}
+      initialRunId={searchParams.get("run_id")}
+      initialNodeId={searchParams.get("node_id")}
+    />
+  );
+}
+
+function DesktopWorkflowRunDetailRoute() {
+  const { caseId = "", runId = "" } = useParams();
+  const [searchParams] = useSearchParams();
+  return (
+    <WorkflowRunDetailPage
+      caseId={caseId}
+      runId={runId}
+      initialNodeId={searchParams.get("node_id")}
+    />
+  );
 }
 
 /**
@@ -160,6 +186,21 @@ export const appRoutes: RouteObject[] = [
             path: "templates/:id",
             element: <DesktopTemplateDetailRoute />,
             handle: { title: "Template" },
+          },
+          {
+            path: "workflow-cases",
+            element: <WorkflowCaseListPage />,
+            handle: { title: "WorkflowCases" },
+          },
+          {
+            path: "workflow-cases/:caseId",
+            element: <DesktopWorkflowCaseDetailRoute />,
+            handle: { title: "WorkflowCase" },
+          },
+          {
+            path: "workflow-cases/:caseId/runs/:runId",
+            element: <DesktopWorkflowRunDetailRoute />,
+            handle: { title: "WorkflowRun" },
           },
           {
             path: "autopilots",

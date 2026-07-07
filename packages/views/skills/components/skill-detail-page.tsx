@@ -303,7 +303,6 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
   const [addingFile, setAddingFile] = useState(false);
   const [conflictPending, setConflictPending] = useState(false);
   const [activeTab, setActiveTab] = useState<"content" | "workflow">("content");
-  const [debugStarting, setDebugStarting] = useState(false);
 
   const draftRef = useRef({ name, description, content, files });
   draftRef.current = { name, description, content, files };
@@ -504,26 +503,6 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
     });
     qc.invalidateQueries({ queryKey: skillDetailOptions(wsId, skillId).queryKey });
     qc.invalidateQueries({ queryKey: workspaceKeys.skills(wsId) });
-  };
-
-  const handleDebugWorkflow = async () => {
-    if (!skill || !fileMap.has("workflow.yaml")) return;
-    setDebugStarting(true);
-    try {
-      const issue = await api.createIssue({
-        title: `Debug workflow: ${skill.name}`,
-        description: `Debug run for skill workflow \`${skill.name}\`.`,
-        status: "todo",
-        priority: "none",
-      });
-      await api.startIssueWorkflowRun(issue.id, { skill_id: skill.id });
-      toast.success(t(($) => $.detail.workflow_debug.toast_started));
-      navigation.push(paths.issueDetail(issue.id));
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t(($) => $.detail.workflow_debug.toast_failed));
-    } finally {
-      setDebugStarting(false);
-    }
   };
 
   const handleFileContentChange = (newContent: string) => {
@@ -831,22 +810,6 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
         </div>
       ) : (
         <div className="flex flex-1 min-h-0 flex-col bg-background">
-          {fileMap.has("workflow.yaml") && (
-            <div className="flex min-h-10 shrink-0 items-center justify-between gap-3 border-b bg-muted/20 px-4 py-1.5">
-              <div className="flex min-w-0 items-center gap-2">
-                <span className="size-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true" />
-                <div className="truncate text-xs font-medium text-foreground">
-                  {t(($) => $.detail.workflow_debug.title)}
-                </div>
-                <div className="hidden truncate text-xs text-muted-foreground sm:block">
-                  {t(($) => $.detail.workflow_debug.description)}
-                </div>
-              </div>
-              <Button type="button" size="xs" variant="secondary" onClick={handleDebugWorkflow} disabled={debugStarting}>
-                {debugStarting ? t(($) => $.detail.workflow_debug.starting) : t(($) => $.detail.workflow_debug.action)}
-              </Button>
-            </div>
-          )}
           <WorkflowEditor
             skillId={skill.id}
             initialYaml={fileMap.get("workflow.yaml")}

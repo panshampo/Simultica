@@ -15,6 +15,7 @@ import {
   CircleUser,
   ListTodo,
   FolderKanban,
+  Workflow,
   Bot,
   Monitor,
   Moon,
@@ -73,6 +74,7 @@ type NavKey =
   | "myIssues"
   | "issues"
   | "projects"
+  | "workflowCases"
   | "agents"
   | "runtimes"
   | "skills"
@@ -145,6 +147,7 @@ export function SearchCommand() {
     { key: "myIssues", label: t(($) => $.pages.my_issues), icon: CircleUser, keywords: ["my", "issues", "assigned", "我的"] },
     { key: "issues", label: t(($) => $.pages.issues), icon: ListTodo, keywords: ["issues", "tasks", "bugs"] },
     { key: "projects", label: t(($) => $.pages.projects), icon: FolderKanban, keywords: ["projects", "kanban", "项目"] },
+    { key: "workflowCases", label: t(($) => $.pages.workflow_cases), icon: Workflow, keywords: ["workflow", "case", "cases", "runs", "planning"] },
     { key: "agents", label: t(($) => $.pages.agents), icon: Bot, keywords: ["agents", "bots", "ai"] },
     { key: "runtimes", label: t(($) => $.pages.runtimes), icon: Monitor, keywords: ["runtimes", "environments"] },
     { key: "skills", label: t(($) => $.pages.skills), icon: BookOpenText, keywords: ["skills", "library"] },

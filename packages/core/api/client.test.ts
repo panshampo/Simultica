@@ -272,116 +272,149 @@ describe("ApiClient", () => {
     ]);
   });
 
-  it("uses the workflow-run cancel endpoint with a default reason", async () => {
+  it("uses the expected HTTP contract for workflow case endpoints", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(
+      new Response(JSON.stringify({
+        workflow_cases: [],
+        id: "case-1",
+        title: "Case",
+        description: "",
+        version: { id: "version-1" },
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new ApiClient("https://api.example.test");
+
+    await client.createWorkflowCase({ title: "Case", description: "" });
+    await client.createWorkflowCaseFromIssue("issue-1", { owner_agent_id: "agent-1" });
+    await client.getIssueWorkflowContext("issue-1");
+    await client.listWorkflowCaseDefinitionVersions("case-1");
+    await client.publishWorkflowCaseDefinition("case-1");
+    await client.listWorkflowCaseRuns("case-1");
+    await client.getWorkflowCaseCurrentRun("case-1");
+    await client.startWorkflowCaseRun("case-1", {
+      run_kind: "experiment",
+      label: "Approach A",
+      initial_state: {},
+    });
+    await client.cancelWorkflowCaseRun("case-1", "run-1");
+    await client.deleteWorkflowCase("case-1");
+
+    const calls = fetchMock.mock.calls.map(([url, init]) => ({
+      url,
+      method: init?.method ?? "GET",
+      body: init?.body,
+    }));
+
+    expect(calls).toMatchObject([
+      {
+        url: "https://api.example.test/api/workflow-cases",
+        method: "POST",
+        body: JSON.stringify({ title: "Case", description: "" }),
+      },
+      {
+        url: "https://api.example.test/api/issues/issue-1/workflow-cases",
+        method: "POST",
+        body: JSON.stringify({ owner_agent_id: "agent-1" }),
+      },
+      {
+        url: "https://api.example.test/api/issues/issue-1/workflow-context",
+        method: "GET",
+      },
+      {
+        url: "https://api.example.test/api/workflow-cases/case-1/definition/versions",
+        method: "GET",
+      },
+      {
+        url: "https://api.example.test/api/workflow-cases/case-1/definition/publish",
+        method: "POST",
+        body: JSON.stringify({}),
+      },
+      {
+        url: "https://api.example.test/api/workflow-cases/case-1/runs",
+        method: "GET",
+      },
+      {
+        url: "https://api.example.test/api/workflow-cases/case-1/current-run",
+        method: "GET",
+      },
+      {
+        url: "https://api.example.test/api/workflow-cases/case-1/runs",
+        method: "POST",
+        body: JSON.stringify({ run_kind: "experiment", label: "Approach A", initial_state: {} }),
+      },
+      {
+        url: "https://api.example.test/api/workflow-cases/case-1/runs/run-1/cancel",
+        method: "POST",
+        body: JSON.stringify({ reason: "workflow stopped by user" }),
+      },
+      {
+        url: "https://api.example.test/api/workflow-cases/case-1",
+        method: "DELETE",
+      },
+    ]);
+  });
+
+  it("unwraps workflow case run and definition publish response envelopes", async () => {
+    const workflowDefinition = {
+      meta: { name: "runtime" },
+      state: { fields: [] },
+      nodes: [],
+      routing: [],
+    };
     const run = {
       id: "run-1",
-      root_issue_id: "issue-1",
+      root_issue_id: null,
+      case_id: "case-1",
+      definition_version_id: "version-1",
       skill_id: null,
-      status: "cancelled",
+      status: "running",
       current_node: "implement",
       nodes_state: {},
-      definition_snapshot: {
-        meta: { name: "runtime" },
-        state: { fields: [] },
-        nodes: [],
-        routing: [],
-      },
+      definition_snapshot: workflowDefinition,
       error: null,
       created_at: "2026-06-27T00:00:00Z",
       updated_at: "2026-06-27T00:00:00Z",
     };
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(run), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
+    const version = {
+      id: "version-1",
+      workspace_id: "workspace-1",
+      case_id: "case-1",
+      definition_id: "definition-1",
+      version: 1,
+      snapshot_json: workflowDefinition,
+      source_skills: [],
+      validation_report: { valid: true, errors: [], warnings: [] },
+      confirmed_by: "user-1",
+      confirmed_at: "2026-06-27T00:00:00Z",
+      created_at: "2026-06-27T00:00:00Z",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ runs: [run] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ version }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     const client = new ApiClient("https://api.example.test");
-    await client.cancelWorkflowRun("run-1");
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.example.test/api/workflow-runs/run-1/cancel",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ reason: "workflow stopped by user" }),
-      }),
-    );
-  });
-
-  it("uses caller-supplied workflow-run cancel reason", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({
-        id: "run-1",
-        root_issue_id: "issue-1",
-        skill_id: null,
-        status: "cancelled",
-        current_node: "implement",
-        nodes_state: {},
-        definition_snapshot: {
-          meta: { name: "runtime" },
-          state: { fields: [] },
-          nodes: [],
-          routing: [],
-        },
-        error: null,
-        created_at: "2026-06-27T00:00:00Z",
-        updated_at: "2026-06-27T00:00:00Z",
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const client = new ApiClient("https://api.example.test");
-    await client.cancelWorkflowRun("run-1", "operator stopped duplicate run");
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.example.test/api/workflow-runs/run-1/cancel",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ reason: "operator stopped duplicate run" }),
-      }),
-    );
-  });
-
-  it("starts workflow-run continuation with caller decision", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({
-        id: "run-2",
-        root_issue_id: "issue-1",
-        skill_id: "skill-1",
-        status: "running",
-        current_node: "START",
-        nodes_state: {},
-        definition_snapshot: {
-          meta: { name: "runtime" },
-          state: { fields: [] },
-          nodes: [],
-          routing: [],
-        },
-        error: null,
-        created_at: "2026-06-27T00:00:00Z",
-        updated_at: "2026-06-27T00:00:00Z",
-      }), {
-        status: 202,
-        headers: { "Content-Type": "application/json" },
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const client = new ApiClient("https://api.example.test");
-    await client.continueWorkflowRun("run-1", "continue one more stabilization round");
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.example.test/api/workflow-runs/run-1/continue",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ decision: "continue one more stabilization round" }),
-      }),
-    );
+    await expect(client.listWorkflowCaseRuns("case-1")).resolves.toEqual([run]);
+    await expect(
+      client.publishWorkflowCaseDefinition("case-1"),
+    ).resolves.toEqual({ version });
   });
 
   it("emits X-Client-* headers when identity is configured", async () => {

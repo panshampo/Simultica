@@ -1,25 +1,16 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { WorkflowRun } from "@multica/core/workflow/types";
+import type { IssueWorkflowContext } from "@multica/core/workflow/types";
 
 const mocks = vi.hoisted(() => ({
-  getIssueWorkflowRun: vi.fn(),
-  listSkills: vi.fn(),
-  cancelWorkflowRun: vi.fn(),
-  continueWorkflowRun: vi.fn(),
-  startIssueWorkflowRun: vi.fn(),
+  getIssueWorkflowContext: vi.fn(),
   useWSEvent: vi.fn(),
-  push: vi.fn(),
 }));
 
 vi.mock("@multica/core/api", () => ({
   api: {
-    getIssueWorkflowRun: mocks.getIssueWorkflowRun,
-    listSkills: mocks.listSkills,
-    cancelWorkflowRun: mocks.cancelWorkflowRun,
-    continueWorkflowRun: mocks.continueWorkflowRun,
-    startIssueWorkflowRun: mocks.startIssueWorkflowRun,
+    getIssueWorkflowContext: mocks.getIssueWorkflowContext,
   },
 }));
 
@@ -30,6 +21,11 @@ vi.mock("@multica/core/realtime", () => ({
 vi.mock("@multica/core/paths", () => ({
   useWorkspacePaths: () => ({
     issueDetail: (id: string) => `/issues/${id}`,
+    workflowCaseDetail: (id: string) => `/workflow-cases/${id}`,
+    workflowCaseRunDetail: (caseId: string, runId: string, nodeId?: string) => {
+      const base = `/workflow-cases/${caseId}/runs/${runId}`;
+      return nodeId ? `${base}?node_id=${nodeId}` : base;
+    },
   }),
 }));
 
@@ -37,13 +33,6 @@ vi.mock("../../navigation", () => ({
   AppLink: ({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) => (
     <a className={className} href={href}>{children}</a>
   ),
-  useNavigation: () => ({
-    push: mocks.push,
-  }),
-}));
-
-vi.mock("./workflow-canvas", () => ({
-  WorkflowCanvas: () => <div data-testid="workflow-canvas" />,
 }));
 
 import { IssueWorkflowPanel } from "./issue-workflow-panel";
@@ -51,237 +40,95 @@ import { IssueWorkflowPanel } from "./issue-workflow-panel";
 describe("IssueWorkflowPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.listSkills.mockResolvedValue([]);
-    mocks.startIssueWorkflowRun.mockResolvedValue({ status: "started" });
-    mocks.continueWorkflowRun.mockResolvedValue(makeRun({ id: "run-2", status: "running" }));
+    mocks.getIssueWorkflowContext.mockResolvedValue(makeContext({ role: "none" }));
   });
 
-  it("shows lifecycle details and stops active workflow runs", async () => {
-    const activeRun = makeRun({ status: "running", current_node: "implement" });
-    const cancelledRun = makeRun({
-      status: "cancelled",
-      cancel_reason: "workflow stopped by user",
-      cancelled_at: "2026-06-27T02:00:00Z",
-    });
-    mocks.getIssueWorkflowRun.mockResolvedValue(activeRun);
-    mocks.cancelWorkflowRun.mockResolvedValue(cancelledRun);
+  it("shows read-only native issue mode when an issue is not managed by a WorkflowCase", async () => {
+    mocks.getIssueWorkflowContext.mockResolvedValue(makeContext({ role: "none" }));
 
     renderPanel();
 
     expect(await screen.findByText("Runtime workflow")).toBeInTheDocument();
-    expect(await screen.findByTestId("workflow-canvas")).toBeInTheDocument();
-    expect(screen.queryByText("Workflow managed")).not.toBeInTheDocument();
-    expect(screen.queryByText("Node implement")).not.toBeInTheDocument();
-    expect(screen.queryByText("Planner task-123")).not.toBeInTheDocument();
-    expect(screen.queryByText("Source implementation")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Node and child issue status/i }));
-    expect(screen.getByText("agent · subissue")).toBeInTheDocument();
-    expect(screen.queryByText("Run workflow")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Stop workflow" }));
-
-    await waitFor(() => {
-      expect(mocks.cancelWorkflowRun).toHaveBeenCalledWith("run-1");
-    });
-  });
-
-  it.each(["planning", "running", "finalizing"] as const)(
-    "shows Stop workflow for %s runs",
-    async (status) => {
-      mocks.getIssueWorkflowRun.mockResolvedValue(makeRun({ status }));
-
-      renderPanel();
-
-      expect(await screen.findByRole("button", { name: "Stop workflow" })).toBeInTheDocument();
-    },
-  );
-
-  it.each(["pending", "done", "failed", "cancelling", "cancelled"] as const)(
-    "does not show Stop workflow for %s runs",
-    async (status) => {
-      mocks.getIssueWorkflowRun.mockResolvedValue(makeRun({ status }));
-
-      renderPanel();
-
-      expect(await screen.findByText("Runtime workflow")).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Stop workflow" })).not.toBeInTheDocument();
-    },
-  );
-
-  it("does not expose manual workflow debug execution from the issue panel", async () => {
-    mocks.getIssueWorkflowRun.mockResolvedValue(null);
-    mocks.listSkills.mockResolvedValue([
-      { id: "skill-1", name: "Debug skill", config: { has_workflow: true } },
-    ]);
-
-    renderPanel();
-
-    expect(await screen.findByText("Waiting for the main agent to plan this issue.")).toBeInTheDocument();
     expect(screen.getByText("Native issue mode")).toBeInTheDocument();
-    expect(screen.queryByText("Debug run skill workflow")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Run workflow" })).not.toBeInTheDocument();
+    expect(await screen.findByText("WorkflowCase not created")).toBeInTheDocument();
+    expect(screen.getByText("Create or attach a WorkflowCase from the WorkflowCase control plane.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create WorkflowCase from this issue" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Managed by WorkflowCase")).not.toBeInTheDocument();
+    expect(screen.queryByText("Run workflow")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop workflow" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue workflow" })).not.toBeInTheDocument();
   });
 
-  it("explains stopped workflows and distinguishes child task from child issue status", async () => {
-    mocks.getIssueWorkflowRun.mockResolvedValue(makeRun({
-      status: "cancelled",
-      cancel_reason: "real e2e active cancellation",
-      cancelled_at: "2026-06-27T02:00:00Z",
-      nodes_state: {
-        implement: {
-          status: "cancelled",
-          sub_issue_id: "sub-1",
-          task_id: "task-1",
-          source_skill_name: "implementation",
-          source_node_id: "implement-template",
-          started_at: "2026-06-27T01:00:00Z",
-          ended_at: "2026-06-27T02:00:00Z",
-          error: null,
-        },
-        review: {
-          status: "pending",
-          sub_issue_id: null,
-          started_at: null,
-          ended_at: null,
-          error: null,
-        },
-      },
-      definition_snapshot: {
-        meta: { name: "runtime", version: "1" },
-        state: { fields: [] },
-        nodes: [
-          { id: "implement", type: "subissue", source_skill_name: "implementation", source_node_id: "implement-template" },
-          { id: "review", type: "final_response" },
-        ],
-        routing: [{ from: "START", to: "implement" }, { from: "implement", to: "review" }],
-      },
+  it("shows entry issue workflow context and links to the case", async () => {
+    mocks.getIssueWorkflowContext.mockResolvedValue(makeContext({
+      role: "entry_issue",
+      workflow_case_id: "case-1",
+      workflow_run_id: "run-1",
+      carrier_kind: "issue",
     }));
 
     renderPanel();
 
-    expect(await screen.findByText("Workflow stopped")).toBeInTheDocument();
-    expect(screen.getByText(/Active child tasks were cancelled/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Node and child issue status/i }));
-    expect(screen.getByText("Child task cancelled")).toBeInTheDocument();
-    expect(screen.getByText("Child issue kept as record")).toBeInTheDocument();
-    expect(screen.getByText("Skipped after stop")).toBeInTheDocument();
+    expect(await screen.findByText("Managed by WorkflowCase")).toBeInTheDocument();
+    expect(screen.getByText("Role: Entry issue")).toBeInTheDocument();
+    expect(screen.getByText("Carrier: issue")).toBeInTheDocument();
+    expect(screen.getByText("Run run-1")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open case" })).toHaveAttribute("href", "/workflow-cases/case-1");
+    expect(screen.queryByRole("button", { name: "Stop workflow" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue workflow" })).not.toBeInTheDocument();
+  });
+
+  it("shows node issue workflow context with carrier and node id", async () => {
+    mocks.getIssueWorkflowContext.mockResolvedValue(makeContext({
+      role: "node_issue",
+      workflow_case_id: "case-1",
+      workflow_run_id: "run-1",
+      workflow_node_id: "implement-node-123456",
+      carrier_kind: "issue_task",
+    }));
+
+    renderPanel();
+
+    expect(await screen.findByText("Managed by WorkflowCase")).toBeInTheDocument();
+    expect(screen.getByText("Role: Node issue")).toBeInTheDocument();
+    expect(screen.getByText("Carrier: issue_task")).toBeInTheDocument();
+    expect(screen.getByText("Node implemen")).toBeInTheDocument();
+    const openRun = screen.getByRole("link", { name: "Open Run at Node" });
+    expect(openRun).toHaveAttribute(
+      "href",
+      "/workflow-cases/case-1/runs/run-1?node_id=implement-node-123456",
+    );
     expect(screen.queryByRole("button", { name: "Stop workflow" })).not.toBeInTheDocument();
   });
 
-  it("shows direct and main issue task carriers", async () => {
-    mocks.getIssueWorkflowRun.mockResolvedValue(makeRun({
-      nodes_state: {
-        quick_review: {
-          status: "done",
-          sub_issue_id: null,
-          traex_session_id: "traex-session-123456",
-          started_at: "2026-06-27T01:00:00Z",
-          ended_at: "2026-06-27T01:01:00Z",
-          error: null,
-        },
-        final_summary: {
-          status: "running",
-          sub_issue_id: null,
-          main_issue_task_id: "main-task-123456",
-          started_at: "2026-06-27T01:01:00Z",
-          ended_at: null,
-          error: null,
-        },
-      },
-      definition_snapshot: {
-        meta: { name: "runtime", version: "1" },
-        state: { fields: [] },
-        nodes: [
-          { id: "quick_review", type: "agent", dispatch: "direct_subagent", agent: "architect" },
-          { id: "final_summary", type: "main_agent", dispatch: "main_issue_task" },
-        ],
-        routing: [{ from: "START", to: "quick_review" }, { from: "quick_review", to: "final_summary" }],
-      },
+  it("does not show Open Run at Node for an entry issue", async () => {
+    mocks.getIssueWorkflowContext.mockResolvedValue(makeContext({
+      role: "entry_issue",
+      workflow_case_id: "case-1",
+      workflow_run_id: "run-1",
+      carrier_kind: "issue",
     }));
 
     renderPanel();
 
-    fireEvent.click(await screen.findByRole("button", { name: /Node and child issue status/i }));
-    expect(await screen.findByText("agent · direct")).toBeInTheDocument();
-    expect(screen.getByText("main agent · main issue")).toBeInTheDocument();
-    expect(screen.getByText("TraeX session traex-se")).toBeInTheDocument();
-    expect(screen.getByText("Main task main-tas")).toBeInTheDocument();
+    expect(await screen.findByText("Managed by WorkflowCase")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open Run at Node" })).not.toBeInTheDocument();
   });
 
-  it("shows conditional route decisions for looped workflow nodes", async () => {
-    mocks.getIssueWorkflowRun.mockResolvedValue(makeRun({
-      nodes_state: {
-        review_result: {
-          status: "done",
-          sub_issue_id: "sub-review",
-          started_at: "2026-06-27T01:00:00Z",
-          ended_at: "2026-06-27T01:01:00Z",
-          route_decision: {
-            condition: 'workflow_status == "fixable_auto" && revisionCount < 3',
-            condition_result: true,
-            selected_route: "stabilize_run",
-            else_route: "final_report",
-            decided_at: "2026-06-27T01:01:00Z",
-          },
-          error: null,
-        },
-      },
-      definition_snapshot: {
-        meta: { name: "runtime", version: "1" },
-        state: { fields: [] },
-        nodes: [
-          { id: "review_result", type: "agent", dispatch: "subissue", agent: "reviewer" },
-        ],
-        routing: [
-          {
-            from: "review_result",
-            condition: 'workflow_status == "fixable_auto" && revisionCount < 3',
-            to: "stabilize_run",
-            else: "final_report",
-          },
-        ],
-      },
-    }));
+  it.each(["issue", "issue_task", "agent_runtime", "inline"] as const)(
+    "shows canonical carrier name %s",
+    async (carrierKind) => {
+      mocks.getIssueWorkflowContext.mockResolvedValue(makeContext({
+        role: "node_issue",
+        workflow_case_id: "case-1",
+        carrier_kind: carrierKind,
+      }));
 
-    renderPanel();
+      renderPanel();
 
-    fireEvent.click(await screen.findByRole("button", { name: /Node and child issue status/i }));
-    expect(await screen.findByText("Route stabilize_run")).toBeInTheDocument();
-    expect(screen.getByText("Condition true")).toBeInTheDocument();
-    expect(screen.getByText('workflow_status == "fixable_auto" && revisionCount < 3')).toBeInTheDocument();
-  });
-
-  it("offers continuation for budget exhausted workflow runs", async () => {
-    mocks.getIssueWorkflowRun.mockResolvedValue(makeRun({
-      status: "done",
-      nodes_state: {
-        review_result: {
-          status: "done",
-          sub_issue_id: "sub-review",
-          output: { workflow_status: "budget_exhausted", needs_user_decision: true },
-          started_at: "2026-06-27T01:00:00Z",
-          ended_at: "2026-06-27T01:01:00Z",
-          error: null,
-        },
-      },
-      definition_snapshot: {
-        meta: { name: "runtime", version: "1" },
-        state: { fields: [] },
-        nodes: [{ id: "review_result", type: "agent", dispatch: "subissue", agent: "reviewer" }],
-        routing: [{ from: "START", to: "review_result" }],
-      },
-    }));
-
-    renderPanel();
-
-    fireEvent.click(await screen.findByRole("button", { name: /Node and child issue status/i }));
-    const button = await screen.findByRole("button", { name: "Continue workflow" });
-    fireEvent.click(button);
-
-    await waitFor(() => {
-      expect(mocks.continueWorkflowRun).toHaveBeenCalledWith("run-1", "continue workflow after human approval");
-    });
-  });
+      expect(await screen.findByText(`Carrier: ${carrierKind}`)).toBeInTheDocument();
+    },
+  );
 });
 
 function renderPanel() {
@@ -298,46 +145,13 @@ function renderPanel() {
   );
 }
 
-function makeRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
+function makeContext(overrides: Partial<IssueWorkflowContext> = {}): IssueWorkflowContext {
   return {
-    id: "run-1",
-    root_issue_id: "issue-1",
-    skill_id: null,
-    planner_task_id: "task-123456",
-    source_skills: [{ id: "skill-1", name: "implementation" }],
-    status: "running",
-    current_node: "implement",
-    nodes_state: {
-      implement: {
-        status: "running",
-        sub_issue_id: "sub-1",
-        source_skill_name: "implementation",
-        source_node_id: "implement-template",
-        started_at: "2026-06-27T01:00:00Z",
-        ended_at: null,
-        error: null,
-      },
-    },
-    definition_snapshot: {
-      meta: { name: "runtime", version: "1" },
-      source_skills: [{ id: "skill-1", name: "implementation" }],
-      state: { fields: [] },
-      nodes: [
-        {
-          id: "implement",
-          type: "agent",
-          dispatch: "subissue",
-          source_skill_name: "implementation",
-          source_node_id: "implement-template",
-        },
-      ],
-      routing: [{ from: "START", to: "implement" }],
-    },
-    error: null,
-    started_at: "2026-06-27T01:00:00Z",
-    completed_at: null,
-    created_at: "2026-06-27T01:00:00Z",
-    updated_at: "2026-06-27T01:00:00Z",
+    role: "none",
+    workflow_case_id: null,
+    workflow_run_id: null,
+    workflow_node_id: null,
+    carrier_kind: null,
     ...overrides,
   };
 }

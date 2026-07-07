@@ -60,3 +60,100 @@ func TestBuildSubmitRuntimeWorkflowBodyRejectsInvalidInitialState(t *testing.T) 
 		t.Fatalf("expected initial-state JSON error, got %v", err)
 	}
 }
+
+func TestWorkflowSubmitCommandIsDeprecated(t *testing.T) {
+	if !strings.Contains(workflowSubmitCmd.Short, "Deprecated") {
+		t.Fatalf("workflow submit short help must mark issue-first submit as deprecated, got %q", workflowSubmitCmd.Short)
+	}
+	if !strings.Contains(workflowSubmitCmd.Long, "debug/compatibility") {
+		t.Fatalf("workflow submit long help must explain debug/compatibility scope, got %q", workflowSubmitCmd.Long)
+	}
+}
+
+func TestBuildWorkflowCaseCreateRequest(t *testing.T) {
+	path, body := buildWorkflowCaseCreateRequest("workspace-1", "issue-1")
+	if path != "/api/issues/issue-1/workflow-cases?workspace_id=workspace-1" {
+		t.Fatalf("path = %q", path)
+	}
+	if len(body) != 0 {
+		t.Fatalf("body = %#v, want empty create body", body)
+	}
+}
+
+func TestBuildWorkflowCaseDefinitionDraftBody(t *testing.T) {
+	body, err := buildWorkflowCaseDefinitionDraftBody(`{"meta":{"name":"x"}}`)
+	if err != nil {
+		t.Fatalf("buildWorkflowCaseDefinitionDraftBody: %v", err)
+	}
+	if _, ok := body["draft_json"]; !ok {
+		t.Fatalf("body missing draft_json: %#v", body)
+	}
+}
+
+func TestBuildWorkflowCaseRunStartBody(t *testing.T) {
+	body, err := buildWorkflowCaseRunStartBody("experiment", "Approach A", "")
+	if err != nil {
+		t.Fatalf("buildWorkflowCaseRunStartBody: %v", err)
+	}
+	if body["run_kind"] != "experiment" {
+		t.Fatalf("run_kind = %#v", body["run_kind"])
+	}
+	if body["label"] != "Approach A" {
+		t.Fatalf("label = %#v", body["label"])
+	}
+	if _, ok := body["definition_version_id"]; ok {
+		t.Fatalf("run start body must not include definition_version_id: %#v", body)
+	}
+	if !reflect.DeepEqual(body["initial_state"], map[string]any{}) {
+		t.Fatalf("initial_state = %#v", body["initial_state"])
+	}
+}
+
+func TestBuildWorkflowCaseRunStartBodyDefaultsPrimaryWithoutLabel(t *testing.T) {
+	body, err := buildWorkflowCaseRunStartBody("primary", "", "")
+	if err != nil {
+		t.Fatalf("buildWorkflowCaseRunStartBody: %v", err)
+	}
+	if body["run_kind"] != "primary" {
+		t.Fatalf("run_kind = %#v", body["run_kind"])
+	}
+	if _, ok := body["label"]; ok {
+		t.Fatalf("empty label must be omitted: %#v", body)
+	}
+}
+
+func TestWorkflowCaseDefinitionPublishCommandRegistered(t *testing.T) {
+	if workflowCaseDefinitionPublishCmd.Use != "publish <case-id>" {
+		t.Fatalf("publish command Use = %q", workflowCaseDefinitionPublishCmd.Use)
+	}
+	for _, c := range workflowCaseDefinitionCmd.Commands() {
+		if c.Name() == "confirm" {
+			t.Fatalf("definition confirm command must be removed in favor of publish")
+		}
+	}
+}
+
+func TestWorkflowCaseDeleteCommandRegistered(t *testing.T) {
+	found := false
+	for _, c := range workflowCaseCmd.Commands() {
+		if c.Name() == "delete" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("workflow-case delete command must be registered")
+	}
+	if workflowCaseDeleteCmd.Flags().Lookup("yes") == nil {
+		t.Fatalf("workflow-case delete must expose a --yes confirmation flag")
+	}
+}
+
+func TestWorkflowCaseDeleteRequiresConfirmation(t *testing.T) {
+	if err := workflowCaseDeleteCmd.Flags().Set("yes", "false"); err != nil {
+		t.Fatalf("set yes flag: %v", err)
+	}
+	err := runWorkflowCaseDelete(workflowCaseDeleteCmd, []string{"case-123"})
+	if err == nil || !strings.Contains(err.Error(), "--yes") {
+		t.Fatalf("expected refusal without --yes, got %v", err)
+	}
+}

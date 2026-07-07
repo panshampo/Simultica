@@ -12,6 +12,20 @@ describe("paths.workspace(slug)", () => {
     expect(ws.projectDetail("p1")).toBe("/acme/projects/p1");
     expect(ws.templates()).toBe("/acme/templates");
     expect(ws.templateDetail("tpl_1")).toBe("/acme/templates/tpl_1");
+    expect(ws.workflowCases()).toBe("/acme/workflow-cases");
+    expect(ws.workflowCaseDetail("case_1")).toBe("/acme/workflow-cases/case_1");
+    expect(ws.workflowCaseRunDetail("case_1", "run_1")).toBe(
+      "/acme/workflow-cases/case_1/runs/run_1",
+    );
+    expect(ws.workflowCaseRunDetail("case_1", "run_1", "node_1")).toBe(
+      "/acme/workflow-cases/case_1/runs/run_1?node_id=node_1",
+    );
+    expect(ws.workflowCaseRunNode("case_1", "run_1", "node_1")).toBe(
+      "/acme/workflow-cases/case_1?run_id=run_1&node_id=node_1",
+    );
+    expect(ws.workflowCaseRunNode("case_1", "run_1")).toBe(
+      "/acme/workflow-cases/case_1?run_id=run_1",
+    );
     expect(ws.automations()).toBe("/acme/automations");
     expect(ws.automationDetail("auto_1")).toBe("/acme/automations/auto_1");
     expect(ws.autopilots()).toBe("/acme/autopilots");

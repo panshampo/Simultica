@@ -21,6 +21,8 @@
     "./projects/components": "./projects/components/index.ts",
     "./templates": "./templates/index.ts",
     "./templates/components": "./templates/components/index.ts",
+    "./workflow": "./workflow/index.ts",
+    "./workflow/components": "./workflow/components/index.ts",
     "./autopilots/components": "./autopilots/components/index.ts",
     "./modals/registry": "./modals/registry.tsx",
     "./modals/create-issue": "./modals/create-issue.tsx",

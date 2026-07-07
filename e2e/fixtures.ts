@@ -24,6 +24,7 @@ export class TestApiClient {
   private workspaceSlug: string | null = null;
   private workspaceId: string | null = null;
   private createdIssueIds: string[] = [];
+  private createdWorkflowCaseIds: string[] = [];
 
   async login(email: string, name: string) {
     const client = new pg.Client(DATABASE_URL);
@@ -123,6 +124,20 @@ export class TestApiClient {
     throw new Error(`Failed to ensure workspace ${slug}: ${res.status} ${res.statusText}`);
   }
 
+  async completeOnboarding(workspaceId?: string) {
+    const res = await this.authedFetch("/api/me/onboarding/complete", {
+      method: "POST",
+      body: JSON.stringify({
+        completion_path: "skip_existing",
+        workspace_id: workspaceId ?? this.workspaceId ?? undefined,
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`complete onboarding failed: ${res.status} ${await res.text()}`);
+    }
+    return res.json();
+  }
+
   async createIssue(title: string, opts?: Record<string, unknown>) {
     const res = await this.authedFetch("/api/issues", {
       method: "POST",
@@ -137,8 +152,62 @@ export class TestApiClient {
     await this.authedFetch(`/api/issues/${id}`, { method: "DELETE" });
   }
 
+  async createWorkflowCase(data: {
+    title: string;
+    description?: string;
+    source_issue_id?: string | null;
+    owner_agent_id?: string | null;
+  }) {
+    const res = await this.authedFetch("/api/workflow-cases", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      throw new Error(`create workflow case failed: ${res.status} ${await res.text()}`);
+    }
+    const workflowCase = await res.json();
+    this.createdWorkflowCaseIds.push(workflowCase.id);
+    return workflowCase;
+  }
+
+  async upsertWorkflowCaseDefinition(caseId: string, draft: Record<string, unknown>) {
+    const res = await this.authedFetch(`/api/workflow-cases/${caseId}/definition/draft`, {
+      method: "PUT",
+      body: JSON.stringify({
+        draft_json: draft,
+        source_templates: [],
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`upsert workflow definition failed: ${res.status} ${await res.text()}`);
+    }
+    return res.json();
+  }
+
+  async getWorkflowCaseRuns(caseId: string) {
+    const res = await this.authedFetch(`/api/workflow-cases/${caseId}/runs`);
+    if (!res.ok) {
+      throw new Error(`list workflow case runs failed: ${res.status} ${await res.text()}`);
+    }
+    return res.json();
+  }
+
   /** Clean up all issues created during this test. */
   async cleanup() {
+    const client = new pg.Client(DATABASE_URL);
+    await client.connect().catch(() => undefined);
+    try {
+      for (const id of this.createdWorkflowCaseIds) {
+        try {
+          await client.query("DELETE FROM workflow_case WHERE id = $1", [id]);
+        } catch {
+          /* ignore — may already be deleted */
+        }
+      }
+    } finally {
+      await client.end().catch(() => undefined);
+      this.createdWorkflowCaseIds = [];
+    }
     for (const id of this.createdIssueIds) {
       try {
         await this.deleteIssue(id);

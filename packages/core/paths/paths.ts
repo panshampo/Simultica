@@ -25,6 +25,17 @@ function workspaceScoped(slug: string) {
     projectDetail: (id: string) => `${ws}/projects/${encode(id)}`,
     templates: () => `${ws}/templates`,
     templateDetail: (id: string) => `${ws}/templates/${encode(id)}`,
+    workflowCases: () => `${ws}/workflow-cases`,
+    workflowCaseDetail: (id: string) => `${ws}/workflow-cases/${encode(id)}`,
+    workflowCaseRunDetail: (caseId: string, runId: string, nodeId?: string) => {
+      const base = `${ws}/workflow-cases/${encode(caseId)}/runs/${encode(runId)}`;
+      return nodeId ? `${base}?node_id=${encode(nodeId)}` : base;
+    },
+    workflowCaseRunNode: (caseId: string, runId: string, nodeId?: string) => {
+      const query = new URLSearchParams({ run_id: runId });
+      if (nodeId) query.set("node_id", nodeId);
+      return `${ws}/workflow-cases/${encode(caseId)}?${query.toString()}`;
+    },
     automations: () => `${ws}/automations`,
     automationDetail: (id: string) => `${ws}/automations/${encode(id)}`,
     autopilots: () => `${ws}/autopilots`,

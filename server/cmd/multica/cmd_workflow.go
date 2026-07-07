@@ -20,9 +20,11 @@ var workflowCmd = &cobra.Command{
 
 var workflowSubmitCmd = &cobra.Command{
 	Use:   "submit <issue-id>",
-	Short: "Submit a runtime workflow definition for an issue (read JSON from stdin)",
-	Args:  exactArgs(1),
-	RunE:  runWorkflowSubmit,
+	Short: "Deprecated: submit an issue-first runtime workflow definition; use workflow-case instead",
+	Long: "Deprecated: submit an issue-first runtime workflow definition for an issue.\n\n" +
+		"This command remains for debug/compatibility only. New agent briefs and clients must use the case-first `multica workflow-case` command surface.",
+	Args: exactArgs(1),
+	RunE: runWorkflowSubmit,
 }
 
 func init() {
@@ -99,7 +101,7 @@ func runWorkflowSubmit(cmd *cobra.Command, args []string) error {
 
 	params := url.Values{}
 	params.Set("workspace_id", client.WorkspaceID)
-	path := "/api/issues/" + args[0] + "/runtime-workflows?" + params.Encode()
+	path := "/api/internal/debug/workflow/issues/" + args[0] + "/runtime-workflows?" + params.Encode()
 
 	ctx, cancel := cli.APIContext(context.Background())
 	defer cancel()

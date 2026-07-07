@@ -901,17 +901,45 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				})
 			})
 
-			// Workflow runs — semantic progress state written by the
-			// orchestration sidecar and read by issue detail views.
-			r.Get("/api/issues/{id}/workflow-run", h.GetIssueWorkflowRun)
-			r.Post("/api/issues/{id}/workflow-run/start", h.StartIssueWorkflowRun)
-			r.Post("/api/issues/{id}/runtime-workflows", h.SubmitRuntimeWorkflow)
-			r.Route("/api/workflow-runs", func(r chi.Router) {
+			// Workflow context resolution is the only normal issue-scoped
+			// workflow API. Run control belongs to WorkflowCase-scoped APIs.
+			r.Get("/api/issues/{id}/workflow-context", h.GetIssueWorkflowContext)
+			r.Post("/api/issues/{id}/workflow-cases", h.CreateWorkflowCaseFromIssue)
+			r.Route("/api/workflow-cases", func(r chi.Router) {
+				r.Get("/", h.ListWorkflowCases)
+				r.Post("/", h.CreateWorkflowCase)
+				r.Route("/{caseId}", func(r chi.Router) {
+					r.Get("/", h.GetWorkflowCase)
+					r.Patch("/", h.UpdateWorkflowCase)
+					r.Delete("/", h.DeleteWorkflowCase)
+					r.Get("/runs", h.ListWorkflowCaseRuns)
+					r.Post("/runs", h.StartWorkflowCaseRun)
+					r.Get("/current-run", h.GetWorkflowCaseCurrentRun)
+					r.Post("/runs/{runId}/cancel", h.CancelWorkflowCaseRun)
+					r.Get("/definition", h.GetWorkflowCaseDefinition)
+					r.Put("/definition/draft", h.UpsertWorkflowCaseDefinitionDraft)
+					r.Post("/definition/validate", h.ValidateWorkflowCaseDefinitionDraft)
+					r.Post("/definition/publish", h.PublishWorkflowCaseDefinition)
+					r.Get("/definition/versions", h.ListWorkflowCaseDefinitionVersions)
+				})
+			})
+			// Deprecated debug/compatibility surface for pre-WorkflowCase
+			// migration tools. Product UI and agent briefs must not call these
+			// issue-first control routes.
+			r.Route("/api/internal/debug/workflow/issues/{id}", func(r chi.Router) {
+				r.Get("/workflow-run", h.GetIssueWorkflowRun)
+				r.Post("/workflow-run/start", h.StartIssueWorkflowRun)
+				r.Post("/runtime-workflows", h.SubmitRuntimeWorkflow)
+			})
+			r.Route("/api/internal/debug/workflow/runs", func(r chi.Router) {
 				r.Post("/", h.CreateWorkflowRun)
-				r.Patch("/{runId}", h.UpdateWorkflowRun)
 				r.Post("/{runId}/cancel", h.CancelWorkflowRun)
 				r.Post("/{runId}/continue", h.ContinueWorkflowRun)
+			})
+			r.Route("/api/workflow-runs", func(r chi.Router) {
+				r.Patch("/{runId}", h.UpdateWorkflowRun)
 				r.Post("/{runId}/main-node-task", h.CreateWorkflowMainNodeTask)
+				r.Post("/{runId}/nodes/{nodeId}/events", h.CreateWorkflowRunNodeEvent)
 			})
 
 			// Dashboard — workspace-wide token + run-time rollups for the

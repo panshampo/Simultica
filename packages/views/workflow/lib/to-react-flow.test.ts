@@ -103,6 +103,31 @@ describe("workflowToReactFlow", () => {
     expect(impl.data.subIssueId).toBe("sub-1");
   });
 
+  it("prefers carrier_kind and maps legacy dispatch values to carrier labels", () => {
+    const { nodes } = workflowToReactFlow({
+      meta: { name: "carriers" },
+      state: { fields: [] },
+      nodes: [
+        { id: "entry", type: "agent", dispatch: "subissue" },
+        { id: "main", type: "main_agent", dispatch: "main_issue_task" },
+        { id: "runtime", type: "agent", dispatch: "direct_subagent" },
+        { id: "explicit", type: "agent", dispatch: "subissue", carrier_kind: "inline" },
+      ],
+      routing: [
+        { from: "START", to: "entry" },
+        { from: "entry", to: "main" },
+        { from: "main", to: "runtime" },
+        { from: "runtime", to: "explicit" },
+      ],
+    });
+
+    const labels = new Map(nodes.map((node) => [node.id, node.data.carrierLabel]));
+    expect(labels.get("entry")).toBe("agent · issue");
+    expect(labels.get("main")).toBe("agent · issue task");
+    expect(labels.get("runtime")).toBe("agent · runtime");
+    expect(labels.get("explicit")).toBe("agent · inline");
+  });
+
   it("uses explicit handles saved on manually drawn routes", () => {
     const { edges } = workflowToReactFlow({
       ...definition,

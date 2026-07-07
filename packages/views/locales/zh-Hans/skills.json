@@ -121,14 +121,6 @@
       "permissions_locked": "只有创建者或工作区管理员能编辑这个 skill。",
       "used_by_empty": "还未分配给任何智能体。打开某个智能体的 Skills 标签页进行分配。"
     },
-    "workflow_debug": {
-      "title": "调试 workflow",
-      "description": "创建一条临时 issue，并立即启动当前 skill workflow。",
-      "action": "调试运行",
-      "starting": "启动中...",
-      "toast_started": "已启动 workflow 调试 issue",
-      "toast_failed": "启动 workflow 调试 issue 失败"
-    },
     "origin_card": {
       "imported_runtime": "从本地运行时导入",
       "imported_clawhub": "从 ClawHub 导入",

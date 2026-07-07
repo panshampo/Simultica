@@ -1,0 +1,342 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+  WorkflowCase,
+  WorkflowDefinition,
+  WorkflowDefinitionDraft,
+  WorkflowDefinitionVersion,
+  WorkflowRun,
+  WorkflowValidationReport,
+} from "@multica/core/workflow/types";
+
+const mocks = vi.hoisted(() => ({
+  getWorkflowCase: vi.fn(),
+  getWorkflowCaseDefinition: vi.fn(),
+  listWorkflowCaseDefinitionVersions: vi.fn(),
+  listWorkflowCaseRuns: vi.fn(),
+  validateWorkflowCaseDefinition: vi.fn(),
+  publishWorkflowCaseDefinition: vi.fn(),
+  startWorkflowCaseRun: vi.fn(),
+  cancelWorkflowCaseRun: vi.fn(),
+  deleteWorkflowCase: vi.fn(),
+  upsertWorkflowCaseDefinitionDraft: vi.fn(),
+  navigationPush: vi.fn(),
+}));
+
+vi.mock("@multica/core/api", () => ({
+  api: {
+    getWorkflowCase: mocks.getWorkflowCase,
+    getWorkflowCaseDefinition: mocks.getWorkflowCaseDefinition,
+    listWorkflowCaseDefinitionVersions: mocks.listWorkflowCaseDefinitionVersions,
+    listWorkflowCaseRuns: mocks.listWorkflowCaseRuns,
+    validateWorkflowCaseDefinition: mocks.validateWorkflowCaseDefinition,
+    publishWorkflowCaseDefinition: mocks.publishWorkflowCaseDefinition,
+    startWorkflowCaseRun: mocks.startWorkflowCaseRun,
+    cancelWorkflowCaseRun: mocks.cancelWorkflowCaseRun,
+    deleteWorkflowCase: mocks.deleteWorkflowCase,
+    upsertWorkflowCaseDefinitionDraft: mocks.upsertWorkflowCaseDefinitionDraft,
+  },
+}));
+
+vi.mock("@multica/core/hooks", () => ({
+  useWorkspaceId: () => "ws-1",
+}));
+
+vi.mock("@multica/core/paths", () => ({
+  useWorkspacePaths: () => ({
+    workflowCases: () => "/workflow-cases",
+    workflowCaseDetail: (id: string) => `/workflow-cases/${id}`,
+    workflowCaseRunDetail: (caseId: string, runId: string, nodeId?: string) => {
+      const base = `/workflow-cases/${caseId}/runs/${runId}`;
+      return nodeId ? `${base}?node_id=${nodeId}` : base;
+    },
+    issueDetail: (id: string) => `/issues/${id}`,
+  }),
+}));
+
+vi.mock("../../navigation", () => ({
+  AppLink: ({ href, children, className, ...props }: { href: string; children: React.ReactNode; className?: string }) => (
+    <a href={href} className={className} {...props}>{children}</a>
+  ),
+  useNavigation: () => ({ push: mocks.navigationPush }),
+}));
+
+vi.mock("./workflow-canvas", () => ({
+  WorkflowCanvas: ({ definition, runStatus, onSelectNode }: {
+    definition: WorkflowDefinition;
+    runStatus?: string;
+    onSelectNode?: (id: string) => void;
+  }) => (
+    <button
+      type="button"
+      data-testid="workflow-canvas"
+      data-name={definition.meta.name}
+      data-status={runStatus ?? ""}
+      onClick={() => onSelectNode?.("plan")}
+    >
+      {definition.meta.name}
+    </button>
+  ),
+}));
+
+import { WorkflowCaseDetailPage } from "./workflow-case-detail-page";
+
+describe("WorkflowCaseDetailPage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getWorkflowCase.mockResolvedValue(makeCase());
+    mocks.getWorkflowCaseDefinition.mockResolvedValue(makeDraft());
+    mocks.listWorkflowCaseDefinitionVersions.mockResolvedValue([makeVersion()]);
+    mocks.listWorkflowCaseRuns.mockResolvedValue([makeRun({ id: "run-1", status: "done" })]);
+    mocks.validateWorkflowCaseDefinition.mockResolvedValue(makeValidation({ valid: true }));
+    mocks.upsertWorkflowCaseDefinitionDraft.mockResolvedValue(makeDraft());
+    mocks.publishWorkflowCaseDefinition.mockResolvedValue({ version: makeVersion() });
+    mocks.startWorkflowCaseRun.mockResolvedValue(makeRun({ id: "run-2", status: "running" }));
+    mocks.cancelWorkflowCaseRun.mockResolvedValue(makeRun({ id: "run-active", status: "cancelled" }));
+    mocks.deleteWorkflowCase.mockResolvedValue(undefined);
+  });
+
+  it("gates publish on validation, then starts an online-version run without a version id", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Workflow case title")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish online version" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Validate draft" }));
+    await waitFor(() => expect(mocks.validateWorkflowCaseDefinition).toHaveBeenCalledWith("case-1"));
+    expect(await screen.findByText("Validation passed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish online version" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Publish online version" }));
+    await waitFor(() => expect(mocks.publishWorkflowCaseDefinition).toHaveBeenCalledWith("case-1"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Start run" }));
+    await waitFor(() => {
+      expect(mocks.startWorkflowCaseRun).toHaveBeenCalledWith("case-1", {
+        run_kind: "primary",
+        label: undefined,
+        initial_state: {},
+      });
+    });
+    // Start run must never carry a definition_version_id.
+    expect(mocks.startWorkflowCaseRun.mock.calls[0]?.[1]).not.toHaveProperty("definition_version_id");
+  });
+
+  it("disables Start run and publishing when there is no online version", async () => {
+    mocks.getWorkflowCase.mockResolvedValue(makeCase({ online_version_id: null }));
+
+    renderPage();
+
+    expect(await screen.findByText("Workflow case title")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start run" })).toBeDisabled();
+    expect(screen.getByText("Publish an online version before starting a run.")).toBeInTheDocument();
+  });
+
+  it("marks the online version and shows historical versions without a Start run row action", async () => {
+    mocks.getWorkflowCase.mockResolvedValue(makeCase({ online_version_id: "version-2" }));
+    mocks.listWorkflowCaseDefinitionVersions.mockResolvedValue([
+      makeVersion({ id: "version-1", version: 1 }),
+      makeVersion({ id: "version-2", version: 2 }),
+    ]);
+
+    renderPage();
+
+    expect(await screen.findByText("Online")).toBeInTheDocument();
+    expect(screen.getByText("Historical")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Start run from/i })).not.toBeInTheDocument();
+  });
+
+  it("renders multiple parallel active runs and cancels a single run", async () => {
+    mocks.getWorkflowCase.mockResolvedValue(makeCase({ online_version_id: "version-1" }));
+    mocks.listWorkflowCaseRuns.mockResolvedValue([
+      makeRun({ id: "run-a", status: "running", run_kind: "primary" }),
+      makeRun({ id: "run-b", status: "running", run_kind: "experiment" }),
+    ]);
+
+    renderPage();
+
+    expect(await screen.findByText("run-a")).toBeInTheDocument();
+    expect(screen.getByText("run-b")).toBeInTheDocument();
+    const cancelButtons = screen.getAllByRole("button", { name: "Cancel" });
+    expect(cancelButtons.length).toBe(2);
+    fireEvent.click(cancelButtons[0]!);
+    await waitFor(() => expect(mocks.cancelWorkflowCaseRun).toHaveBeenCalledWith("case-1", "run-a"));
+  });
+
+  it("has no confirm-and-run affordance in the UI", async () => {
+    renderPage();
+    await screen.findByText("Workflow case title");
+    expect(screen.queryByText(/Confirm and run/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Confirm version/i })).not.toBeInTheDocument();
+  });
+
+  it("deletes the case after confirmation and navigates back to the list", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: "Delete case" }));
+    // The dialog's confirm action carries the alert-dialog-action data-slot.
+    const dialogConfirm = await waitFor(() => {
+      const match = screen
+        .getAllByRole("button", { name: "Delete case" })
+        .find((b) => b.getAttribute("data-slot") === "alert-dialog-action");
+      if (!match) throw new Error("dialog confirm not mounted yet");
+      return match;
+    });
+    await user.click(dialogConfirm);
+
+    await waitFor(() => expect(mocks.deleteWorkflowCase).toHaveBeenCalledWith("case-1"));
+    await waitFor(() => expect(mocks.navigationPush).toHaveBeenCalledWith("/workflow-cases"));
+  });
+
+  it("creates a starter draft from an empty case and resets validation after saving", async () => {
+    mocks.getWorkflowCaseDefinition.mockResolvedValue(null);
+    mocks.upsertWorkflowCaseDefinitionDraft.mockResolvedValue(makeDraft());
+
+    renderPage();
+
+    expect(await screen.findByText("No definition draft is available for this workflow case.")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Create starter draft" }).at(-1)!);
+    expect(await screen.findByLabelText("Workflow YAML")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply YAML" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await waitFor(() => {
+      expect(mocks.upsertWorkflowCaseDefinitionDraft).toHaveBeenCalledWith(
+        "case-1",
+        expect.objectContaining({
+          source_templates: [],
+          draft_json: expect.objectContaining({
+            meta: expect.objectContaining({ name: "workflow-case" }),
+          }),
+        }),
+      );
+    });
+  });
+});
+
+function renderPage() {
+  const qc = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  return render(
+    <QueryClientProvider client={qc}>
+      <WorkflowCaseDetailPage caseId="case-1" />
+    </QueryClientProvider>,
+  );
+}
+
+const definition: WorkflowDefinition = {
+  meta: { name: "Case workflow", version: "1" },
+  state: { fields: [] },
+  nodes: [{ id: "plan", type: "agent", dispatch: "subissue" }],
+  routing: [{ from: "START", to: "plan" }],
+};
+
+function makeCase(overrides: Partial<WorkflowCase> = {}): WorkflowCase {
+  return {
+    id: "case-1",
+    workspace_id: "ws-1",
+    title: "Workflow case title",
+    description: "Plan this issue",
+    entry_issue_id: "issue-1",
+    source_issue_id: "issue-1",
+    owner_agent_id: null,
+    status: "draft",
+    online_version_id: "version-1",
+    current_run_id: null,
+    created_at: "2026-07-01T00:00:00Z",
+    updated_at: "2026-07-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function makeDraft(): WorkflowDefinitionDraft {
+  return {
+    id: "definition-1",
+    case_id: "case-1",
+    draft_json: definition,
+    source_templates: [],
+    status: "draft",
+    created_at: "2026-07-01T00:00:00Z",
+    updated_at: "2026-07-01T00:00:00Z",
+  };
+}
+
+function makeValidation(overrides: Partial<WorkflowValidationReport> = {}): WorkflowValidationReport {
+  return {
+    valid: true,
+    errors: [],
+    warnings: [],
+    ...overrides,
+  };
+}
+
+function makeVersion(overrides: Partial<WorkflowDefinitionVersion> = {}): WorkflowDefinitionVersion {
+  return {
+    id: "version-1",
+    workspace_id: "ws-1",
+    case_id: "case-1",
+    definition_id: "definition-1",
+    version: 1,
+    snapshot_json: definition,
+    source_skills: [],
+    validation_report: makeValidation({ valid: true }),
+    confirmed_by: "user-1",
+    confirmed_at: "2026-07-01T00:00:00Z",
+    created_at: "2026-07-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function makeRun(overrides: Partial<WorkflowRun> = {}): WorkflowRun {
+  return {
+    id: "run-1",
+    root_issue_id: "issue-1",
+    case_id: "case-1",
+    definition_version_id: "version-1",
+    skill_id: null,
+    status: "done",
+    current_node: "plan",
+    nodes_state: {
+      plan: {
+        status: "done",
+        sub_issue_id: "sub-1",
+        started_at: "2026-07-01T00:00:00Z",
+        ended_at: "2026-07-01T00:01:00Z",
+        error: null,
+      },
+    },
+    nodes: [{
+      id: "run-node-1",
+      run_id: "run-1",
+      node_id: "plan",
+      node_type: "agent",
+      dispatch: "subissue",
+      carrier_kind: "issue",
+      status: "succeeded",
+      attempt: 1,
+      input_snapshot: { issue: "issue-1" },
+      output_snapshot: { result: "ok" },
+      error: null,
+      logs: ["done"],
+      carrier_ref: { sub_issue_id: "sub-1" },
+      started_at: "2026-07-01T00:00:00Z",
+      completed_at: "2026-07-01T00:01:00Z",
+      updated_at: "2026-07-01T00:01:00Z",
+    }],
+    definition_snapshot: definition,
+    error: null,
+    started_at: "2026-07-01T00:00:00Z",
+    completed_at: "2026-07-01T00:01:00Z",
+    created_at: "2026-07-01T00:00:00Z",
+    updated_at: "2026-07-01T00:01:00Z",
+    ...overrides,
+  };
+}
