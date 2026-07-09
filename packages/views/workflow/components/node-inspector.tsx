@@ -24,6 +24,7 @@ const DISPATCH_LABELS: Record<WorkflowDispatch, string> = {
   direct_subagent: "Direct sub-agent",
   inline: "Inline",
   main_issue_task: "Main issue task",
+  human_gate: "Review step",
 };
 
 export function NodeInspector({

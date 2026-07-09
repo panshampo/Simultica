@@ -1,16 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { ArrowLeft, FolderGit2 } from "lucide-react";
+import { api } from "@multica/core/api";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
 import {
   workflowCaseDefinitionVersionsOptions,
   workflowCaseDetailOptions,
   workflowCaseRunsOptions,
+  workflowRunKeys,
 } from "@multica/core/workflow/queries";
 import type { WorkflowRun, WorkflowRunNode } from "@multica/core/workflow/types";
+import { Button } from "@multica/ui/components/ui/button";
 import { Skeleton } from "@multica/ui/components/ui/skeleton";
 import { cn } from "@multica/ui/lib/utils";
 import { PageHeader } from "../../layout/page-header";
@@ -29,7 +33,9 @@ export function WorkflowRunDetailPage({
 }) {
   const wsId = useWorkspaceId();
   const paths = useWorkspacePaths();
+  const qc = useQueryClient();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(initialNodeId ?? null);
+  const [reviewing, setReviewing] = useState(false);
   const { data: workflowCase } = useQuery(workflowCaseDetailOptions(wsId, caseId));
   const { data: versions = [] } = useQuery(workflowCaseDefinitionVersionsOptions(wsId, caseId));
   const { data: runs = [], isLoading } = useQuery(workflowCaseRunsOptions(wsId, caseId));
@@ -44,9 +50,40 @@ export function WorkflowRunDetailPage({
   const selectedDefinitionNode = run?.definition_snapshot.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const nodeMissing = Boolean(initialNodeId) && !isLoading && Boolean(run) && !nodes.some((n) => n.node_id === initialNodeId);
 
+  // A Review Step pauses the run until a human approves or rejects. The step is
+  // whatever node is currently sitting in pending_review; routing (not this UI)
+  // decides what happens next.
+  const reviewStepId = useMemo(() => {
+    const state = run?.nodes_state ?? {};
+    for (const [nodeId, node] of Object.entries(state)) {
+      if (node?.status === "pending_review") return nodeId;
+    }
+    return null;
+  }, [run]);
+  const reviewStepInput = reviewStepId
+    ? (run?.nodes_state?.[reviewStepId] as { input?: unknown } | undefined)?.input
+    : undefined;
+
   useEffect(() => {
     if (initialNodeId) setSelectedNodeId(initialNodeId);
   }, [initialNodeId]);
+
+  async function submitReview(decision: "approved" | "rejected") {
+    if (!reviewStepId || reviewing) return;
+    setReviewing(true);
+    try {
+      await api.reviewWorkflowRunStep(caseId, runId, reviewStepId, { decision });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: workflowRunKeys.caseRuns(wsId, caseId) }),
+        qc.invalidateQueries({ queryKey: workflowRunKeys.caseCurrentRun(wsId, caseId) }),
+      ]);
+      toast.success(decision === "approved" ? "Review step approved" : "Review step rejected");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to submit review");
+    } finally {
+      setReviewing(false);
+    }
+  }
 
   if (isLoading) {
     return <WorkflowRunDetailSkeleton />;
@@ -111,6 +148,33 @@ export function WorkflowRunDetailPage({
             </div>
             {run.error && <p className="mt-3 rounded-md bg-red-50 p-2 text-xs text-red-700">{run.error}</p>}
           </section>
+
+          {reviewStepId && (
+            <section className="rounded-lg border border-amber-300 bg-amber-50 p-4">
+              <h2 className="text-sm font-medium text-amber-900">Review required</h2>
+              <p className="mt-1 text-xs text-amber-800">
+                Step <span className="font-mono">{reviewStepId}</span> is waiting for review. Approve or reject it — the workflow path decides what happens next.
+              </p>
+              {isRenderableRecord(reviewStepInput) && (
+                <dl className="mt-3 space-y-1.5">
+                  {Object.entries(reviewStepInput as Record<string, unknown>).map(([key, value]) => (
+                    <div key={key} className="text-xs">
+                      <dt className="font-medium text-amber-900">{key}</dt>
+                      <dd className="text-amber-800">{formatReviewValue(value)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+              <div className="mt-3 flex gap-2">
+                <Button type="button" size="sm" onClick={() => void submitReview("approved")} disabled={reviewing}>
+                  Approve
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => void submitReview("rejected")} disabled={reviewing}>
+                  Reject
+                </Button>
+              </div>
+            </section>
+          )}
 
           <section className="space-y-3">
             <h2 className="text-sm font-medium">Run graph</h2>
@@ -209,6 +273,20 @@ function NodeTable({
   );
 }
 
+function isRenderableRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value) && Object.keys(value as object).length > 0;
+}
+
+function formatReviewValue(value: unknown): string {
+  if (value === null || value === undefined) return "-";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
 function issueIdFromCarrierRef(ref: unknown): string | null {
   if (!ref || typeof ref !== "object") return null;
   const rec = ref as Record<string, unknown>;
@@ -252,6 +330,8 @@ function runStatusClass(status: WorkflowRun["status"]): string {
     case "running":
     case "finalizing":
       return `${base} bg-blue-100 text-blue-800`;
+    case "waiting_for_review":
+      return `${base} bg-amber-100 text-amber-800`;
     case "done":
       return `${base} bg-green-100 text-green-800`;
     case "failed":
@@ -271,6 +351,8 @@ function nodeStatusClass(status: WorkflowRunNode["status"]): string {
       return `${base} bg-blue-100 text-blue-800`;
     case "succeeded":
       return `${base} bg-green-100 text-green-800`;
+    case "pending_review":
+      return `${base} bg-amber-100 text-amber-800`;
     case "failed":
       return `${base} bg-red-100 text-red-800`;
     case "blocked":

@@ -23,6 +23,7 @@ export function WorkflowRunNodeDetailPanel({
   const carrierIssueId = node.carrier_kind === "issue" ? issueIdFromCarrierRef(node.carrier_ref) : null;
   const agentRoute = definitionNode?.config?.agent ?? definitionNode?.agent ?? null;
   const systemPrompt = definitionNode?.config?.system ?? null;
+  const reviewDecision = reviewDecisionFromOutput(node.output_snapshot);
 
   return (
     <section className="overflow-hidden rounded-lg border bg-card">
@@ -46,6 +47,17 @@ export function WorkflowRunNodeDetailPanel({
             Open sub-issue
           </AppLink>
         )}
+        {reviewDecision && (
+          <div className="space-y-2 rounded-md border bg-background/60 p-2">
+            <div className="text-[11px] font-medium uppercase text-muted-foreground">Review decision</div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <Detail label="Decision" value={reviewDecision.decision} />
+              <Detail label="Reviewed by" value={reviewDecision.reviewed_by} mono />
+              <Detail label="Reviewed at" value={reviewDecision.reviewed_at} />
+            </div>
+            {reviewDecision.comment && <JsonBlock label="Comment" value={reviewDecision.comment} />}
+          </div>
+        )}
         {definitionNode && (
           <div className="space-y-2 rounded-md border bg-background/60 p-2">
             <div className="text-[11px] font-medium uppercase text-muted-foreground">Step configuration</div>
@@ -68,6 +80,19 @@ export function WorkflowRunNodeDetailPanel({
       </div>
     </section>
   );
+}
+
+function reviewDecisionFromOutput(output: unknown): { decision: string; comment?: string; reviewed_by?: string; reviewed_at?: string } | null {
+  if (!output || typeof output !== "object" || Array.isArray(output)) return null;
+  const rec = output as Record<string, unknown>;
+  const decision = rec.review_decision;
+  if (typeof decision !== "string" || decision === "") return null;
+  return {
+    decision,
+    comment: typeof rec.review_comment === "string" ? rec.review_comment : undefined,
+    reviewed_by: typeof rec.reviewed_by === "string" ? rec.reviewed_by : undefined,
+    reviewed_at: typeof rec.reviewed_at === "string" ? rec.reviewed_at : undefined,
+  };
 }
 
 function issueIdFromCarrierRef(ref: unknown): string | null {

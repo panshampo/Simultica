@@ -11,8 +11,10 @@ export type WorkflowNodeType =
   | "condition"
   | "merge"
   | "final_response"
+  | "main_issue_task"
+  | "human_review"
   | "human_gate";
-export type WorkflowDispatch = "subissue" | "direct_subagent" | "inline" | "main_issue_task";
+export type WorkflowDispatch = "subissue" | "direct_subagent" | "inline" | "main_issue_task" | "human_gate";
 export type WorkflowCarrierKind = "issue" | "issue_task" | "agent_runtime" | "inline";
 
 export type IssueWorkflowRole = "entry_issue" | "node_issue" | "none";
@@ -133,7 +135,7 @@ export interface WorkflowDefinitionVersion {
   created_at: string;
 }
 
-export type WorkflowNodeStatus = "pending" | "running" | "done" | "blocked" | "failed" | "cancelling" | "cancelled";
+export type WorkflowNodeStatus = "pending" | "running" | "pending_review" | "done" | "blocked" | "failed" | "cancelling" | "cancelled";
 
 export interface WorkflowNodeRunState {
   status: WorkflowNodeStatus;
@@ -166,6 +168,7 @@ export type WorkflowRunStatus =
   | "pending"
   | "planning"
   | "running"
+  | "waiting_for_review"
   | "finalizing"
   | "done"
   | "failed"
@@ -179,7 +182,7 @@ export interface WorkflowRunNode {
   node_type: WorkflowNodeType | string;
   dispatch: WorkflowDispatch | string;
   carrier_kind?: WorkflowCarrierKind | string;
-  status: "pending" | "running" | "blocked" | "succeeded" | "failed" | "cancelling" | "cancelled" | "skipped";
+  status: "pending" | "running" | "pending_review" | "blocked" | "succeeded" | "failed" | "cancelling" | "cancelled" | "skipped";
   attempt: number;
   input_snapshot?: unknown;
   output_snapshot?: unknown;

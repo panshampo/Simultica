@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   WorkflowCase,
@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   getWorkflowCase: vi.fn(),
   listWorkflowCaseDefinitionVersions: vi.fn(),
   listWorkflowCaseRuns: vi.fn(),
+  reviewWorkflowRunStep: vi.fn(),
 }));
 
 vi.mock("@multica/core/api", () => ({
@@ -19,6 +20,7 @@ vi.mock("@multica/core/api", () => ({
     getWorkflowCase: mocks.getWorkflowCase,
     listWorkflowCaseDefinitionVersions: mocks.listWorkflowCaseDefinitionVersions,
     listWorkflowCaseRuns: mocks.listWorkflowCaseRuns,
+    reviewWorkflowRunStep: mocks.reviewWorkflowRunStep,
   },
 }));
 
@@ -67,6 +69,13 @@ describe("WorkflowRunDetailPage", () => {
     mocks.getWorkflowCase.mockResolvedValue(makeCase());
     mocks.listWorkflowCaseDefinitionVersions.mockResolvedValue([makeVersion()]);
     mocks.listWorkflowCaseRuns.mockResolvedValue([makeRun()]);
+    mocks.reviewWorkflowRunStep.mockResolvedValue({
+      run_id: "run-1",
+      step_id: "review_before_mutation",
+      decision: "approved",
+      reviewed_by: "user-1",
+      reviewed_at: "2026-07-09T12:00:00Z",
+    });
   });
 
   it("renders the run header, node table, and links back to the case", async () => {
@@ -128,6 +137,55 @@ describe("WorkflowRunDetailPage", () => {
     renderPage("does-not-exist");
 
     expect(await screen.findByText("Workflow run not found in this case.")).toBeInTheDocument();
+  });
+
+  it("shows a Review required banner with Approve/Reject when the current step is pending_review", async () => {
+    mocks.listWorkflowCaseRuns.mockResolvedValue([makeReviewRun()]);
+    renderPage("run-1");
+
+    expect(await screen.findByText(/Review required/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Approve/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Reject/i })).toBeInTheDocument();
+  });
+
+  it("does not show the Review banner when no step is pending_review", async () => {
+    renderPage("run-1");
+
+    expect(await screen.findByText("Approach A")).toBeInTheDocument();
+    expect(screen.queryByText(/Review required/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Approve/i })).not.toBeInTheDocument();
+  });
+
+  it("calls the review API with approved when Approve is clicked", async () => {
+    mocks.listWorkflowCaseRuns.mockResolvedValue([makeReviewRun()]);
+    renderPage("run-1");
+
+    fireEvent.click(await screen.findByRole("button", { name: /Approve/i }));
+
+    await waitFor(() =>
+      expect(mocks.reviewWorkflowRunStep).toHaveBeenCalledWith(
+        "case-1",
+        "run-1",
+        "review_before_mutation",
+        expect.objectContaining({ decision: "approved" }),
+      ),
+    );
+  });
+
+  it("calls the review API with rejected when Reject is clicked", async () => {
+    mocks.listWorkflowCaseRuns.mockResolvedValue([makeReviewRun()]);
+    renderPage("run-1");
+
+    fireEvent.click(await screen.findByRole("button", { name: /Reject/i }));
+
+    await waitFor(() =>
+      expect(mocks.reviewWorkflowRunStep).toHaveBeenCalledWith(
+        "case-1",
+        "run-1",
+        "review_before_mutation",
+        expect.objectContaining({ decision: "rejected" }),
+      ),
+    );
   });
 });
 
@@ -238,5 +296,66 @@ function makeRun(): WorkflowRun {
     completed_at: null,
     created_at: "2026-07-06T00:00:00Z",
     updated_at: "2026-07-06T00:00:30Z",
+  };
+}
+
+const reviewDefinition: WorkflowDefinition = {
+  meta: { name: "Run workflow", version: "1" },
+  state: { fields: [] },
+  nodes: [{
+    id: "review_before_mutation",
+    type: "human_review",
+    dispatch: "human_gate",
+    inputs: ["proposed_fix"],
+    outputs: ["review_decision", "review_comment"],
+    config: { title: "Review before code changes", question: "Approve the agent to modify files?" },
+  }],
+  routing: [{ from: "START", to: "review_before_mutation" }],
+};
+
+function makeReviewRun(): WorkflowRun {
+  return {
+    id: "run-1",
+    root_issue_id: "issue-1",
+    case_id: "case-1",
+    definition_version_id: "version-1",
+    skill_id: null,
+    status: "waiting_for_review",
+    label: "Review run",
+    current_node: "review_before_mutation",
+    nodes_state: {
+      review_before_mutation: {
+        status: "pending_review",
+        sub_issue_id: null,
+        started_at: "2026-07-09T00:00:00Z",
+        ended_at: null,
+        error: null,
+        input: { proposed_fix: "Change request builder", risk_assessment: "Touches submit path" },
+      } as never,
+    },
+    nodes: [{
+      id: "run-node-review",
+      run_id: "run-1",
+      node_id: "review_before_mutation",
+      node_type: "human_review",
+      dispatch: "human_gate",
+      carrier_kind: "inline",
+      status: "pending_review" as never,
+      attempt: 1,
+      input_snapshot: { proposed_fix: "Change request builder" },
+      output_snapshot: null,
+      error: null,
+      logs: [],
+      carrier_ref: null,
+      started_at: "2026-07-09T00:00:00Z",
+      completed_at: null,
+      updated_at: "2026-07-09T00:00:30Z",
+    }],
+    definition_snapshot: reviewDefinition,
+    error: null,
+    started_at: "2026-07-09T00:00:00Z",
+    completed_at: null,
+    created_at: "2026-07-09T00:00:00Z",
+    updated_at: "2026-07-09T00:00:30Z",
   };
 }

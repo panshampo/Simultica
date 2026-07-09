@@ -699,6 +699,18 @@ export class ApiClient {
     });
   }
 
+  async reviewWorkflowRunStep(
+    caseId: string,
+    runId: string,
+    stepId: string,
+    data: { decision: "approved" | "rejected"; comment?: string },
+  ): Promise<{ run_id: string; step_id: string; decision: "approved" | "rejected"; reviewed_by: string; reviewed_at: string }> {
+    return this.fetch(`/api/workflow-cases/${caseId}/runs/${runId}/steps/${encodeURIComponent(stepId)}/review`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
   async createIssue(data: CreateIssueRequest): Promise<Issue> {
     return this.fetch("/api/issues", {
       method: "POST",
