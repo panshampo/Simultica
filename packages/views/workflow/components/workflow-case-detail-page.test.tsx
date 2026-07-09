@@ -116,6 +116,25 @@ describe("WorkflowCaseDetailPage", () => {
     expect(screen.queryByLabelText("Workflow YAML")).not.toBeInTheDocument();
   });
 
+  it("uses product-aligned copy: Workflow tab, Active Workflow, Set active", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Workflow case title")).toBeInTheDocument();
+
+    // Tab reads Workflow, never Definition.
+    expect(screen.getByRole("tab", { name: "Workflow" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Definition" })).not.toBeInTheDocument();
+
+    // Overview surfaces "Active Workflow", not "Online version".
+    expect(screen.getByText("Active Workflow")).toBeInTheDocument();
+    expect(screen.queryByText("Online version")).not.toBeInTheDocument();
+
+    // The Workflow tab exposes "Set active", never "Publish online version".
+    await userEvent.click(screen.getByRole("tab", { name: "Workflow" }));
+    expect(screen.getByRole("button", { name: "Set active" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Publish online version" })).not.toBeInTheDocument();
+  });
+
   it("creates a run from the Runs tab without run_kind", async () => {
     renderPage();
 
@@ -154,15 +173,15 @@ describe("WorkflowCaseDetailPage", () => {
     renderPage();
 
     expect(await screen.findByText("Workflow case title")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("tab", { name: "Definition" }));
-    expect(screen.getByRole("button", { name: "Publish online version" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("tab", { name: "Workflow" }));
+    expect(screen.getByRole("button", { name: "Set active" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Validate draft" }));
     await waitFor(() => expect(mocks.validateWorkflowCaseDefinition).toHaveBeenCalledWith("case-1"));
     expect(await screen.findByText("Validation passed")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Publish online version" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Set active" })).toBeEnabled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Publish online version" }));
+    fireEvent.click(screen.getByRole("button", { name: "Set active" }));
     await waitFor(() => expect(mocks.publishWorkflowCaseDefinition).toHaveBeenCalledWith("case-1"));
 
     await userEvent.click(screen.getByRole("tab", { name: "Runs" }));
@@ -186,7 +205,7 @@ describe("WorkflowCaseDetailPage", () => {
     expect(await screen.findByText("Workflow case title")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Runs" }));
     expect(screen.getByRole("button", { name: "Create run" })).toBeDisabled();
-    expect(screen.getByText("Publish an online version before creating a run.")).toBeInTheDocument();
+    expect(screen.getByText("Set a workflow active before creating a run.")).toBeInTheDocument();
   });
 
   it("marks the online version and shows historical versions on Overview", async () => {
@@ -211,7 +230,7 @@ describe("WorkflowCaseDetailPage", () => {
     );
     expect(screen.queryByRole("button", { name: /Create run from/i })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("tab", { name: "Definition" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Workflow" }));
     expect(screen.queryByText("Historical")).not.toBeInTheDocument();
   });
 
@@ -268,7 +287,7 @@ describe("WorkflowCaseDetailPage", () => {
 
     renderPage();
 
-    await userEvent.click(await screen.findByRole("tab", { name: "Definition" }));
+    await userEvent.click(await screen.findByRole("tab", { name: "Workflow" }));
     expect(await screen.findByText("No definition draft is available for this workflow case.")).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "Create starter draft" }).at(-1)!);
     expect(await screen.findByLabelText("Workflow YAML")).toBeInTheDocument();

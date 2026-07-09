@@ -48,11 +48,11 @@ export function WorkflowRunNodeDetailPanel({
         )}
         {definitionNode && (
           <div className="space-y-2 rounded-md border bg-background/60 p-2">
-            <div className="text-[11px] font-medium uppercase text-muted-foreground">Definition</div>
+            <div className="text-[11px] font-medium uppercase text-muted-foreground">Step configuration</div>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <Detail label="Agent route" value={agentRoute} mono />
-              <Detail label="Definition type" value={definitionNode.type} />
-              <Detail label="Definition dispatch" value={definitionNode.dispatch ?? "-"} />
+              <Detail label="Step type" value={definitionNode.type} />
+              <Detail label="Step dispatch" value={definitionNode.dispatch ?? "-"} />
               <Detail label="Carrier" value={definitionNode.carrier_kind ?? "-"} />
             </div>
             <JsonBlock label="Inputs" value={definitionNode.inputs} />

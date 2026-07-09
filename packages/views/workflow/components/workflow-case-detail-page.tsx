@@ -48,7 +48,7 @@ type WorkflowCaseTab = "overview" | "definition" | "runs";
 
 const WORKFLOW_CASE_TABS: Array<{ id: WorkflowCaseTab; label: string }> = [
   { id: "overview", label: "Overview" },
-  { id: "definition", label: "Definition" },
+  { id: "definition", label: "Workflow" },
   { id: "runs", label: "Runs" },
 ];
 
@@ -137,9 +137,9 @@ export function WorkflowCaseDetailPage({
         qc.invalidateQueries({ queryKey: workflowRunKeys.caseCurrentRun(wsId, caseId) }),
         qc.invalidateQueries({ queryKey: workflowRunKeys.caseDefinitionVersions(wsId, caseId) }),
       ]);
-      toast.success("Published online version");
+      toast.success("Workflow set active");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to publish online version");
+      toast.error(err instanceof Error ? err.message : "Failed to set workflow active");
     } finally {
       setPublishing(false);
     }
@@ -453,7 +453,7 @@ function WorkflowCaseOverview({
               </AppLink>
             )}
           </Property>
-          <Property label="Online version" value={onlineVersionId ? shortId(onlineVersionId) : "-"} />
+          <Property label="Active Workflow" value={onlineVersionId ? shortId(onlineVersionId) : "-"} />
           <Property label="Active runs" value={String(activeRunCount)} />
           <Property label="Versions" value={String(versionCount)} />
           <Property label="Updated" value={formatDateTime(workflowCase.updated_at)} />
@@ -556,7 +556,7 @@ function WorkflowCaseDefinitionPanel({
             </Button>
             <Button type="button" size="sm" onClick={() => void publishOnlineVersion()} disabled={!canPublish || publishing}>
               <Rocket className="mr-1 size-3.5" />
-              {publishing ? "Publishing..." : "Publish online version"}
+              {publishing ? "Setting active..." : "Set active"}
             </Button>
           </div>
         </div>
@@ -642,7 +642,7 @@ function WorkflowCaseRunsPanel({
           {starting ? "Creating..." : "Create run"}
         </Button>
         {!hasOnlineVersion && (
-          <p className="text-xs text-muted-foreground">Publish an online version before creating a run.</p>
+          <p className="text-xs text-muted-foreground">Set a workflow active before creating a run.</p>
         )}
       </section>
       <WorkflowCaseRunList
@@ -750,7 +750,7 @@ function WorkflowCaseLifecyclePanel({
         <div>
           <h2 className="text-sm font-medium">Lifecycle</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            No published versions yet. Publish the draft to create the first online version.
+            No snapshots yet. Set the draft active to create the first snapshot.
           </p>
         </div>
         <Button type="button" size="sm" variant="outline" onClick={() => void archiveCase()} disabled={archiving || workflowCaseStatus === "archived"}>
