@@ -1,1 +1,1 @@
-export { WorkflowCaseListPage, WorkflowCaseDetailPage, WorkflowRunDetailPage } from "./components";
+export { WorkflowCaseListPage, WorkflowCaseDetailPage, WorkflowCaseVersionPage, WorkflowRunDetailPage } from "./components";

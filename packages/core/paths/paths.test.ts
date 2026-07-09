@@ -14,6 +14,9 @@ describe("paths.workspace(slug)", () => {
     expect(ws.templateDetail("tpl_1")).toBe("/acme/templates/tpl_1");
     expect(ws.workflowCases()).toBe("/acme/workflow-cases");
     expect(ws.workflowCaseDetail("case_1")).toBe("/acme/workflow-cases/case_1");
+    expect(ws.workflowCaseVersionDetail("case_1", "version_1")).toBe(
+      "/acme/workflow-cases/case_1/versions/version_1",
+    );
     expect(ws.workflowCaseRunDetail("case_1", "run_1")).toBe(
       "/acme/workflow-cases/case_1/runs/run_1",
     );

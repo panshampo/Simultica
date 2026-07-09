@@ -29,7 +29,6 @@ type WorkflowRunResponse struct {
 	SkillID             *string                   `json:"skill_id"`
 	PlannerTaskID       *string                   `json:"planner_task_id,omitempty"`
 	Status              string                    `json:"status"`
-	RunKind             string                    `json:"run_kind"`
 	Label               string                    `json:"label"`
 	CurrentNode         string                    `json:"current_node"`
 	NodesState          json.RawMessage           `json:"nodes_state"`
@@ -106,7 +105,6 @@ func workflowRunToResponse(run db.WorkflowRun) WorkflowRunResponse {
 	resp := WorkflowRunResponse{
 		ID:                 uuidToString(run.ID),
 		Status:             run.Status,
-		RunKind:            run.RunKind,
 		Label:              run.Label,
 		CurrentNode:        run.CurrentNode,
 		NodesState:         json.RawMessage(run.NodesState),

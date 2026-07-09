@@ -46,11 +46,11 @@ const sourceSerif = Source_Serif_4({
 
 export const metadata: Metadata = {
   title: {
-    template: "%s | Multica Docs",
-    default: "Multica Docs",
+    template: "%s | Si-Multica Docs",
+    default: "Si-Multica Docs",
   },
   description:
-    "Documentation for Multica — the open-source managed agents platform.",
+    "Documentation for Si-Multica — the open-source managed agents platform.",
 };
 
 export function generateStaticParams() {

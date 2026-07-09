@@ -1,23 +1,25 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, CheckCircle2, CircleAlert, FolderGit2, Play, Rocket, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CircleAlert, FolderGit2, Play, Rocket } from "lucide-react";
 import { api } from "@multica/core/api";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
 import {
   workflowCaseDefinitionOptions,
   workflowCaseDefinitionVersionsOptions,
+  workflowCaseCurrentRunOptions,
   workflowCaseDetailOptions,
   workflowCaseRunsOptions,
   workflowRunKeys,
 } from "@multica/core/workflow/queries";
 import type {
+  WorkflowCase,
+  WorkflowDefinitionDraft,
   WorkflowDefinitionVersion,
   WorkflowRun,
-  WorkflowRunKind,
   WorkflowValidationReport,
 } from "@multica/core/workflow/types";
 import { Button } from "@multica/ui/components/ui/button";
@@ -39,19 +41,23 @@ import { AppLink, useNavigation } from "../../navigation";
 import { WorkflowCanvas } from "./workflow-canvas";
 import { WorkflowCaseDraftEditor } from "./workflow-case-draft-editor";
 import { WorkflowCaseRunList } from "./workflow-case-run-list";
-import { WorkflowRunNodeDetailPanel } from "./workflow-run-node-detail-panel";
 
 const ACTIVE_RUN_STATUSES = new Set<WorkflowRun["status"]>(["pending", "planning", "running", "finalizing", "cancelling"]);
-const RUN_KINDS: WorkflowRunKind[] = ["primary", "experiment", "shadow", "replay", "debug"];
+
+type WorkflowCaseTab = "overview" | "definition" | "runs";
+
+const WORKFLOW_CASE_TABS: Array<{ id: WorkflowCaseTab; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "definition", label: "Definition" },
+  { id: "runs", label: "Runs" },
+];
 
 export function WorkflowCaseDetailPage({
   caseId,
   initialRunId,
-  initialNodeId,
 }: {
   caseId: string;
   initialRunId?: string | null;
-  initialNodeId?: string | null;
 }) {
   const wsId = useWorkspaceId();
   const paths = useWorkspacePaths();
@@ -65,37 +71,48 @@ export function WorkflowCaseDetailPage({
   const [editingDraft, setEditingDraft] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [runKind, setRunKind] = useState<WorkflowRunKind>("primary");
   const [runLabel, setRunLabel] = useState("");
   const [selectedRunId, setSelectedRunId] = useState<string | null>(initialRunId ?? null);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(initialNodeId ?? null);
+  const [activeTab, setActiveTab] = useState<WorkflowCaseTab>("overview");
+  const [caseTitle, setCaseTitle] = useState("");
+  const [caseDescription, setCaseDescription] = useState("");
+  const [caseOwnerAgentId, setCaseOwnerAgentId] = useState("");
+  const [savingCase, setSavingCase] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   const { data: workflowCase, isLoading: caseLoading } = useQuery(workflowCaseDetailOptions(wsId, caseId));
   const { data: definition, isLoading: definitionLoading } = useQuery(workflowCaseDefinitionOptions(wsId, caseId));
   const { data: definitionVersions = [] } = useQuery(workflowCaseDefinitionVersionsOptions(wsId, caseId));
-  const { data: runs = [], isLoading: runsLoading } = useQuery(workflowCaseRunsOptions(wsId, caseId));
+  const { data: runs = [] } = useQuery(workflowCaseRunsOptions(wsId, caseId));
+  const { data: currentRunFromApi = null } = useQuery(workflowCaseCurrentRunOptions(wsId, caseId));
 
   const onlineVersionId = workflowCase?.online_version_id ?? null;
   const hasOnlineVersion = Boolean(onlineVersionId);
-  const selectedRun = useMemo(() => {
-    if (selectedRunId) return runs.find((run) => run.id === selectedRunId) ?? null;
-    return runs[0] ?? null;
-  }, [runs, selectedRunId]);
-  const selectedRunNode = selectedRun?.nodes?.find((node) => node.node_id === selectedNodeId) ?? null;
   const canPublish = Boolean(definition && validation?.valid && !editingDraft);
   const canStart = hasOnlineVersion && !editingDraft;
   const entryIssueId = workflowCase?.entry_issue_id ?? workflowCase?.source_issue_id ?? null;
-  const activeRunCount = runs.filter((run) => ACTIVE_RUN_STATUSES.has(run.status)).length;
+  const runsWithCurrent = useMemo(
+    () => mergeCurrentRun(runs, currentRunFromApi),
+    [runs, currentRunFromApi],
+  );
+  const activeRunCount = runsWithCurrent.filter((run) => ACTIVE_RUN_STATUSES.has(run.status)).length;
+  const currentRun = (workflowCase?.current_run_id
+    ? runsWithCurrent.find((run) => run.id === workflowCase.current_run_id)
+    : null) ?? currentRunFromApi ?? runsWithCurrent[0] ?? null;
 
   useEffect(() => {
-    if (!selectedRunId && runs[0]) setSelectedRunId(runs[0].id);
-  }, [runs, selectedRunId]);
+    if (!selectedRunId && runsWithCurrent[0]) setSelectedRunId(runsWithCurrent[0].id);
+  }, [runsWithCurrent, selectedRunId]);
 
   useEffect(() => {
-    // Preserve a deep-linked node on the initially targeted run; otherwise
-    // clear node selection whenever the viewed run changes.
-    if (selectedRun?.id === initialRunId) return;
-    setSelectedNodeId(null);
-  }, [selectedRun?.id, initialRunId]);
+    if (initialRunId) setActiveTab("runs");
+  }, [initialRunId]);
+
+  useEffect(() => {
+    if (!workflowCase) return;
+    setCaseTitle(workflowCase.title);
+    setCaseDescription(workflowCase.description ?? "");
+    setCaseOwnerAgentId(workflowCase.owner_agent_id ?? "");
+  }, [workflowCase]);
 
   async function validateDefinition() {
     setValidating(true);
@@ -117,6 +134,7 @@ export function WorkflowCaseDetailPage({
       await api.publishWorkflowCaseDefinition(caseId);
       await Promise.all([
         qc.invalidateQueries({ queryKey: workflowRunKeys.caseDetail(wsId, caseId) }),
+        qc.invalidateQueries({ queryKey: workflowRunKeys.caseCurrentRun(wsId, caseId) }),
         qc.invalidateQueries({ queryKey: workflowRunKeys.caseDefinitionVersions(wsId, caseId) }),
       ]);
       toast.success("Published online version");
@@ -127,17 +145,11 @@ export function WorkflowCaseDetailPage({
     }
   }
 
-  async function discardDraft() {
-    if (!definition) return;
-    setEditingDraft(true);
-  }
-
   async function startRun() {
     if (!canStart) return;
     setStarting(true);
     try {
       const run = await api.startWorkflowCaseRun(caseId, {
-        run_kind: runKind,
         label: runLabel.trim() || undefined,
         initial_state: {},
       });
@@ -149,11 +161,49 @@ export function WorkflowCaseDetailPage({
       setSelectedRunId(run.id);
       setRunLabel("");
       await qc.invalidateQueries({ queryKey: workflowRunKeys.caseRuns(wsId, caseId) });
-      toast.success("Workflow run started");
+      await qc.invalidateQueries({ queryKey: workflowRunKeys.caseCurrentRun(wsId, caseId) });
+      toast.success("Workflow run created");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to start workflow run");
+      toast.error(err instanceof Error ? err.message : "Failed to create workflow run");
     } finally {
       setStarting(false);
+    }
+  }
+
+  async function saveCaseSettings() {
+    const title = caseTitle.trim();
+    if (!title) {
+      toast.error("Case title is required");
+      return;
+    }
+    setSavingCase(true);
+    try {
+      const updated = await api.updateWorkflowCase(caseId, {
+        title,
+        description: caseDescription,
+        owner_agent_id: caseOwnerAgentId.trim() || null,
+      });
+      qc.setQueryData(workflowRunKeys.caseDetail(wsId, caseId), updated);
+      await qc.invalidateQueries({ queryKey: workflowRunKeys.caseList(wsId) });
+      toast.success("Workflow case updated");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update workflow case");
+    } finally {
+      setSavingCase(false);
+    }
+  }
+
+  async function archiveCase() {
+    setArchiving(true);
+    try {
+      const updated = await api.updateWorkflowCase(caseId, { status: "archived" });
+      qc.setQueryData(workflowRunKeys.caseDetail(wsId, caseId), updated);
+      await qc.invalidateQueries({ queryKey: workflowRunKeys.caseList(wsId) });
+      toast.success("Workflow case archived");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to archive workflow case");
+    } finally {
+      setArchiving(false);
     }
   }
 
@@ -224,164 +274,79 @@ export function WorkflowCaseDetailPage({
           <h1 className="truncate text-sm font-medium">{workflowCase.title}</h1>
           <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{workflowCase.status}</span>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="shrink-0 text-red-600 hover:text-red-700"
-          onClick={() => setDeleteOpen(true)}
-        >
-          <Trash2 className="mr-1 size-3.5" />
-          Delete case
-        </Button>
       </PageHeader>
 
-      <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <main className="min-w-0 space-y-4">
-          <section className="rounded-lg border bg-card p-4">
-            <div className="grid gap-3 text-sm md:grid-cols-3 lg:grid-cols-6">
-              <Property label="Status" value={workflowCase.status} />
-              <Property
-                label="Entry issue"
-                value={entryIssueId ? undefined : "-"}
-              >
-                {entryIssueId && (
-                  <AppLink href={paths.issueDetail(entryIssueId)} className="font-mono text-xs underline underline-offset-2">
-                    {entryIssueId}
-                  </AppLink>
-                )}
-              </Property>
-              <Property label="Online version" value={onlineVersionId ? shortId(onlineVersionId) : "-"} />
-              <Property label="Active runs" value={String(activeRunCount)} />
-              <Property label="Versions" value={String(definitionVersions.length)} />
-              <Property label="Updated" value={formatDateTime(workflowCase.updated_at)} />
-            </div>
-            {workflowCase.description && <p className="mt-3 text-sm text-muted-foreground">{workflowCase.description}</p>}
-          </section>
+      <WorkflowCaseTabBar activeTab={activeTab} onTabChange={setActiveTab} />
 
-          {/* Draft Workspace */}
-          <section className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-medium">Draft workspace</h2>
-              <div className="flex items-center gap-2">
-                <Button type="button" size="sm" variant="outline" onClick={() => setEditingDraft(true)}>
-                  {definition ? "Edit draft" : "Create starter draft"}
-                </Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => void validateDefinition()} disabled={!definition || validating || editingDraft}>
-                  {validating ? "Validating..." : "Validate draft"}
-                </Button>
-                <Button type="button" size="sm" onClick={() => void publishOnlineVersion()} disabled={!canPublish || publishing}>
-                  <Rocket className="mr-1 size-3.5" />
-                  {publishing ? "Publishing..." : "Publish online version"}
-                </Button>
-                <Button type="button" size="sm" variant="ghost" onClick={() => void discardDraft()} disabled={!definition || editingDraft}>
-                  <Trash2 className="mr-1 size-3.5" />
-                  Discard draft
-                </Button>
-              </div>
-            </div>
-            {editingDraft ? (
-              <WorkflowCaseDraftEditor
-                caseId={caseId}
-                definition={definition}
-                onCancel={() => setEditingDraft(false)}
-                onSaved={(saved) => {
-                  qc.setQueryData(workflowRunKeys.caseDefinition(wsId, caseId), saved);
-                  setValidation(null);
-                  setEditingDraft(false);
-                }}
-              />
-            ) : definitionLoading ? (
-              <Skeleton className="h-[360px] rounded-lg" />
-            ) : definition ? (
-              <WorkflowCanvas definition={definition.draft_json} fullscreenTitle="Workflow definition draft" />
-            ) : (
-              <div className="rounded-lg border border-dashed bg-background/60 p-4">
-                <p className="text-sm text-muted-foreground">No definition draft is available for this workflow case.</p>
-                <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setEditingDraft(true)}>
-                  Create starter draft
-                </Button>
-              </div>
-            )}
-          </section>
-
-          <ValidationReportPanel report={validation} />
-
-          {/* Versions Workspace */}
-          <VersionsWorkspace versions={definitionVersions} onlineVersionId={onlineVersionId} />
-
-          {/* Runs Workspace: selected run canvas */}
-          <section className="space-y-3">
-            <h2 className="text-sm font-medium">Selected run canvas</h2>
-            {runsLoading ? (
-              <Skeleton className="h-[360px] rounded-lg" />
-            ) : selectedRun ? (
-              <WorkflowCanvas
-                definition={selectedRun.definition_snapshot}
-                runState={selectedRun.nodes_state}
-                runStatus={selectedRun.status}
-                selectedNodeId={selectedNodeId}
-                onSelectNode={setSelectedNodeId}
-                onPaneClick={() => setSelectedNodeId(null)}
-                hideSelectionOverlay
-                fullscreenTitle="Workflow run"
-              />
-            ) : (
-              <div className="rounded-lg border border-dashed bg-background/60 p-4 text-sm text-muted-foreground">
-                Start a run from the online version to see its canvas.
-              </div>
-            )}
-          </section>
-        </main>
-
-        <aside className="space-y-4">
-          {/* Runs Workspace: start form + run list */}
-          <section className="space-y-3 rounded-lg border bg-card p-3">
-            <h2 className="text-sm font-medium">Start run</h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                aria-label="Run kind"
-                className="h-8 rounded-md border bg-background px-2 text-sm"
-                value={runKind}
-                onChange={(event) => setRunKind(event.target.value as WorkflowRunKind)}
-              >
-                {RUN_KINDS.map((kind) => (
-                  <option key={kind} value={kind}>{kind}</option>
-                ))}
-              </select>
-              <Input
-                aria-label="Run label"
-                className="h-8 flex-1"
-                placeholder="Label (optional)"
-                value={runLabel}
-                onChange={(event) => setRunLabel(event.target.value)}
-              />
-            </div>
-            <Button type="button" size="sm" className="w-full" onClick={() => void startRun()} disabled={!canStart || starting}>
-              <Play className="mr-1 size-3.5" />
-              {starting ? "Starting..." : "Start run"}
-            </Button>
-            {!hasOnlineVersion && (
-              <p className="text-xs text-muted-foreground">Publish an online version before starting a run.</p>
-            )}
-          </section>
-          <WorkflowCaseRunList
-            runs={runs}
-            selectedRunId={selectedRun?.id}
-            onSelectRun={setSelectedRunId}
-            onCancelRun={(runId) => void cancelRun(runId)}
-            cancellingRunId={cancellingRunId}
-            activeStatuses={ACTIVE_RUN_STATUSES}
-            openRunHref={(runId) => paths.workflowCaseRunDetail(caseId, runId)}
+      <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        {activeTab === "overview" && (
+          <WorkflowCaseOverview
+            workflowCase={workflowCase}
+            entryIssueId={entryIssueId}
+            issueHref={(issueId) => paths.issueDetail(issueId)}
+            onlineVersionId={onlineVersionId}
+            currentRun={currentRun}
+            currentRunHref={currentRun ? paths.workflowCaseRunDetail(caseId, currentRun.id) : null}
+            activeRunCount={activeRunCount}
+            versionCount={definitionVersions.length}
+            caseTitle={caseTitle}
+            setCaseTitle={setCaseTitle}
+            caseDescription={caseDescription}
+            setCaseDescription={setCaseDescription}
+            caseOwnerAgentId={caseOwnerAgentId}
+            setCaseOwnerAgentId={setCaseOwnerAgentId}
+            savingCase={savingCase}
+            saveCaseSettings={saveCaseSettings}
+            archiving={archiving}
+            archiveCase={archiveCase}
+            versions={definitionVersions}
+            versionHref={(versionId) => paths.workflowCaseVersionDetail(caseId, versionId)}
+            setDeleteOpen={setDeleteOpen}
           />
-          <WorkflowRunNodeDetailPanel node={selectedRunNode} issueHref={(issueId) => paths.issueDetail(issueId)} />
-        </aside>
+        )}
+        {activeTab === "definition" && (
+          <WorkflowCaseDefinitionPanel
+            caseId={caseId}
+            wsId={wsId}
+            qc={qc}
+            definition={definition}
+            definitionLoading={definitionLoading}
+            editingDraft={editingDraft}
+            setEditingDraft={setEditingDraft}
+            validation={validation}
+            setValidation={setValidation}
+            validating={validating}
+            validateDefinition={validateDefinition}
+            publishing={publishing}
+            publishOnlineVersion={publishOnlineVersion}
+            canPublish={canPublish}
+          />
+        )}
+        {activeTab === "runs" && (
+          <WorkflowCaseRunsPanel
+            runs={runs}
+            currentRun={currentRun}
+            versions={definitionVersions}
+            selectedRunId={selectedRunId}
+            runLabel={runLabel}
+            setRunLabel={setRunLabel}
+            canStart={canStart}
+            starting={starting}
+            startRun={startRun}
+            hasOnlineVersion={hasOnlineVersion}
+            setSelectedRunId={setSelectedRunId}
+            cancelRun={cancelRun}
+            cancellingRunId={cancellingRunId}
+            runHref={(runId) => paths.workflowCaseRunDetail(caseId, runId)}
+            versionHref={(versionId) => paths.workflowCaseVersionDetail(caseId, versionId)}
+          />
+        )}
       </div>
 
       <AlertDialog open={deleteOpen} onOpenChange={(open) => { if (!open && !deleting) setDeleteOpen(false); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete workflow case</AlertDialogTitle>
+            <AlertDialogTitle>Delete permanently</AlertDialogTitle>
             <AlertDialogDescription>
               This permanently deletes the case together with its draft, all versions, and all runs and their node history. Carrier sub-issues are kept but detached from this workflow.
               <span className="mt-2 block text-xs text-muted-foreground/80">This action cannot be undone.</span>
@@ -394,7 +359,7 @@ export function WorkflowCaseDetailPage({
               disabled={deleting}
               className="bg-destructive text-white hover:bg-destructive/90"
             >
-              {deleting ? "Deleting..." : "Delete case"}
+              {deleting ? "Deleting..." : "Delete permanently"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -403,25 +368,408 @@ export function WorkflowCaseDetailPage({
   );
 }
 
-function VersionsWorkspace({
+function WorkflowCaseTabBar({
+  activeTab,
+  onTabChange,
+}: {
+  activeTab: WorkflowCaseTab;
+  onTabChange: (tab: WorkflowCaseTab) => void;
+}) {
+  return (
+    <div role="tablist" aria-label="Workflow case sections" className="flex h-10 shrink-0 items-center gap-1 border-b px-5">
+      {WORKFLOW_CASE_TABS.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === tab.id}
+          className={cn(
+            "h-8 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent hover:text-foreground",
+            activeTab === tab.id && "bg-accent text-foreground",
+          )}
+          onClick={() => onTabChange(tab.id)}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function WorkflowCaseOverview({
+  workflowCase,
+  entryIssueId,
+  issueHref,
+  onlineVersionId,
+  currentRun,
+  currentRunHref,
+  activeRunCount,
+  versionCount,
+  caseTitle,
+  setCaseTitle,
+  caseDescription,
+  setCaseDescription,
+  caseOwnerAgentId,
+  setCaseOwnerAgentId,
+  savingCase,
+  saveCaseSettings,
+  archiving,
+  archiveCase,
+  versions,
+  versionHref,
+  setDeleteOpen,
+}: {
+  workflowCase: WorkflowCase;
+  entryIssueId: string | null;
+  issueHref: (issueId: string) => string;
+  onlineVersionId: string | null;
+  currentRun: WorkflowRun | null;
+  currentRunHref: string | null;
+  activeRunCount: number;
+  versionCount: number;
+  caseTitle: string;
+  setCaseTitle: (title: string) => void;
+  caseDescription: string;
+  setCaseDescription: (description: string) => void;
+  caseOwnerAgentId: string;
+  setCaseOwnerAgentId: (ownerAgentId: string) => void;
+  savingCase: boolean;
+  saveCaseSettings: () => Promise<void>;
+  archiving: boolean;
+  archiveCase: () => Promise<void>;
+  versions: WorkflowDefinitionVersion[];
+  versionHref: (versionId: string) => string;
+  setDeleteOpen: (open: boolean) => void;
+}) {
+  return (
+    <main className="max-w-5xl space-y-4">
+      <section className="rounded-lg border bg-card p-4">
+        <div className="grid gap-3 text-sm md:grid-cols-3 lg:grid-cols-6">
+          <Property label="Status" value={workflowCase.status} />
+          <Property label="Entry issue" value={entryIssueId ? undefined : "-"}>
+            {entryIssueId && (
+              <AppLink href={issueHref(entryIssueId)} className="font-mono text-xs underline underline-offset-2">
+                {entryIssueId}
+              </AppLink>
+            )}
+          </Property>
+          <Property label="Online version" value={onlineVersionId ? shortId(onlineVersionId) : "-"} />
+          <Property label="Active runs" value={String(activeRunCount)} />
+          <Property label="Versions" value={String(versionCount)} />
+          <Property label="Updated" value={formatDateTime(workflowCase.updated_at)} />
+        </div>
+        {workflowCase.description && <p className="mt-3 text-sm text-muted-foreground">{workflowCase.description}</p>}
+      </section>
+
+      <section className="rounded-lg border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-sm font-medium">Current run</h2>
+            {currentRun ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span className={runStatusClass(currentRun.status)}>{currentRun.status}</span>
+                <span className="font-mono">{shortId(currentRun.id)}</span>
+                {currentRun.label && <span className="truncate">{currentRun.label}</span>}
+                {currentRun.current_node && <span className="rounded bg-muted px-1.5 py-0.5 font-mono">{currentRun.current_node}</span>}
+              </div>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">No run has been created yet.</p>
+            )}
+          </div>
+          {currentRun && currentRunHref && (
+            <AppLink
+              href={currentRunHref}
+              className="inline-flex h-8 shrink-0 items-center justify-center rounded-md border border-border bg-background px-3 text-xs font-medium hover:bg-muted hover:text-foreground"
+            >
+              Open current run
+            </AppLink>
+          )}
+        </div>
+      </section>
+
+      <WorkflowCaseSettingsPanel
+        caseTitle={caseTitle}
+        setCaseTitle={setCaseTitle}
+        caseDescription={caseDescription}
+        setCaseDescription={setCaseDescription}
+        caseOwnerAgentId={caseOwnerAgentId}
+        setCaseOwnerAgentId={setCaseOwnerAgentId}
+        savingCase={savingCase}
+        saveCaseSettings={saveCaseSettings}
+        setDeleteOpen={setDeleteOpen}
+      />
+
+      <WorkflowCaseLifecyclePanel
+        versions={versions}
+        onlineVersionId={onlineVersionId}
+        workflowCaseStatus={workflowCase.status}
+        archiving={archiving}
+        archiveCase={archiveCase}
+        versionHref={versionHref}
+      />
+    </main>
+  );
+}
+
+function WorkflowCaseDefinitionPanel({
+  caseId,
+  wsId,
+  qc,
+  definition,
+  definitionLoading,
+  editingDraft,
+  setEditingDraft,
+  validation,
+  setValidation,
+  validating,
+  validateDefinition,
+  publishing,
+  publishOnlineVersion,
+  canPublish,
+}: {
+  caseId: string;
+  wsId: string;
+  qc: QueryClient;
+  definition: WorkflowDefinitionDraft | null | undefined;
+  definitionLoading: boolean;
+  editingDraft: boolean;
+  setEditingDraft: (editing: boolean) => void;
+  validation: WorkflowValidationReport | null;
+  setValidation: (report: WorkflowValidationReport | null) => void;
+  validating: boolean;
+  validateDefinition: () => Promise<void>;
+  publishing: boolean;
+  publishOnlineVersion: () => Promise<void>;
+  canPublish: boolean;
+}) {
+  return (
+    <main className="max-w-6xl space-y-4">
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-medium">Draft workspace</h2>
+          <div className="flex items-center gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={() => setEditingDraft(true)}>
+              {definition ? "Edit draft" : "Create starter draft"}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => void validateDefinition()} disabled={!definition || validating || editingDraft}>
+              {validating ? "Validating..." : "Validate draft"}
+            </Button>
+            <Button type="button" size="sm" onClick={() => void publishOnlineVersion()} disabled={!canPublish || publishing}>
+              <Rocket className="mr-1 size-3.5" />
+              {publishing ? "Publishing..." : "Publish online version"}
+            </Button>
+          </div>
+        </div>
+        {editingDraft ? (
+          <WorkflowCaseDraftEditor
+            caseId={caseId}
+            definition={definition}
+            onCancel={() => setEditingDraft(false)}
+            onSaved={(saved) => {
+              qc.setQueryData(workflowRunKeys.caseDefinition(wsId, caseId), saved);
+              setValidation(null);
+              setEditingDraft(false);
+            }}
+          />
+        ) : definitionLoading ? (
+          <Skeleton className="h-[360px] rounded-lg" />
+        ) : definition ? (
+          <WorkflowCanvas definition={definition.draft_json} fullscreenTitle="Workflow definition draft" />
+        ) : (
+          <div className="rounded-lg border border-dashed bg-background/60 p-4">
+            <p className="text-sm text-muted-foreground">No definition draft is available for this workflow case.</p>
+            <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setEditingDraft(true)}>
+              Create starter draft
+            </Button>
+          </div>
+        )}
+      </section>
+
+      <ValidationReportPanel report={validation} />
+    </main>
+  );
+}
+
+function WorkflowCaseRunsPanel({
+  runs,
+  currentRun,
+  versions,
+  selectedRunId,
+  runLabel,
+  setRunLabel,
+  canStart,
+  starting,
+  startRun,
+  hasOnlineVersion,
+  setSelectedRunId,
+  cancelRun,
+  cancellingRunId,
+  runHref,
+  versionHref,
+}: {
+  runs: WorkflowRun[];
+  currentRun: WorkflowRun | null;
+  versions: WorkflowDefinitionVersion[];
+  selectedRunId: string | null;
+  runLabel: string;
+  setRunLabel: (label: string) => void;
+  canStart: boolean;
+  starting: boolean;
+  startRun: () => Promise<void>;
+  hasOnlineVersion: boolean;
+  setSelectedRunId: (runId: string) => void;
+  cancelRun: (runId: string) => Promise<void>;
+  cancellingRunId: string | null;
+  runHref: (runId: string) => string;
+  versionHref: (versionId: string) => string;
+}) {
+  const versionLabelById = Object.fromEntries(
+    versions.map((version) => [version.id, `v${version.version}`]),
+  );
+  return (
+    <div className="grid max-w-6xl gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+      <section className="h-fit space-y-3 rounded-lg border bg-card p-3">
+        <h2 className="text-sm font-medium">Create run</h2>
+        <Input
+          aria-label="Run label"
+          className="h-8"
+          placeholder="Label (optional)"
+          value={runLabel}
+          onChange={(event) => setRunLabel(event.target.value)}
+        />
+        <Button type="button" size="sm" className="w-full" onClick={() => void startRun()} disabled={!canStart || starting}>
+          <Play className="mr-1 size-3.5" />
+          {starting ? "Creating..." : "Create run"}
+        </Button>
+        {!hasOnlineVersion && (
+          <p className="text-xs text-muted-foreground">Publish an online version before creating a run.</p>
+        )}
+      </section>
+      <WorkflowCaseRunList
+        runs={mergeCurrentRun(runs, currentRun)}
+        selectedRunId={selectedRunId}
+        onSelectRun={setSelectedRunId}
+        onCancelRun={(runId) => void cancelRun(runId)}
+        cancellingRunId={cancellingRunId}
+        activeStatuses={ACTIVE_RUN_STATUSES}
+        openRunHref={(runId) => runHref(runId)}
+        versionHref={versionHref}
+        versionLabelById={versionLabelById}
+      />
+    </div>
+  );
+}
+
+function mergeCurrentRun(runs: WorkflowRun[], currentRun: WorkflowRun | null | undefined): WorkflowRun[] {
+  if (!currentRun) return runs;
+  const rest = runs.filter((run) => run.id !== currentRun.id);
+  return [currentRun, ...rest];
+}
+
+function WorkflowCaseSettingsPanel({
+  caseTitle,
+  setCaseTitle,
+  caseDescription,
+  setCaseDescription,
+  caseOwnerAgentId,
+  setCaseOwnerAgentId,
+  savingCase,
+  saveCaseSettings,
+  setDeleteOpen,
+}: {
+  caseTitle: string;
+  setCaseTitle: (title: string) => void;
+  caseDescription: string;
+  setCaseDescription: (description: string) => void;
+  caseOwnerAgentId: string;
+  setCaseOwnerAgentId: (ownerAgentId: string) => void;
+  savingCase: boolean;
+  saveCaseSettings: () => Promise<void>;
+  setDeleteOpen: (open: boolean) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <section className="space-y-3 rounded-lg border bg-card p-4">
+        <div>
+          <h2 className="text-sm font-medium">Case metadata</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Update the human-facing name, description, and owning agent for this workflow case.</p>
+        </div>
+        <label className="block space-y-1">
+          <span className="text-xs font-medium text-muted-foreground">Case title</span>
+          <Input aria-label="Case title" value={caseTitle} onChange={(event) => setCaseTitle(event.target.value)} />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-xs font-medium text-muted-foreground">Owner agent ID</span>
+          <Input aria-label="Owner agent ID" value={caseOwnerAgentId} onChange={(event) => setCaseOwnerAgentId(event.target.value)} />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-xs font-medium text-muted-foreground">Description</span>
+          <textarea
+            aria-label="Description"
+            className="min-h-24 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            value={caseDescription}
+            onChange={(event) => setCaseDescription(event.target.value)}
+          />
+        </label>
+        <Button type="button" size="sm" onClick={() => void saveCaseSettings()} disabled={savingCase}>
+          {savingCase ? "Saving..." : "Save changes"}
+        </Button>
+      </section>
+
+      <section className="rounded-lg border border-red-200 bg-card p-4">
+        <h2 className="text-sm font-medium text-red-700">Danger zone</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Permanent deletion removes the case, draft, versions, runs, node history, and event history. Active runs must be cancelled first.
+        </p>
+        <Button type="button" size="sm" variant="outline" className="mt-3 text-red-600 hover:text-red-700" onClick={() => setDeleteOpen(true)}>
+          Delete permanently
+        </Button>
+      </section>
+    </div>
+  );
+}
+
+function WorkflowCaseLifecyclePanel({
   versions,
   onlineVersionId,
+  workflowCaseStatus,
+  archiving,
+  archiveCase,
+  versionHref,
 }: {
   versions: WorkflowDefinitionVersion[];
   onlineVersionId: string | null;
+  workflowCaseStatus: WorkflowCase["status"];
+  archiving: boolean;
+  archiveCase: () => Promise<void>;
+  versionHref: (versionId: string) => string;
 }) {
   if (versions.length === 0) {
     return (
-      <section className="rounded-lg border border-dashed bg-background/60 p-4 text-sm text-muted-foreground">
-        No published versions yet. Publish the draft to create the first online version.
+      <section className="space-y-3 rounded-lg border bg-card p-4">
+        <div>
+          <h2 className="text-sm font-medium">Lifecycle</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            No published versions yet. Publish the draft to create the first online version.
+          </p>
+        </div>
+        <Button type="button" size="sm" variant="outline" onClick={() => void archiveCase()} disabled={archiving || workflowCaseStatus === "archived"}>
+          {archiving ? "Archiving..." : "Archive case"}
+        </Button>
       </section>
     );
   }
   const sorted = [...versions].sort((a, b) => b.version - a.version);
   return (
     <section className="overflow-hidden rounded-lg border bg-card">
-      <div className="border-b px-3 py-2">
-        <h2 className="text-sm font-medium">Versions</h2>
+      <div className="flex items-start justify-between gap-3 border-b px-3 py-2">
+        <div>
+          <h2 className="text-sm font-medium">Lifecycle</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Published versions and archive controls.</p>
+        </div>
+        <Button type="button" size="sm" variant="outline" onClick={() => void archiveCase()} disabled={archiving || workflowCaseStatus === "archived"}>
+          {archiving ? "Archiving..." : "Archive case"}
+        </Button>
       </div>
       <ul className="divide-y">
         {sorted.map((version) => {
@@ -445,6 +793,12 @@ function VersionsWorkspace({
                   {version.validation_report?.valid === false ? " · validation issues" : ""}
                 </div>
               </div>
+              <AppLink
+                href={versionHref(version.id)}
+                className="shrink-0 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                Open v{version.version}
+              </AppLink>
             </li>
           );
         })}
@@ -491,6 +845,25 @@ function Property({ label, value, children }: { label: string; value?: string; c
       <div className="mt-1 truncate text-sm">{children ?? value}</div>
     </div>
   );
+}
+
+function runStatusClass(status: WorkflowRun["status"]): string {
+  const base = "rounded px-1.5 py-0.5 text-xs";
+  switch (status) {
+    case "planning":
+    case "running":
+    case "finalizing":
+      return `${base} bg-blue-100 text-blue-800`;
+    case "done":
+      return `${base} bg-green-100 text-green-800`;
+    case "failed":
+      return `${base} bg-red-100 text-red-800`;
+    case "cancelled":
+    case "cancelling":
+      return `${base} bg-slate-100 text-slate-700`;
+    default:
+      return `${base} bg-muted text-muted-foreground`;
+  }
 }
 
 function WorkflowCaseDetailSkeleton() {

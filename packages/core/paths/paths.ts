@@ -27,6 +27,7 @@ function workspaceScoped(slug: string) {
     templateDetail: (id: string) => `${ws}/templates/${encode(id)}`,
     workflowCases: () => `${ws}/workflow-cases`,
     workflowCaseDetail: (id: string) => `${ws}/workflow-cases/${encode(id)}`,
+    workflowCaseVersionDetail: (caseId: string, versionId: string) => `${ws}/workflow-cases/${encode(caseId)}/versions/${encode(versionId)}`,
     workflowCaseRunDetail: (caseId: string, runId: string, nodeId?: string) => {
       const base = `${ws}/workflow-cases/${encode(caseId)}/runs/${encode(runId)}`;
       return nodeId ? `${base}?node_id=${encode(nodeId)}` : base;

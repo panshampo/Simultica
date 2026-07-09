@@ -1,0 +1,82 @@
+---
+title: Issue Templates
+description: Reusable issue shapes for manual issue creation and automation.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Mermaid } from "@/components/mermaid";
+
+An Issue Template is a reusable shape for creating Issues. It stores the title pattern, body, assignee, priority, project, labels, and default metadata for new Issues.
+
+<Callout type="info">
+In Si-Multica, "Template" means Issue Template. It does not create Skills, Agents, Workflows, or Runs.
+</Callout>
+
+## What an Issue Template Does
+
+**Issue Templates answer one question: what should a new Issue look like when it is created from this reusable shape?**
+
+An Issue Template can define:
+
+| Field | Purpose |
+|---|---|
+| Name | The template's display name |
+| Issue title template | The title of the created Issue |
+| Issue body template | The Markdown body of the created Issue |
+| Assignee | The Agent or Squad assigned to the created Issue |
+| Priority | The priority copied to the created Issue |
+| Project | Optional project for the created Issue |
+| Labels | Labels copied to the created Issue |
+| Default metadata | Structured context for downstream execution |
+| Execution spec | Optional execution hints for automation or runtime behavior |
+
+When an Issue is created from a template, the Issue owns its own state afterwards. Editing the template later does not rewrite existing Issues.
+
+## Two Ways to Use Templates
+
+**Templates can be used manually or by Automation. Both paths create Issues.**
+
+<Mermaid chart={`
+flowchart LR
+  Template["Issue Template"] --> Manual["Manual use"]
+  Template --> Automation["Automation"]
+  Manual --> IssueA["New Issue"]
+  Automation --> IssueB["New Issue"]
+  IssueA --> AgentTask["Agent task when assigned"]
+  IssueB --> AgentTask
+`} />
+
+### Manual Use
+
+Use a template from the issue creation flow when you want to create a new Issue with known defaults. This is useful for repeated work such as release reviews, weekly triage, or standard investigation requests.
+
+### Automation Use
+
+Automation can reference an Issue Template. When the schedule or webhook fires, Si-Multica creates a new Issue from the template and then dispatches it through the normal issue assignment path.
+
+## How Templates Differ From Workflows
+
+**An Issue Template creates an Issue. A Workflow runs complex AI work in stages. They are different product capabilities.**
+
+| Capability | It creates or manages | Best for |
+|---|---|---|
+| Issue Template | New Issues with default fields | Repeated issue creation |
+| Automation | Scheduled/manual/webhook triggers | Starting work without a human click |
+| Workflow | Draft, Active Workflow, Runs, Steps, Review Steps | Complex or risky AI work that needs staged execution |
+| Skill | Reusable agent knowledge and workflow shapes | Making an Agent better at a category of work |
+
+Do not call a Skill workflow shape a Template. Use "workflow shape" or "reusable subgraph" for Skills, and use "Issue Template" for issue creation defaults.
+
+## Deleting Templates
+
+Templates cannot be deleted while they are referenced by existing Issues or Automations. This protects the audit trail:
+
+- Existing Issues keep the template snapshot they were created from.
+- Automations keep a stable reference to the Issue Template they use.
+- Deleting a template never deletes existing Issues.
+
+## Related Pages
+
+- [Issues and projects](/issues) - understand what an Issue owns after creation.
+- [Automations](/autopilots) - run recurring or webhook-triggered work from inline issue config or an Issue Template.
+- [Workflows](/workflow-issues) - understand when a Workflow is the right model instead of an Issue Template.

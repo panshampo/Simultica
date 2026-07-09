@@ -1,0 +1,82 @@
+---
+title: Issue Templates
+description: 用于手动创建 issue 和自动化创建 issue 的可复用 issue 形态。
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Mermaid } from "@/components/mermaid";
+
+Issue Template 是创建 Issue 的可复用形态。它保存新 Issue 的标题模式、正文、负责人、优先级、项目、标签和默认元数据。
+
+<Callout type="info">
+在 Si-Multica 里，"Template" 指 Issue Template。它不创建 Skill、Agent、Workflow 或 Run。
+</Callout>
+
+## Issue Template 做什么
+
+**结论：Issue Template 只回答一个问题：从这个可复用形态创建的新 Issue 应该长什么样。**
+
+Issue Template 可以定义：
+
+| 字段 | 用途 |
+|---|---|
+| 名称 | 模板显示名 |
+| Issue 标题模板 | 创建出来的 Issue 标题 |
+| Issue 正文模板 | 创建出来的 Issue Markdown 正文 |
+| 负责人 | 创建出来的 Issue 分配给哪个 Agent 或 Squad |
+| 优先级 | 复制到新 Issue 的优先级 |
+| Project | 新 Issue 归属的可选 Project |
+| Labels | 复制到新 Issue 的标签 |
+| Default metadata | 传给后续执行的结构化上下文 |
+| Execution spec | 给 automation 或 runtime 使用的可选执行提示 |
+
+Issue 从模板创建出来以后，就拥有自己的状态。之后编辑模板不会原地改写已有 Issue。
+
+## 两种使用方式
+
+**结论：Template 可以手动使用，也可以被 Automation 使用；两条路径最终都创建 Issue。**
+
+<Mermaid chart={`
+flowchart LR
+  Template["Issue Template"] --> Manual["手动使用"]
+  Template --> Automation["Automation"]
+  Manual --> IssueA["新 Issue"]
+  Automation --> IssueB["新 Issue"]
+  IssueA --> AgentTask["分配后产生 Agent task"]
+  IssueB --> AgentTask
+`} />
+
+### 手动使用
+
+在创建 Issue 时选择模板，可以快速生成带默认内容的新 Issue。适合发布评审、每周 triage、标准调查请求这类重复工作。
+
+### Automation 使用
+
+Automation 可以引用 Issue Template。定时或 webhook 触发时，Si-Multica 会先从模板创建一个新 Issue，再走普通 issue 分配链路派给智能体。
+
+## Template 和 Workflow 的区别
+
+**结论：Issue Template 创建 Issue；Workflow 分阶段运行复杂 AI 工作。它们是不同产品能力。**
+
+| 能力 | 创建或管理什么 | 适合什么 |
+|---|---|---|
+| Issue Template | 带默认字段的新 Issue | 重复创建 Issue |
+| Automation | 定时、手动或 webhook 触发 | 不需要人点击也能启动工作 |
+| Workflow | Draft、Active Workflow、Run、Step、Review Step | 需要分阶段执行的复杂或高风险 AI 工作 |
+| Skill | Agent 可复用知识和 workflow shape | 让 Agent 更擅长某类工作 |
+
+不要把 Skill 里的 workflow shape 叫 Template。Skill 里用 "workflow shape" 或 "可复用子图"；Issue 创建默认值才叫 Issue Template。
+
+## 删除 Template
+
+Template 被已有 Issue 或 Automation 引用时不能删除。这是为了保护审计链路：
+
+- 已有 Issue 会保留创建时的 template snapshot。
+- Automation 会稳定引用它使用的 Issue Template。
+- 删除 Template 永远不会删除已有 Issue。
+
+## 相关页面
+
+- [Issue 与 project](/issues) - 理解 Issue 创建后自己拥有什么状态。
+- [自动化](/autopilots) - 从内联 issue config 或 Issue Template 启动定时 / webhook 工作。
+- [Workflow](/workflow-issues) - 理解什么时候应该用 Workflow，而不是 Issue Template。

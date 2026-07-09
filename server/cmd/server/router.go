@@ -891,10 +891,13 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Post("/", h.CreateSkill)
 				r.Get("/search", h.SearchSkills)
 				r.Post("/import", h.ImportSkill)
+				r.Post("/global-links", h.CreateGlobalSkillLink)
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/", h.GetSkill)
 					r.Put("/", h.UpdateSkill)
 					r.Delete("/", h.DeleteSkill)
+					r.Post("/refresh", h.RefreshSkill)
+					r.Post("/workflow/validate", h.ValidateSkillWorkflow)
 					r.Get("/files", h.ListSkillFiles)
 					r.Put("/files", h.UpsertSkillFile)
 					r.Delete("/files/{fileId}", h.DeleteSkillFile)
@@ -921,6 +924,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Post("/definition/validate", h.ValidateWorkflowCaseDefinitionDraft)
 					r.Post("/definition/publish", h.PublishWorkflowCaseDefinition)
 					r.Get("/definition/versions", h.ListWorkflowCaseDefinitionVersions)
+					r.Get("/definition/versions/{versionId}", h.GetWorkflowCaseDefinitionVersion)
 				})
 			})
 			// Deprecated debug/compatibility surface for pre-WorkflowCase

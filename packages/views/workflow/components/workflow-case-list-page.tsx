@@ -23,6 +23,12 @@ export function WorkflowCaseListPage() {
   const { data: cases = [], isLoading } = useQuery(workflowCaseListOptions(wsId));
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createTitle, setCreateTitle] = useState("");
+  const [createDescription, setCreateDescription] = useState("");
+  const [createEntryIssueId, setCreateEntryIssueId] = useState("");
+  const [createOwnerAgentId, setCreateOwnerAgentId] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
   const filtered = cases.filter((workflowCase) => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
@@ -33,13 +39,26 @@ export function WorkflowCaseListPage() {
   });
 
   async function createCase() {
+    const title = createTitle.trim();
+    if (!title) {
+      setCreateError("Case title is required");
+      return;
+    }
     setCreating(true);
+    setCreateError(null);
     try {
       const workflowCase = await api.createWorkflowCase({
-        title: "Untitled workflow case",
-        description: "",
+        title,
+        description: createDescription,
+        source_issue_id: createEntryIssueId.trim() || null,
+        owner_agent_id: createOwnerAgentId.trim() || null,
       });
       await qc.invalidateQueries({ queryKey: workflowRunKeys.caseList(wsId) });
+      setCreateOpen(false);
+      setCreateTitle("");
+      setCreateDescription("");
+      setCreateEntryIssueId("");
+      setCreateOwnerAgentId("");
       navigation.push(paths.workflowCaseDetail(workflowCase.id));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create workflow case");
@@ -56,11 +75,55 @@ export function WorkflowCaseListPage() {
           <h1 className="text-sm font-medium">Workflow cases</h1>
           {!isLoading && <span className="text-xs tabular-nums text-muted-foreground">{cases.length}</span>}
         </div>
-        <Button type="button" size="sm" variant="outline" onClick={() => void createCase()} disabled={creating}>
+        <Button type="button" size="sm" variant="outline" onClick={() => setCreateOpen(true)} disabled={creating}>
           <Plus className="mr-1 size-3.5" />
-          {creating ? "Creating..." : "Create case"}
+          Create case
         </Button>
       </PageHeader>
+
+      {createOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-workflow-case-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/20"
+        >
+          <div className="w-full max-w-lg rounded-lg border bg-background p-4 shadow-lg">
+            <h2 id="create-workflow-case-title" className="text-sm font-medium">Create workflow case</h2>
+            <div className="mt-4 space-y-3">
+              <Input
+                aria-label="Case title"
+                value={createTitle}
+                onChange={(event) => setCreateTitle(event.target.value)}
+              />
+              <Input
+                aria-label="Description"
+                value={createDescription}
+                onChange={(event) => setCreateDescription(event.target.value)}
+              />
+              <Input
+                aria-label="Entry issue ID"
+                value={createEntryIssueId}
+                onChange={(event) => setCreateEntryIssueId(event.target.value)}
+              />
+              <Input
+                aria-label="Owner agent ID"
+                value={createOwnerAgentId}
+                onChange={(event) => setCreateOwnerAgentId(event.target.value)}
+              />
+              {createError && <p className="text-xs text-red-600">{createError}</p>}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setCreateOpen(false)} disabled={creating}>
+                Cancel
+              </Button>
+              <Button type="button" size="sm" onClick={() => void createCase()} disabled={creating}>
+                {creating ? "Creating..." : "Create workflow case"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex h-12 shrink-0 items-center gap-3 border-b px-4">
         <div className="relative min-w-0 flex-1 sm:max-w-sm">
@@ -84,7 +147,7 @@ export function WorkflowCaseListPage() {
           <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
             <FolderGit2 className="size-10 text-muted-foreground/50" />
             <p className="text-sm text-muted-foreground">No workflow cases yet.</p>
-            <Button type="button" size="sm" variant="outline" onClick={() => void createCase()} disabled={creating}>
+            <Button type="button" size="sm" variant="outline" onClick={() => setCreateOpen(true)} disabled={creating}>
               <Plus className="mr-1 size-3.5" />
               Create case
             </Button>

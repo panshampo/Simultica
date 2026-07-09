@@ -20,7 +20,7 @@ UPDATE workflow_run SET
     completed_at = COALESCE(completed_at, now()),
     updated_at = now()
 WHERE id = $1
-RETURNING id, workspace_id, root_issue_id, skill_id, planner_task_id, status, current_node, nodes_state, definition_snapshot, source_skills, error, cancel_reason, cancelled_at, started_at, completed_at, created_at, updated_at, case_id, definition_version_id, run_kind, label
+RETURNING id, workspace_id, root_issue_id, skill_id, planner_task_id, status, current_node, nodes_state, definition_snapshot, source_skills, error, cancel_reason, cancelled_at, started_at, completed_at, created_at, updated_at, case_id, definition_version_id, label
 `
 
 type CancelWorkflowRunParams struct {
@@ -51,7 +51,6 @@ func (q *Queries) CancelWorkflowRun(ctx context.Context, arg CancelWorkflowRunPa
 		&i.UpdatedAt,
 		&i.CaseID,
 		&i.DefinitionVersionID,
-		&i.RunKind,
 		&i.Label,
 	)
 	return i, err
@@ -61,16 +60,15 @@ const createWorkflowRun = `-- name: CreateWorkflowRun :one
 INSERT INTO workflow_run (
     workspace_id, root_issue_id, skill_id, planner_task_id, status,
     current_node, nodes_state, definition_snapshot, source_skills,
-    case_id, definition_version_id, run_kind, label, started_at
+    case_id, definition_version_id, label, started_at
 ) VALUES (
     $1, $2, $3, $8, $4,
     $5, $6, $7, $9,
     $10, $11,
-    COALESCE($12, 'primary'),
-    COALESCE($13, ''),
+    COALESCE($12, ''),
     now()
 )
-RETURNING id, workspace_id, root_issue_id, skill_id, planner_task_id, status, current_node, nodes_state, definition_snapshot, source_skills, error, cancel_reason, cancelled_at, started_at, completed_at, created_at, updated_at, case_id, definition_version_id, run_kind, label
+RETURNING id, workspace_id, root_issue_id, skill_id, planner_task_id, status, current_node, nodes_state, definition_snapshot, source_skills, error, cancel_reason, cancelled_at, started_at, completed_at, created_at, updated_at, case_id, definition_version_id, label
 `
 
 type CreateWorkflowRunParams struct {
@@ -85,7 +83,6 @@ type CreateWorkflowRunParams struct {
 	SourceSkills        []byte      `json:"source_skills"`
 	CaseID              pgtype.UUID `json:"case_id"`
 	DefinitionVersionID pgtype.UUID `json:"definition_version_id"`
-	RunKind             interface{} `json:"run_kind"`
 	Label               interface{} `json:"label"`
 }
 
@@ -102,7 +99,6 @@ func (q *Queries) CreateWorkflowRun(ctx context.Context, arg CreateWorkflowRunPa
 		arg.SourceSkills,
 		arg.CaseID,
 		arg.DefinitionVersionID,
-		arg.RunKind,
 		arg.Label,
 	)
 	var i WorkflowRun
@@ -126,14 +122,13 @@ func (q *Queries) CreateWorkflowRun(ctx context.Context, arg CreateWorkflowRunPa
 		&i.UpdatedAt,
 		&i.CaseID,
 		&i.DefinitionVersionID,
-		&i.RunKind,
 		&i.Label,
 	)
 	return i, err
 }
 
 const getLatestWorkflowRunByCase = `-- name: GetLatestWorkflowRunByCase :one
-SELECT id, workspace_id, root_issue_id, skill_id, planner_task_id, status, current_node, nodes_state, definition_snapshot, source_skills, error, cancel_reason, cancelled_at, started_at, completed_at, created_at, updated_at, case_id, definition_version_id, run_kind, label FROM workflow_run
+SELECT id, workspace_id, root_issue_id, skill_id, planner_task_id, status, current_node, nodes_state, definition_snapshot, source_skills, error, cancel_reason, cancelled_at, started_at, completed_at, created_at, updated_at, case_id, definition_version_id, label FROM workflow_run
 WHERE case_id = $1
 ORDER BY created_at DESC
 LIMIT 1
@@ -162,14 +157,13 @@ func (q *Queries) GetLatestWorkflowRunByCase(ctx context.Context, caseID pgtype.
 		&i.UpdatedAt,
 		&i.CaseID,
 		&i.DefinitionVersionID,
-		&i.RunKind,
 		&i.Label,
 	)
 	return i, err
 }
 
 const getWorkflowRun = `-- name: GetWorkflowRun :one
-SELECT id, workspace_id, root_issue_id, skill_id, planner_task_id, status, current_node, nodes_state, definition_snapshot, source_skills, error, cancel_reason, cancelled_at, started_at, completed_at, created_at, updated_at, case_id, definition_version_id, run_kind, label FROM workflow_run WHERE id = $1
+SELECT id, workspace_id, root_issue_id, skill_id, planner_task_id, status, current_node, nodes_state, definition_snapshot, source_skills, error, cancel_reason, cancelled_at, started_at, completed_at, created_at, updated_at, case_id, definition_version_id, label FROM workflow_run WHERE id = $1
 `
 
 func (q *Queries) GetWorkflowRun(ctx context.Context, id pgtype.UUID) (WorkflowRun, error) {
@@ -195,14 +189,13 @@ func (q *Queries) GetWorkflowRun(ctx context.Context, id pgtype.UUID) (WorkflowR
 		&i.UpdatedAt,
 		&i.CaseID,
 		&i.DefinitionVersionID,
-		&i.RunKind,
 		&i.Label,
 	)
 	return i, err
 }
 
 const getWorkflowRunByRootIssue = `-- name: GetWorkflowRunByRootIssue :one
-SELECT id, workspace_id, root_issue_id, skill_id, planner_task_id, status, current_node, nodes_state, definition_snapshot, source_skills, error, cancel_reason, cancelled_at, started_at, completed_at, created_at, updated_at, case_id, definition_version_id, run_kind, label FROM workflow_run
+SELECT id, workspace_id, root_issue_id, skill_id, planner_task_id, status, current_node, nodes_state, definition_snapshot, source_skills, error, cancel_reason, cancelled_at, started_at, completed_at, created_at, updated_at, case_id, definition_version_id, label FROM workflow_run
 WHERE root_issue_id = $1
 ORDER BY created_at DESC
 LIMIT 1
@@ -231,14 +224,13 @@ func (q *Queries) GetWorkflowRunByRootIssue(ctx context.Context, rootIssueID pgt
 		&i.UpdatedAt,
 		&i.CaseID,
 		&i.DefinitionVersionID,
-		&i.RunKind,
 		&i.Label,
 	)
 	return i, err
 }
 
 const listWorkflowRunsByCase = `-- name: ListWorkflowRunsByCase :many
-SELECT id, workspace_id, root_issue_id, skill_id, planner_task_id, status, current_node, nodes_state, definition_snapshot, source_skills, error, cancel_reason, cancelled_at, started_at, completed_at, created_at, updated_at, case_id, definition_version_id, run_kind, label FROM workflow_run
+SELECT id, workspace_id, root_issue_id, skill_id, planner_task_id, status, current_node, nodes_state, definition_snapshot, source_skills, error, cancel_reason, cancelled_at, started_at, completed_at, created_at, updated_at, case_id, definition_version_id, label FROM workflow_run
 WHERE case_id = $1
 ORDER BY created_at DESC
 `
@@ -272,7 +264,6 @@ func (q *Queries) ListWorkflowRunsByCase(ctx context.Context, caseID pgtype.UUID
 			&i.UpdatedAt,
 			&i.CaseID,
 			&i.DefinitionVersionID,
-			&i.RunKind,
 			&i.Label,
 		); err != nil {
 			return nil, err
@@ -297,7 +288,7 @@ UPDATE workflow_run SET
     END,
     updated_at   = now()
 WHERE id = $1
-RETURNING id, workspace_id, root_issue_id, skill_id, planner_task_id, status, current_node, nodes_state, definition_snapshot, source_skills, error, cancel_reason, cancelled_at, started_at, completed_at, created_at, updated_at, case_id, definition_version_id, run_kind, label
+RETURNING id, workspace_id, root_issue_id, skill_id, planner_task_id, status, current_node, nodes_state, definition_snapshot, source_skills, error, cancel_reason, cancelled_at, started_at, completed_at, created_at, updated_at, case_id, definition_version_id, label
 `
 
 type UpdateWorkflowRunProgressParams struct {
@@ -337,7 +328,6 @@ func (q *Queries) UpdateWorkflowRunProgress(ctx context.Context, arg UpdateWorkf
 		&i.UpdatedAt,
 		&i.CaseID,
 		&i.DefinitionVersionID,
-		&i.RunKind,
 		&i.Label,
 	)
 	return i, err

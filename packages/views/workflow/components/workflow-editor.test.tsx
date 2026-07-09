@@ -56,4 +56,15 @@ describe("WorkflowEditor structured editing", () => {
 
     await vi.waitFor(() => expect(api.upsertSkillFile).toHaveBeenCalledWith("skill-1", { path: "workflow.yaml", content: yaml }));
   });
+
+  it("renders workflow in read-only mode without edit or save controls", () => {
+    const yaml = "meta:\n  name: readonly\nstate:\n  fields: []\nnodes:\n  - id: plan\n    type: llm\nrouting:\n  - from: START\n    to: plan\n";
+    render(<WorkflowEditor skillId="skill-1" agents={[]} initialYaml={yaml} readOnly />);
+
+    expect(screen.getByTestId("workflow-canvas")).toBeInTheDocument();
+    expect(screen.getByText("Read-only")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add node" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add edge" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save workflow" })).not.toBeInTheDocument();
+  });
 });

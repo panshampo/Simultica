@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleCheck,
+  FolderGit2,
   MoreHorizontal,
   PanelRight,
   Pin,
@@ -58,9 +59,8 @@ import { collectThreadReplies } from "./thread-utils";
 import { IssueAgentHeaderChip } from "./issue-agent-header-chip";
 import { ExecutionLogSection } from "./execution-log-section";
 import { PullRequestList } from "./pull-request-list";
-import { IssueWorkflowPanel } from "../../workflow/components/issue-workflow-panel";
 import { useGitHubSettings } from "@multica/core/github";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@multica/core/auth";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { useActorName } from "@multica/core/workspace/hooks";
@@ -71,6 +71,8 @@ import { projectDetailOptions } from "@multica/core/projects/queries";
 import { ProjectIcon } from "../../projects/components/project-icon";
 import { issueLabelsOptions } from "@multica/core/labels";
 import { memberListOptions, agentListOptions } from "@multica/core/workspace/queries";
+import { issueWorkflowContextOptions, workflowRunKeys } from "@multica/core/workflow/queries";
+import type { WorkflowRun } from "@multica/core/workflow/types";
 import { useRecentIssuesStore } from "@multica/core/issues/stores";
 import { useIssueSelectionStore } from "@multica/core/issues/stores/selection-store";
 import { BatchActionToolbar } from "./batch-action-toolbar";
@@ -80,6 +82,7 @@ import { useIssueSubscribers } from "../hooks/use-issue-subscribers";
 import { ReactionBar } from "@multica/ui/components/common/reaction-bar";
 import { useFileUpload } from "@multica/core/hooks/use-file-upload";
 import { api } from "@multica/core/api";
+import { useWSEvent } from "@multica/core/realtime";
 import { useTimeAgo } from "../../i18n";
 import { cn } from "@multica/ui/lib/utils";
 
@@ -660,6 +663,7 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
   const timeAgo = useTimeAgo();
   const id = issueId;
   const router = useNavigation();
+  const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const paths = useWorkspacePaths();
 
@@ -1033,6 +1037,17 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
   const { data: childIssues = [] } = useQuery({
     ...childIssuesOptions(wsId, id),
     enabled: !!issue,
+  });
+  const { data: workflowContext } = useQuery({
+    ...issueWorkflowContextOptions(wsId, id),
+    enabled: !!issue,
+  });
+  const relatedWorkflowCaseId = workflowContext?.workflow_case_id ?? null;
+  useWSEvent("workflow_run:updated", (payload: unknown) => {
+    const incoming = (payload as { workflow_run?: WorkflowRun } | null)?.workflow_run;
+    if (incoming?.root_issue_id === id || incoming?.case_id === relatedWorkflowCaseId) {
+      void qc.invalidateQueries({ queryKey: workflowRunKeys.issueContext(wsId, id) });
+    }
   });
   // Parent's children — used to render the "x/y" progress next to the
   // "Sub-issue of …" breadcrumb under the title.
@@ -1776,6 +1791,32 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
             </AppLink>
           )}
 
+          {workflowContext?.role === "node_issue" && workflowContext.workflow_case_id && (
+            <AppLink
+              href={
+                workflowContext.workflow_run_id
+                  ? paths.workflowCaseRunDetail(
+                      workflowContext.workflow_case_id,
+                      workflowContext.workflow_run_id,
+                      workflowContext.workflow_node_id ?? undefined,
+                    )
+                  : paths.workflowCaseDetail(workflowContext.workflow_case_id)
+              }
+              className="mt-2 inline-flex max-w-full items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group/workflow"
+            >
+              <span className="font-medium shrink-0">{t(($) => $.detail.workflow_issue_of)}</span>
+              <FolderGit2 className="h-3.5 w-3.5 shrink-0" />
+              {workflowContext.workflow_node_id && (
+                <span className="font-mono shrink-0">{workflowContext.workflow_node_id}</span>
+              )}
+              {workflowContext.workflow_run_id && (
+                <span className="font-mono shrink-0 text-muted-foreground/80">
+                  {workflowContext.workflow_run_id.slice(0, 8)}
+                </span>
+              )}
+            </AppLink>
+          )}
+
           <div {...descDropZoneProps} className="relative mt-5 rounded-lg">
             <ContentEditor
               ref={descEditorRef}
@@ -1897,10 +1938,6 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
               </div>
             );
           })()}
-
-          {!issue.parent_issue_id && (
-            <IssueWorkflowPanel wsId={wsId} issueId={issue.id} />
-          )}
 
           <div className="my-8 border-t" />
 

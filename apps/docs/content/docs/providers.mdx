@@ -1,11 +1,11 @@
 ---
 title: AI coding tools matrix
-description: Multica supports 14 AI coding tools; they implement the same interface, but the capability details diverge significantly.
+description: Si-Multica supports 14 AI coding tools; they implement the same interface, but the capability details diverge significantly.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Multica ships with built-in support for **14 AI coding tools**. They all implement the same interface — queue, dispatch, execute, return results — so you can drive any of them from the same Multica board. **But the capability details diverge significantly**: whether session resumption actually works, whether MCP is supported, where skill files live, how models are selected. This page is the full matrix.
+Si-Multica ships with built-in support for **14 AI coding tools**. They all implement the same interface — queue, dispatch, execute, return results — so you can drive any of them from the same Si-Multica board. **But the capability details diverge significantly**: whether session resumption actually works, whether MCP is supported, where skill files live, how models are selected. This page is the full matrix.
 
 For guidance on picking a tool when creating an agent, see [Creating and configuring agents](/agents-create).
 
@@ -52,7 +52,7 @@ From Anysphere, the CLI counterpart to the Cursor editor. **Session resumption c
 
 ### DS Copilot
 
-From ByteDance GEC. DS Copilot is a Claude Code wrapper with a managed CCR model proxy and data-science tooling. It uses Claude Code's stream-json protocol, session resume, and MCP flags, but **model selection is managed by the DS Copilot launcher** (`.last_model` / CCR config). Multica therefore disables per-agent model selection for this provider and does not append `--model`.
+From ByteDance GEC. DS Copilot is a Claude Code wrapper with a managed CCR model proxy and data-science tooling. It uses Claude Code's stream-json protocol, session resume, and MCP flags, but **model selection is managed by the DS Copilot launcher** (`.last_model` / CCR config). Si-Multica therefore disables per-agent model selection for this provider and does not append `--model`.
 
 ### Gemini
 
@@ -72,11 +72,11 @@ From Amazon. Uses ACP over stdio via `kiro-cli acp`. Session resumption works th
 
 ### OpenCode
 
-From SST, open source. Dynamically discovers available models and model variants (scans the CLI's configuration file). Session resumption works, and it consumes the agent's `mcp_config` field — Multica injects it inline through the `OPENCODE_CONFIG_CONTENT` environment variable, so the agent's MCP servers reach OpenCode without writing anything into the task workdir's `opencode.json` (the agent or the user keep ownership of that file). When a model exposes variants, Multica shows them as the agent thinking selector and passes the selected value through `opencode run --variant`. **Suitable for tinkerers who want to customize their model catalog.**
+From SST, open source. Dynamically discovers available models and model variants (scans the CLI's configuration file). Session resumption works, and it consumes the agent's `mcp_config` field — Si-Multica injects it inline through the `OPENCODE_CONFIG_CONTENT` environment variable, so the agent's MCP servers reach OpenCode without writing anything into the task workdir's `opencode.json` (the agent or the user keep ownership of that file). When a model exposes variants, Si-Multica shows them as the agent thinking selector and passes the selected value through `opencode run --variant`. **Suitable for tinkerers who want to customize their model catalog.**
 
 ### OpenClaw
 
-Open-source project, a CLI agent orchestrator. MCP config is materialized through Multica's per-task OpenClaw config wrapper. **Model is bound at the agent layer** (`openclaw agents add --model`) — it can't be overridden per task. Configuration is strictly controlled: users can't pass `--model` or `--system-prompt`; the agent-registration config decides.
+Open-source project, a CLI agent orchestrator. MCP config is materialized through Si-Multica's per-task OpenClaw config wrapper. **Model is bound at the agent layer** (`openclaw agents add --model`) — it can't be overridden per task. Configuration is strictly controlled: users can't pass `--model` or `--system-prompt`; the agent-registration config decides.
 
 ### Pi
 
@@ -84,7 +84,7 @@ From Inflection AI, minimalist. **Session resumption is unusual** — the sessio
 
 ### Traex
 
-From ByteDance. Traex is a Codex fork that exposes the same `app-server --listen stdio://` JSON-RPC entry point as Codex. Multica reuses the Codex transport and model catalog. MCP config is materialized into the per-task Traex home, and skills come from `$TRAE_HOME/skills` (default `~/.trae/skills`).
+From ByteDance. Traex is a Codex fork that exposes the same `app-server --listen stdio://` JSON-RPC entry point as Codex. Si-Multica reuses the Codex transport and model catalog. MCP config is materialized into the per-task Traex home, and skills come from `$TRAE_HOME/skills` (default `~/.trae/skills`).
 
 ## Session resumption: who really supports it
 
@@ -102,7 +102,7 @@ The session resumption mechanism is covered in [Tasks](/tasks#can-a-task-continu
 
 **Of the 14 tools, nine consume `mcp_config`: Claude Code, DS Copilot, Codex, Hermes, Kimi, Kiro CLI, OpenCode, OpenClaw, and Traex**. The other five accept the field but **ignore it** — no error, no warning, the config just has no effect.
 
-The runtime paths are provider-specific: Claude Code and DS Copilot receive it through `--mcp-config` paired with `--strict-mcp-config`; Codex and Traex write a daemon-managed `mcp_servers` block into the per-task home config; Hermes, Kimi, and Kiro CLI receive ACP `mcpServers`; OpenCode receives inline config through `OPENCODE_CONFIG_CONTENT`; OpenClaw receives `mcp.servers` through Multica's per-task config wrapper. OpenCode's path does **not** rewrite the project's `opencode.json`.
+The runtime paths are provider-specific: Claude Code and DS Copilot receive it through `--mcp-config` paired with `--strict-mcp-config`; Codex and Traex write a daemon-managed `mcp_servers` block into the per-task home config; Hermes, Kimi, and Kiro CLI receive ACP `mcpServers`; OpenCode receives inline config through `OPENCODE_CONFIG_CONTENT`; OpenClaw receives `mcp.servers` through Si-Multica's per-task config wrapper. OpenCode's path does **not** rewrite the project's `opencode.json`.
 
 <Callout type="warning">
 If you set `mcp_config` in an agent configuration but pick a tool not marked ✅ in the MCP column, your MCP servers have **no effect** on that agent. MCP integration is provider-specific.
@@ -110,7 +110,7 @@ If you set `mcp_config` in an agent configuration but pick a tool not marked ✅
 
 ## Where skill files go
 
-Each tool uses **its own** skill discovery path. Before a task runs, the Multica daemon copies the workspace's skill files into the corresponding path:
+Each tool uses **its own** skill discovery path. Before a task runs, the Si-Multica daemon copies the workspace's skill files into the corresponding path:
 
 | Tool | Path | Native discovery? |
 |---|---|---|
@@ -137,5 +137,5 @@ For creating and using skills, see [Skills](/skills).
 
 - [Creating and configuring agents](/agents-create) — pick a tool for your agent
 - [Tasks](/tasks) — task lifecycle and session-resumption mechanics
-- [Daemon and runtimes](/daemon-runtimes) — where the tools run and how they connect to Multica
+- [Daemon and runtimes](/daemon-runtimes) — where the tools run and how they connect to Si-Multica
 - [Install an agent runtime](/install-agent-runtime) — installation and authentication for each of the 14 supported tools

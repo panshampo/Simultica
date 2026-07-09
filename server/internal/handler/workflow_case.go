@@ -73,7 +73,6 @@ type publishWorkflowDefinitionRequest struct {
 }
 
 type startWorkflowCaseRunRequest struct {
-	RunKind      string         `json:"run_kind"`
 	Label        string         `json:"label"`
 	InitialState map[string]any `json:"initial_state"`
 }
@@ -518,6 +517,31 @@ func (h *Handler) ListWorkflowCaseDefinitionVersions(w http.ResponseWriter, r *h
 	writeJSON(w, http.StatusOK, map[string]any{"versions": resp})
 }
 
+func (h *Handler) GetWorkflowCaseDefinitionVersion(w http.ResponseWriter, r *http.Request) {
+	c, ok := h.workflowCaseFromRequest(w, r)
+	if !ok {
+		return
+	}
+	versionID, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "versionId"), "workflow definition version id")
+	if !ok {
+		return
+	}
+	version, err := h.Queries.GetWorkflowDefinitionVersion(r.Context(), versionID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "workflow definition version not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "load workflow definition version: "+err.Error())
+		return
+	}
+	if uuidToString(version.CaseID) != uuidToString(c.ID) || uuidToString(version.WorkspaceID) != uuidToString(c.WorkspaceID) {
+		writeError(w, http.StatusForbidden, "workflow definition version is outside workflow case")
+		return
+	}
+	writeJSON(w, http.StatusOK, workflowDefinitionVersionToResponse(version))
+}
+
 func (h *Handler) ListWorkflowCaseRuns(w http.ResponseWriter, r *http.Request) {
 	c, ok := h.workflowCaseFromRequest(w, r)
 	if !ok {
@@ -546,8 +570,8 @@ func (h *Handler) ListWorkflowCaseRuns(w http.ResponseWriter, r *http.Request) {
 
 // StartWorkflowCaseRun creates a new WorkflowRun from the case's online
 // version only. It never accepts an arbitrary historical definition_version_id,
-// allows multiple parallel active runs, and persists run_kind/label. It does
-// not project run status onto the case.
+// allows multiple parallel active runs, and persists label. It does not project
+// run status onto the case.
 func (h *Handler) StartWorkflowCaseRun(w http.ResponseWriter, r *http.Request) {
 	c, ok := h.workflowCaseFromRequest(w, r)
 	if !ok {
@@ -562,6 +586,10 @@ func (h *Handler) StartWorkflowCaseRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "definition_version_id is not accepted; runs always use the online version")
 		return
 	}
+	if _, present := raw["run_kind"]; present {
+		writeError(w, http.StatusBadRequest, "run_kind is no longer supported")
+		return
+	}
 	var req startWorkflowCaseRunRequest
 	if len(raw) > 0 {
 		merged, _ := json.Marshal(raw)
@@ -569,11 +597,6 @@ func (h *Handler) StartWorkflowCaseRun(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
-	}
-	runKind := normalizeWorkflowRunKind(req.RunKind)
-	if !workflowRunKinds[runKind] {
-		writeError(w, http.StatusBadRequest, "unsupported run_kind")
-		return
 	}
 	if !c.OnlineVersionID.Valid {
 		writeError(w, http.StatusBadRequest, "workflow case has no online version; publish a version before starting a run")
@@ -601,7 +624,6 @@ func (h *Handler) StartWorkflowCaseRun(w http.ResponseWriter, r *http.Request) {
 		Definition:          json.RawMessage(version.SnapshotJson),
 		InitialState:        req.InitialState,
 		SourceSkills:        version.SourceSkills,
-		RunKind:             runKind,
 		Label:               req.Label,
 	})
 	if err != nil {
@@ -610,6 +632,13 @@ func (h *Handler) StartWorkflowCaseRun(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "start workflow case run: "+err.Error())
+		return
+	}
+	if _, err := h.Queries.UpdateWorkflowCase(r.Context(), db.UpdateWorkflowCaseParams{
+		ID:           c.ID,
+		CurrentRunID: run.ID,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "update workflow case current run: "+err.Error())
 		return
 	}
 	writeJSON(w, http.StatusAccepted, workflowRunToResponse(run))

@@ -1453,6 +1453,9 @@ func TestWorkflowOrchestrationRenderedForIssueTasks(t *testing.T) {
 			t.Errorf("brief missing %q", want)
 		}
 	}
+	if strings.Contains(content, "--run-kind") {
+		t.Errorf("brief must not include removed --run-kind flag:\n%s", content)
+	}
 }
 
 func TestWorkflowBriefUsesWorkflowCaseCommands(t *testing.T) {
@@ -1474,6 +1477,9 @@ func TestWorkflowBriefUsesWorkflowCaseCommands(t *testing.T) {
 		if !strings.Contains(brief, want) {
 			t.Fatalf("brief missing %q:\n%s", want, brief)
 		}
+	}
+	if strings.Contains(brief, "--run-kind") {
+		t.Fatalf("brief must not include removed --run-kind flag:\n%s", brief)
 	}
 }
 

@@ -5,6 +5,7 @@ import {
   Download,
   FileText,
   HardDrive,
+  Link2,
   Lock,
   Pencil,
   Workflow,
@@ -23,7 +24,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@multica/ui/components/ui/tooltip";
-import { readOrigin, totalFileCount } from "../lib/origin";
+import { readOrigin, readSkillHealth, totalFileCount } from "../lib/origin";
 import { resolvePublicFileUrl } from "@multica/core/workspace/avatar-url";
 import { useT } from "../../i18n";
 import { cn } from "@multica/ui/lib/utils";
@@ -46,6 +47,7 @@ const COL_WIDTHS = {
   name: 240,
   usedBy: 140,
   source: 220,
+  sourceType: 52,
   workflow: 52,
   updated: 100,
   chevron: 48,
@@ -83,6 +85,13 @@ export function useSkillColumns(): ColumnDef<SkillRow>[] {
           runtime={row.original.runtime}
         />
       ),
+    },
+    {
+      id: "sourceType",
+      header: () => null,
+      size: COL_WIDTHS.sourceType,
+      enableResizing: false,
+      cell: ({ row }) => <SourceTypeIndicator skill={row.original.skill} />,
     },
     {
       id: "workflow",
@@ -218,6 +227,70 @@ function WorkflowIndicator({ skill }: { skill: SkillSummary }) {
   );
 }
 
+function SourceTypeIndicator({ skill }: { skill: SkillSummary }) {
+  const { t } = useT("skills");
+  const origin = readOrigin(skill);
+  const health = readSkillHealth(skill);
+  const meta = (() => {
+    if (origin.type === "global_link") {
+      return {
+        icon: Link2,
+        label:
+          health?.status === "broken"
+            ? t(($) => $.table.source_global_link_broken)
+            : t(($) => $.table.source_global_link),
+        className:
+          health?.status === "broken"
+            ? "border-destructive/30 bg-destructive/10 text-destructive"
+            : "border-emerald-200 bg-emerald-50 text-emerald-700",
+      };
+    }
+    if (origin.type === "runtime_local") {
+      return {
+        icon: HardDrive,
+        label: t(($) => $.table.source_local_import),
+        className: "border-amber-200 bg-amber-50 text-amber-700",
+      };
+    }
+    if (
+      origin.type === "clawhub" ||
+      origin.type === "skills_sh" ||
+      origin.type === "github"
+    ) {
+      return {
+        icon: Download,
+        label: t(($) => $.table.source_imported_snapshot),
+        className: "border-violet-200 bg-violet-50 text-violet-700",
+      };
+    }
+    return {
+      icon: FileText,
+      label: t(($) => $.table.source_workspace_files),
+      className: "border-slate-200 bg-slate-50 text-slate-700",
+    };
+  })();
+  const Icon = meta.icon;
+  return (
+    <div className="flex items-center justify-center">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span
+              className={cn(
+                "inline-flex size-7 items-center justify-center rounded-md border",
+                meta.className,
+              )}
+            >
+              <Icon className="size-3.5" aria-hidden="true" />
+            </span>
+          }
+        />
+        <TooltipContent>{meta.label}</TooltipContent>
+      </Tooltip>
+    </div>
+  );
+}
+
 function SourceCell({
   skill,
   creator,
@@ -229,9 +302,11 @@ function SourceCell({
 }) {
   const { t } = useT("skills");
   const origin = readOrigin(skill);
+  const health = readSkillHealth(skill);
 
   let icon = <Pencil className="h-3 w-3 shrink-0" />;
   let label: string = t(($) => $.table.source_manual);
+  let detailLabel: string = t(($) => $.table.source_workspace_files);
   if (origin.type === "runtime_local") {
     icon = <HardDrive className="h-3 w-3 shrink-0" />;
     label = runtime
@@ -239,22 +314,42 @@ function SourceCell({
       : origin.provider
         ? t(($) => $.table.source_runtime_provider, { provider: origin.provider })
         : t(($) => $.table.source_runtime_unknown);
+    detailLabel = t(($) => $.table.source_local_import);
   } else if (origin.type === "clawhub") {
     icon = <Download className="h-3 w-3 shrink-0" />;
     label = t(($) => $.table.source_clawhub);
+    detailLabel = t(($) => $.table.source_imported_snapshot);
   } else if (origin.type === "skills_sh") {
     icon = <Download className="h-3 w-3 shrink-0" />;
     label = t(($) => $.table.source_skills_sh);
+    detailLabel = t(($) => $.table.source_imported_snapshot);
   } else if (origin.type === "github") {
     icon = <Download className="h-3 w-3 shrink-0" />;
     label = t(($) => $.table.source_github);
+    detailLabel = t(($) => $.table.source_imported_snapshot);
+  } else if (origin.type === "global_link") {
+    icon = <Link2 className="h-3 w-3 shrink-0" />;
+    label =
+      health?.status === "broken"
+        ? t(($) => $.table.source_global_link_broken)
+        : t(($) => $.table.source_global_link);
+    detailLabel =
+      health?.resolved_path ?? origin.resolved_path ?? origin.target_path ?? "";
   }
 
   return (
     <div className="min-w-0">
-      <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+      <div
+        className={cn(
+          "flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground",
+          health?.status === "broken" && "text-destructive",
+        )}
+      >
         <span className="shrink-0">{icon}</span>
         <span className="block min-w-0 truncate">{label}</span>
+      </div>
+      <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground/80">
+        {detailLabel}
       </div>
       {creator && (
         <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">

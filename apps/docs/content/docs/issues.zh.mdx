@@ -1,13 +1,17 @@
 ---
 title: Issue 与 project
-description: Multica 的核心工作单位——可以分配给人，也可以分配给智能体。
+description: Si-Multica 的核心工作单位——可以分配给人，也可以分配给智能体。
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Issue（工作项）是 Multica 里一个独立工作的单位——一条 bug、一个新功能、一项要做的事。每个 issue 有**标题**、**描述**（支持 Markdown）、**状态**、**优先级**、**分配人（assignee）**，可选地还能归入某个 **project**。如果你用过 Linear 或 Jira，它们是同类东西。
+Issue（工作项）是 Si-Multica 里一个独立工作的单位——一条 bug、一个新功能、一项要做的事。每个 issue 有**标题**、**描述**（支持 Markdown）、**状态**、**优先级**、**分配人（assignee）**，可选地还能归入某个 **project**。如果你用过 Linear 或 Jira，它们是同类东西。
 
-**Multica 最大的特色是：issue 的分配人可以是人，也可以是 [智能体](/agents)**——这是下面先讲的第一件事。
+**Si-Multica 最大的特色是：issue 的分配人可以是人，也可以是 [智能体](/agents)**——这是下面先讲的第一件事。
+
+<Callout type="info">
+Issue 是目标容器。[Issue Templates](/issue-templates) 用可复用默认值创建 Issue。[Workflow](/workflow-issues) 用于复杂或高风险 AI 工作，需要分阶段执行、Review Step 和 Run 历史。
+</Callout>
 
 ## 把 issue 分配给智能体
 
@@ -21,7 +25,7 @@ Issue（工作项）是 Multica 里一个独立工作的单位——一条 bug�
 
 ## 状态
 
-Multica 提供七种状态。**任何状态可以直接改到任何状态**——Multica 不强加工作流，不会因为你从 `backlog` 直接跳到 `done` 就拦你。
+Si-Multica 提供七种状态。**任何状态可以直接改到任何状态**——Si-Multica 不强加工作流，不会因为你从 `backlog` 直接跳到 `done` 就拦你。
 
 | 状态 | 含义 |
 |---|---|
@@ -51,6 +55,12 @@ Multica 提供七种状态。**任何状态可以直接改到任何状态**—�
 
 每个 issue 有一个工作区内唯一的编号，格式是 `<前缀>-<数字>`，比如 `MUL-123`。编号在创建时由系统自动分配、**永不改变**。详见 [工作区 → Issue 编号](/workspaces#issue-编号)。
 
+## Issue Templates
+
+Issue Template 是创建 Issue 的可复用默认值。它可以设置新 Issue 的标题、正文、负责人、优先级、Project、标签和默认元数据。
+
+Template 不创建 Skill、Agent、Workflow 或 Run。Issue 从模板创建出来以后，就拥有自己的状态、评论、负责人和结果；之后编辑模板不会原地改写已有 Issue。
+
 ## 评论
 
 Issue 下面的评论区是协作发生的地方——回复某条评论、`@` 点名人或智能体、加表情反应。
@@ -77,3 +87,5 @@ Project 有自己的**负责人（lead）**——**和 issue 的 assignee 一样
 
 - [评论与提及](/comments) —— 在 issue 下协作
 - [智能体](/agents) —— 理解"分配给智能体"的工作原理
+- [Issue Templates](/issue-templates) —— 用可复用默认值创建重复 Issue
+- [Workflow 和 Issue 如何协作](/workflow-issues) —— 了解什么时候应该用 Workflow，而不是单个 Issue

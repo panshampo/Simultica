@@ -55,6 +55,11 @@
     "source_clawhub": "From ClawHub",
     "source_skills_sh": "From Skills.sh",
     "source_github": "From GitHub",
+    "source_workspace_files": "Workspace files",
+    "source_local_import": "Local import",
+    "source_imported_snapshot": "Imported snapshot",
+    "source_global_link": "Global skill link",
+    "source_global_link_broken": "Broken global link",
     "workflow_yes": "Has workflow",
     "workflow_no": "No workflow"
   },
@@ -79,6 +84,7 @@
       "origin_clawhub": "Imported · ClawHub",
       "origin_skills_sh": "Imported · Skills.sh",
       "origin_github": "Imported · GitHub",
+      "origin_global_link": "Global skill link",
       "origin_workspace": "Workspace",
       "updated_label": "Updated {{when}}",
       "by_creator": "by {{name}}"
@@ -116,6 +122,19 @@
       "imported_github": "Imported from GitHub",
       "provider": "provider · {{provider}}"
     },
+    "global_link": {
+      "ready": "Linked to global skill library",
+      "broken": "Global skill link is broken",
+      "validate_workflow": "Validate workflow"
+    },
+    "source_type": {
+      "workspace_files": "Workspace files",
+      "imported_snapshot": "Imported snapshot",
+      "local_import_snapshot": "Local runtime snapshot",
+      "global_link": "Global skill link",
+      "global_link_broken": "Broken global skill link",
+      "workspace_storage": "Stored inside this workspace"
+    },
     "not_found": {
       "title": "Skill not found",
       "fallback": "This skill may have been deleted or you lost access.",
@@ -126,6 +145,9 @@
     "toast_file_removed": "Removed {{path}} from the draft",
     "toast_workflow_saved": "Workflow saved",
     "toast_workflow_save_failed": "Failed to save workflow",
+    "toast_workflow_valid": "Workflow is valid",
+    "toast_workflow_invalid": "Workflow has validation errors",
+    "toast_workflow_validate_failed": "Failed to validate workflow",
     "toast_deleted": "Skill deleted",
     "toast_delete_failed": "Failed to delete skill",
     "delete_dialog": {
@@ -172,6 +194,10 @@
       "runtime": {
         "title": "Copy from runtime",
         "desc": "Scan a local runtime and promote one of its on-disk skills into this workspace."
+      },
+      "globalLink": {
+        "title": "Link global skill",
+        "desc": "Reference a skill from the global skill library without copying its files."
       }
     },
     "method_card": {
@@ -180,7 +206,9 @@
       "url_title": "Import from URL",
       "url_desc": "Pull a published skill from ClawHub or Skills.sh.",
       "runtime_title": "Copy from runtime",
-      "runtime_desc": "Promote a skill already installed on your local runtime."
+      "runtime_desc": "Promote a skill already installed on your local runtime.",
+      "globalLink_title": "Link global skill",
+      "globalLink_desc": "Use a skill directly from ~/.agents/skills and keep it synced."
     },
     "manual": {
       "name_label": "Name",
@@ -207,6 +235,19 @@
       "fallback_error": "Import failed",
       "cancel": "Cancel",
       "toast_imported": "Skill imported"
+    },
+    "global_link": {
+      "target_label": "Target path",
+      "target_hint": "Path must be inside an allowed global skill root and contain SKILL.md.",
+      "name_label": "Name override",
+      "name_placeholder": "Leave empty to read from SKILL.md",
+      "description_label": "Description override",
+      "description_placeholder": "Leave empty to read from SKILL.md",
+      "fallback_error": "Failed to link global skill",
+      "cancel": "Cancel",
+      "submit": "Link skill",
+      "submitting": "Linking…",
+      "toast_created": "Global skill linked"
     }
   },
   "runtime_import": {

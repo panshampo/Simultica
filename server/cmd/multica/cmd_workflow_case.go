@@ -108,7 +108,6 @@ func init() {
 	workflowCaseDefinitionPublishCmd.Flags().String("output", "json", "Output format: json")
 
 	workflowCaseRunCmd.AddCommand(workflowCaseRunStartCmd)
-	workflowCaseRunStartCmd.Flags().String("run-kind", "primary", "Run kind: primary|experiment|shadow|replay|debug")
 	workflowCaseRunStartCmd.Flags().String("label", "", "Optional run label")
 	workflowCaseRunStartCmd.Flags().Bool("initial-state-stdin", false, "Read initial_state JSON from stdin")
 	workflowCaseRunStartCmd.Flags().String("initial-state", "", "Inline initial_state JSON")
@@ -148,8 +147,8 @@ func buildWorkflowCaseDefinitionDraftBodyWithSourceTemplates(definitionRaw, sour
 	return body, nil
 }
 
-func buildWorkflowCaseRunStartBody(runKind, label, initialStateRaw string) (map[string]any, error) {
-	body := map[string]any{"run_kind": runKind}
+func buildWorkflowCaseRunStartBody(label, initialStateRaw string) (map[string]any, error) {
+	body := map[string]any{}
 	if label != "" {
 		body["label"] = label
 	}
@@ -281,16 +280,12 @@ func runWorkflowCaseRunStart(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	runKind, _ := cmd.Flags().GetString("run-kind")
-	if runKind == "" {
-		runKind = "primary"
-	}
 	label, _ := cmd.Flags().GetString("label")
 	initialStateRaw, err := workflowCaseInitialStateInput(cmd)
 	if err != nil {
 		return err
 	}
-	body, err := buildWorkflowCaseRunStartBody(runKind, label, initialStateRaw)
+	body, err := buildWorkflowCaseRunStartBody(label, initialStateRaw)
 	if err != nil {
 		return err
 	}

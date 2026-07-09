@@ -1,7 +1,7 @@
 import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
 import { ArrowUpRight } from "lucide-react";
 
-// Docs-local stateless Multica mark — matches @multica/ui's MulticaIcon
+// Docs-local stateless Si-Multica mark — matches @multica/ui's MulticaIcon
 // visually (same 8-pointed-asterisk clip-path), but without useState/
 // useEffect so it's safe to render from Server Components such as
 // layout.config.tsx / layout.tsx. Keep in sync with
@@ -43,7 +43,7 @@ function GitHubMark() {
 }
 
 // External links shown at the top of the sidebar (and in the top nav on
-// desktop). Leading icon = brand identity (GitHub mark / Multica asterisk);
+// desktop). Leading icon = brand identity (GitHub mark / Si-Multica asterisk);
 // trailing ArrowUpRight = "opens externally" glyph, same pattern as
 // `packages/views/layout/help-launcher.tsx` from PR #1560.
 const externalLinkText = (label: string) => (
@@ -56,7 +56,7 @@ const externalLinkText = (label: string) => (
 export const baseOptions: BaseLayoutProps = {
   nav: {
     title: (
-      <span className="font-semibold text-base">Multica Docs</span>
+      <span className="font-semibold text-base">Si-Multica Docs</span>
     ),
   },
   links: [
@@ -68,7 +68,7 @@ export const baseOptions: BaseLayoutProps = {
     },
     {
       icon: <MulticaMark />,
-      text: externalLinkText("Multica"),
+      text: externalLinkText("Si-Multica"),
       url: "https://multica.ai",
       external: true,
     },

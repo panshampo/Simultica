@@ -5,7 +5,10 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowLeft,
+  Download,
+  FileText,
   HardDrive,
+  Link2,
   Loader2,
   Lock,
   Pencil,
@@ -60,7 +63,7 @@ import { BreadcrumbHeader } from "../../layout/breadcrumb-header";
 import { useCanEditSkill } from "../hooks/use-can-edit-skill";
 import { useSkillPermissions } from "@multica/core/permissions";
 import { CapabilityBanner } from "@multica/ui/components/common/capability-banner";
-import { readOrigin, totalFileCount } from "../lib/origin";
+import { readOrigin, readSkillHealth, totalFileCount } from "../lib/origin";
 import { FileTree } from "./file-tree";
 import { FileViewer } from "./file-viewer";
 import { WorkflowEditor } from "../../workflow/components/workflow-editor";
@@ -303,6 +306,7 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
   const [addingFile, setAddingFile] = useState(false);
   const [conflictPending, setConflictPending] = useState(false);
   const [activeTab, setActiveTab] = useState<"content" | "workflow">("content");
+  const [validatingWorkflow, setValidatingWorkflow] = useState(false);
 
   const draftRef = useRef({ name, description, content, files });
   draftRef.current = { name, description, content, files };
@@ -364,6 +368,10 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
     () => (skill ? readOrigin(skill) : null),
     [skill],
   );
+  const skillHealth = useMemo(
+    () => (skill ? readSkillHealth(skill) : null),
+    [skill],
+  );
   const originRuntime = useMemo<AgentRuntime | null>(() => {
     if (!origin || origin.type !== "runtime_local" || !origin.runtime_id)
       return null;
@@ -418,8 +426,11 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
     );
   };
 
+  const isGlobalLink = origin?.type === "global_link";
+  const canEditContent = canEdit && !isGlobalLink;
+
   const handleSave = async () => {
-    if (!skill || !canEdit) return;
+    if (!skill || !canEditContent) return;
     const trimmedName = name.trim();
     const trimmedDesc = description.trim();
     setSaving(true);
@@ -506,7 +517,7 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
   };
 
   const handleFileContentChange = (newContent: string) => {
-    if (!canEdit) return;
+    if (!canEditContent) return;
     if (selectedPath === SKILL_MD) {
       setContent(newContent);
     } else {
@@ -515,6 +526,30 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
           f.path === selectedPath ? { ...f, content: newContent } : f,
         ),
       );
+    }
+  };
+
+  const handleValidateWorkflow = async () => {
+    if (!skill) return;
+    setValidatingWorkflow(true);
+    try {
+      const result = await api.validateSkillWorkflow(skill.id);
+      const validation = result.validation as { valid?: boolean } | undefined;
+      if (result.error) {
+        toast.error(result.error);
+      } else if (validation?.valid === true) {
+        toast.success(t(($) => $.detail.toast_workflow_valid));
+      } else {
+        toast.error(t(($) => $.detail.toast_workflow_invalid));
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t(($) => $.detail.toast_workflow_validate_failed),
+      );
+    } finally {
+      setValidatingWorkflow(false);
     }
   };
 
@@ -582,8 +617,50 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
     if (origin.type === "clawhub") return t(($) => $.detail.subline.origin_clawhub);
     if (origin.type === "skills_sh") return t(($) => $.detail.subline.origin_skills_sh);
     if (origin.type === "github") return t(($) => $.detail.subline.origin_github);
+    if (origin.type === "global_link") return t(($) => $.detail.subline.origin_global_link);
     return t(($) => $.detail.subline.origin_workspace);
   })();
+  const sourceTypeLabel = (() => {
+    if (origin?.type === "global_link") {
+      return skillHealth?.status === "broken"
+        ? t(($) => $.detail.source_type.global_link_broken)
+        : t(($) => $.detail.source_type.global_link);
+    }
+    if (origin?.type === "runtime_local") {
+      return t(($) => $.detail.source_type.local_import_snapshot);
+    }
+    if (origin?.type === "clawhub" || origin?.type === "skills_sh" || origin?.type === "github") {
+      return t(($) => $.detail.source_type.imported_snapshot);
+    }
+    return t(($) => $.detail.source_type.workspace_files);
+  })();
+  const sourceTypeDetail = (() => {
+    if (origin?.type === "global_link") {
+      return skillHealth?.resolved_path ?? origin.target_path ?? origin.resolved_path ?? "";
+    }
+    if (origin?.type === "runtime_local") {
+      return originRuntime?.name ?? origin.provider ?? t(($) => $.detail.source_type.workspace_storage);
+    }
+    if (origin?.type === "github" || origin?.type === "skills_sh" || origin?.type === "clawhub") {
+      return origin.source_url ?? t(($) => $.detail.source_type.workspace_storage);
+    }
+    return t(($) => $.detail.source_type.workspace_storage);
+  })();
+  const sourceTypeIcon = (() => {
+    if (origin?.type === "global_link") return Link2;
+    if (origin?.type === "runtime_local") return HardDrive;
+    if (origin?.type === "github" || origin?.type === "skills_sh" || origin?.type === "clawhub") {
+      return Download;
+    }
+    return FileText;
+  })();
+  const SourceTypeIcon = sourceTypeIcon;
+  const sourceTypeIconClass =
+    skillHealth?.status === "broken"
+      ? "border-destructive/30 bg-destructive/10 text-destructive"
+      : isGlobalLink
+        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+        : "border-muted bg-muted/40 text-muted-foreground";
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
@@ -596,7 +673,30 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
         }
         actions={
           <>
-            {!canEdit && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    className={`inline-flex size-7 items-center justify-center rounded-md border ${sourceTypeIconClass}`}
+                    aria-label={sourceTypeLabel}
+                  >
+                    <SourceTypeIcon className="h-3.5 w-3.5" />
+                  </span>
+                }
+              />
+              <TooltipContent className="max-w-sm">
+                <div className="font-medium">{sourceTypeLabel}</div>
+                <div className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                  {sourceTypeDetail}
+                </div>
+                {skillHealth?.reasons?.length ? (
+                  <div className="mt-1 text-xs text-destructive">
+                    {skillHealth.reasons.join("; ")}
+                  </div>
+                ) : null}
+              </TooltipContent>
+            </Tooltip>
+            {(!canEdit || isGlobalLink) && (
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                 <Lock className="h-3 w-3" />
                 {t(($) => $.detail.read_only)}
@@ -665,7 +765,7 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
               <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {t(($) => $.detail.files_label, { count: totalFileCount(skill) })}
               </span>
-              {canEdit && (
+              {canEditContent && (
                 <Tooltip>
                   <TooltipTrigger
                     render={
@@ -699,7 +799,7 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
                 onSelect={setSelectedPath}
               />
             </div>
-            {selectedPath !== SKILL_MD && canEdit && (
+            {selectedPath !== SKILL_MD && canEditContent && (
               <div className="border-t px-3 py-2">
                 <Button
                   type="button"
@@ -719,7 +819,7 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
             <SkillHeaderCompact
               name={name}
               description={description}
-              canEdit={canEdit}
+              canEdit={canEditContent}
               originLabel={originLabel}
               originType={origin?.type}
               updatedLabel={t(($) => $.detail.subline.updated_label, {
@@ -736,7 +836,7 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
             />
 
             {/* Conflict banner */}
-            {conflictPending && canEdit && (
+            {conflictPending && canEditContent && (
               <div
                 role="status"
                 aria-live="polite"
@@ -761,12 +861,12 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
                 path={selectedPath}
                 content={selectedContent}
                 onChange={handleFileContentChange}
-                canEdit={canEdit}
+                canEdit={canEditContent}
               />
             </div>
 
             {/* Save bar */}
-            {isDirty && canEdit && (
+            {isDirty && canEditContent && (
               <div
                 role="status"
                 aria-live="polite"
@@ -810,12 +910,47 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
         </div>
       ) : (
         <div className="flex flex-1 min-h-0 flex-col bg-background">
-          <WorkflowEditor
-            skillId={skill.id}
-            initialYaml={fileMap.get("workflow.yaml")}
-            agents={agents}
-            onSaved={handleWorkflowSaved}
-          />
+          {isGlobalLink ? (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="flex shrink-0 items-center gap-3 border-b px-4 py-2">
+                <Link2 className="h-4 w-4 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">
+                    {t(($) => $.detail.global_link.ready)}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {skillHealth?.resolved_path ?? origin?.target_path ?? origin?.resolved_path}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleValidateWorkflow}
+                  disabled={validatingWorkflow}
+                >
+                  {validatingWorkflow ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3 w-3" />
+                  )}
+                  {t(($) => $.detail.global_link.validate_workflow)}
+                </Button>
+              </div>
+              <WorkflowEditor
+                skillId={skill.id}
+                initialYaml={fileMap.get("workflow.yaml")}
+                agents={agents}
+                readOnly
+              />
+            </div>
+          ) : (
+            <WorkflowEditor
+              skillId={skill.id}
+              initialYaml={fileMap.get("workflow.yaml")}
+              agents={agents}
+              onSaved={handleWorkflowSaved}
+            />
+          )}
         </div>
       )}
 

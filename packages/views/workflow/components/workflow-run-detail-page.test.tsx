@@ -4,17 +4,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   WorkflowCase,
   WorkflowDefinition,
+  WorkflowDefinitionVersion,
   WorkflowRun,
 } from "@multica/core/workflow/types";
 
 const mocks = vi.hoisted(() => ({
   getWorkflowCase: vi.fn(),
+  listWorkflowCaseDefinitionVersions: vi.fn(),
   listWorkflowCaseRuns: vi.fn(),
 }));
 
 vi.mock("@multica/core/api", () => ({
   api: {
     getWorkflowCase: mocks.getWorkflowCase,
+    listWorkflowCaseDefinitionVersions: mocks.listWorkflowCaseDefinitionVersions,
     listWorkflowCaseRuns: mocks.listWorkflowCaseRuns,
   },
 }));
@@ -26,6 +29,7 @@ vi.mock("@multica/core/hooks", () => ({
 vi.mock("@multica/core/paths", () => ({
   useWorkspacePaths: () => ({
     workflowCaseDetail: (id: string) => `/workflow-cases/${id}`,
+    workflowCaseVersionDetail: (caseId: string, versionId: string) => `/workflow-cases/${caseId}/versions/${versionId}`,
     issueDetail: (id: string) => `/issues/${id}`,
   }),
 }));
@@ -61,6 +65,7 @@ describe("WorkflowRunDetailPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getWorkflowCase.mockResolvedValue(makeCase());
+    mocks.listWorkflowCaseDefinitionVersions.mockResolvedValue([makeVersion()]);
     mocks.listWorkflowCaseRuns.mockResolvedValue([makeRun()]);
   });
 
@@ -68,14 +73,22 @@ describe("WorkflowRunDetailPage", () => {
     renderPage("run-1");
 
     expect(await screen.findByText("Approach A")).toBeInTheDocument();
-    // "experiment" appears both as the header badge and the Kind property.
-    expect(screen.getAllByText("experiment").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("Kind")).not.toBeInTheDocument();
+    expect(screen.queryByText("experiment")).not.toBeInTheDocument();
     // Node table row.
     expect(screen.getByText("implement")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open issue" })).toHaveAttribute(
+      "href",
+      "/issues/e114f904-79c2-4db6-a3a9-c7d23f22c9aa",
+    );
     // Back link to the owning case.
     expect(screen.getByRole("link", { name: "Back to workflow case" })).toHaveAttribute(
       "href",
       "/workflow-cases/case-1",
+    );
+    expect(screen.getByRole("link", { name: "v1" })).toHaveAttribute(
+      "href",
+      "/workflow-cases/case-1/versions/version-1",
     );
   });
 
@@ -85,6 +98,10 @@ describe("WorkflowRunDetailPage", () => {
     expect(await screen.findByText("Node detail")).toBeInTheDocument();
     const canvas = await screen.findByTestId("workflow-canvas");
     expect(canvas.getAttribute("data-selected")).toBe("implement");
+    expect(screen.getByText("Agent route")).toBeInTheDocument();
+    expect(screen.getByText("frontend-bug-investigation")).toBeInTheDocument();
+    expect(screen.getByText("System prompt")).toBeInTheDocument();
+    expect(screen.getByText("Investigate the browser failure and capture Playwright evidence.")).toBeInTheDocument();
     // Carrier issue is reachable from the node panel.
     expect(screen.getByRole("link", { name: "Open sub-issue" })).toHaveAttribute(
       "href",
@@ -131,7 +148,17 @@ function renderPage(runId: string, nodeId?: string) {
 const definition: WorkflowDefinition = {
   meta: { name: "Run workflow", version: "1" },
   state: { fields: [] },
-  nodes: [{ id: "implement", type: "agent", dispatch: "subissue" }],
+  nodes: [{
+    id: "implement",
+    type: "agent",
+    dispatch: "subissue",
+    agent: "frontend-bug-investigation",
+    inputs: ["task", "scope_result"],
+    outputs: ["investigation_report"],
+    config: {
+      system: "Investigate the browser failure and capture Playwright evidence.",
+    },
+  }],
   routing: [{ from: "START", to: "implement" }],
 };
 
@@ -152,6 +179,22 @@ function makeCase(): WorkflowCase {
   };
 }
 
+function makeVersion(): WorkflowDefinitionVersion {
+  return {
+    id: "version-1",
+    workspace_id: "ws-1",
+    case_id: "case-1",
+    definition_id: "definition-1",
+    version: 1,
+    snapshot_json: definition,
+    source_skills: [],
+    validation_report: { valid: true, errors: [], warnings: [] },
+    confirmed_by: "user-1",
+    confirmed_at: "2026-07-06T00:00:00Z",
+    created_at: "2026-07-06T00:00:00Z",
+  };
+}
+
 function makeRun(): WorkflowRun {
   return {
     id: "run-1",
@@ -160,7 +203,6 @@ function makeRun(): WorkflowRun {
     definition_version_id: "version-1",
     skill_id: null,
     status: "running",
-    run_kind: "experiment",
     label: "Approach A",
     current_node: "implement",
     nodes_state: {

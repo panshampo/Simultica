@@ -68,7 +68,7 @@ func createSkillWithFilesInTx(ctx context.Context, qtx *db.Queries, input skillC
 	}
 
 	return SkillWithFilesResponse{
-		SkillResponse: skillToResponse(skill),
+		SkillResponse: rawSkillToResponse(skill),
 		Files:         fileResps,
 	}, nil
 }

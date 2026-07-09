@@ -87,7 +87,7 @@ export function WorkflowCaseDraftEditor({
         <div>
           <h3 className="text-sm font-medium">{definition ? "Edit draft" : "Create starter draft"}</h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            Edit the workflow YAML, apply it, then save the draft before validation.
+            Edit the workflow YAML, apply it, then save the draft before validation. Cancel editing leaves the saved draft unchanged.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">

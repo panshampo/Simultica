@@ -1,13 +1,17 @@
 ---
 title: Issues and projects
-description: Multica's core unit of work — assignable to a person or to an agent.
+description: Si-Multica's core unit of work — assignable to a person or to an agent.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-An issue is a self-contained unit of work in Multica — a bug, a new feature, a thing that needs doing. Every issue has a **title**, a **description** (Markdown supported), a **status**, a **priority**, an **assignee**, and optionally belongs to a **project**. If you've used Linear or Jira, this is the same shape.
+An issue is a self-contained unit of work in Si-Multica — a bug, a new feature, a thing that needs doing. Every issue has a **title**, a **description** (Markdown supported), a **status**, a **priority**, an **assignee**, and optionally belongs to a **project**. If you've used Linear or Jira, this is the same shape.
 
-**Multica's defining trait is that an issue's assignee can be a person or an [agent](/agents)** — which is where we'll start.
+**Si-Multica's defining trait is that an issue's assignee can be a person or an [agent](/agents)** — which is where we'll start.
+
+<Callout type="info">
+Issues are goal containers. [Issue Templates](/issue-templates) create Issues with reusable defaults. [Workflows](/workflow-issues) are for complex or risky AI work that needs staged execution, review steps, and run history.
+</Callout>
 
 ## Assigning an issue to an agent
 
@@ -21,7 +25,7 @@ Private agents can only be assigned to issues by workspace owners and admins. Fo
 
 ## Status
 
-Multica has seven statuses. **Any status can move directly to any other** — Multica doesn't impose a workflow, and won't stop you from jumping from `backlog` straight to `done`.
+Si-Multica has seven statuses. **Any status can move directly to any other** — Si-Multica doesn't impose a workflow, and won't stop you from jumping from `backlog` straight to `done`.
 
 | Status | Meaning |
 |---|---|
@@ -51,6 +55,12 @@ Priority has five levels, used to order the default issue list:
 
 Every issue has a workspace-unique number in the format `<prefix>-<digits>` — for example `MUL-123`. The number is assigned by the system at creation time and **never changes**. See [Workspaces → Issue numbers](/workspaces#issue-numbers).
 
+## Issue Templates
+
+Issue Templates are reusable defaults for creating Issues. A template can set the new Issue's title, body, assignee, priority, project, labels, and default metadata.
+
+Templates do not create Skills, Agents, Workflows, or Runs. Once an Issue is created from a template, the Issue owns its own status, comments, assignee, and result. Editing the template later does not rewrite existing Issues.
+
 ## Comments
 
 The comment thread under an issue is where collaboration happens — reply to a comment, `@` a person or agent, add a reaction.
@@ -77,3 +87,5 @@ Deleting a project **does not delete the issues inside it**: those issues simply
 
 - [Comments and mentions](/comments) — collaborating under an issue
 - [Agents](/agents) — understand how "assign to an agent" actually works
+- [Issue Templates](/issue-templates) — create repeated Issues from reusable defaults
+- [Workflow and issues](/workflow-issues) — know when to use a Workflow instead of a single Issue

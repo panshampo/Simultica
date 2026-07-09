@@ -1,11 +1,11 @@
 ---
 title: 環境変数
-description: セルフホストの Multica サーバーを実行するための環境変数の完全な一覧です。
+description: セルフホストの Si-Multica サーバーを実行するための環境変数の完全な一覧です。
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-セルフホストの Multica [サーバー](/self-host-quickstart)は、起動時に環境変数から設定を読み込みます — データベース、サインイン、メール、ストレージ、サインアップ許可リストはすべてここにあります。このページでは、すべての変数を用途別にグループ化しています。各セクションでは、**設定しないと何が起きるか**、そして**プロダクションで必ず設定すべきものはどれか**を明確に説明します。auth 関連の変数を実際にどう設定するかについては、[サインインとサインアップの設定](/auth-setup)を参照してください。
+セルフホストの Si-Multica [サーバー](/self-host-quickstart)は、起動時に環境変数から設定を読み込みます — データベース、サインイン、メール、ストレージ、サインアップ許可リストはすべてここにあります。このページでは、すべての変数を用途別にグループ化しています。各セクションでは、**設定しないと何が起きるか**、そして**プロダクションで必ず設定すべきものはどれか**を明確に説明します。auth 関連の変数を実際にどう設定するかについては、[サインインとサインアップの設定](/auth-setup)を参照してください。
 
 ## コアサーバー変数
 
@@ -35,7 +35,7 @@ import { Callout } from "fumadocs-ui/components/callout";
 
 ## メール設定
 
-Multica は 2 つの配信バックエンドをサポートします — クラウドデプロイ向けの [Resend](https://resend.com/) と、内部 / オンプレミスネットワーク向けの SMTP relay です。両方が設定されている場合は `SMTP_HOST` が `RESEND_API_KEY` より優先されます。
+Si-Multica は 2 つの配信バックエンドをサポートします — クラウドデプロイ向けの [Resend](https://resend.com/) と、内部 / オンプレミスネットワーク向けの SMTP relay です。両方が設定されている場合は `SMTP_HOST` が `RESEND_API_KEY` より優先されます。
 
 ### Resend
 
@@ -76,7 +76,7 @@ Multica は 2 つの配信バックエンドをサポートします — クラ�
 
 ## ファイルストレージ設定
 
-Multica はユーザーがアップロードした添付ファイル（コメント内の画像やファイル）を保存します。**S3 が推奨されます**。S3 が設定されていない場合はローカルディスクにフォールバックします。
+Si-Multica はユーザーがアップロードした添付ファイル（コメント内の画像やファイル）を保存します。**S3 が推奨されます**。S3 が設定されていない場合はローカルディスクにフォールバックします。
 
 ### S3 / S3 互換ストレージ
 
@@ -132,7 +132,7 @@ S3 の前段に CloudFront を置く場合、3 つの変数が適用されます
 
 **直感に反する部分**: `ALLOWED_EMAIL_DOMAINS=company.io` + `ALLOW_SIGNUP=true` は「company.io または全員を許可」という意味では**なく**、**company.io のみを許可**という意味です。許可リストの層は AND セマンティクスです — 完全な決定木は[サインインとサインアップの設定 → サインアップ許可リスト](/auth-setup#restricting-who-can-sign-up)にあります。
 
-**招待フロー自体はサインアップ許可リストをチェックしません** — ただし、招待された人は招待を承諾する前に依然として**サインイン**できる必要があります。すでに Multica アカウントを持っている場合（例: 別のワークスペースから）、許可リストの影響を受けずに直接承諾できます。**一度もサインアップしたことがない場合**、サインインの最初のステップ（検証コードの要求）は依然として許可リストのチェックを通過し、`ALLOW_SIGNUP=false` や `ALLOWED_EMAILS` / `ALLOWED_EMAIL_DOMAINS` によって拒否されたメールは**サインアップを完了できず、したがって招待を承諾できません**。
+**招待フロー自体はサインアップ許可リストをチェックしません** — ただし、招待された人は招待を承諾する前に依然として**サインイン**できる必要があります。すでに Si-Multica アカウントを持っている場合（例: 別のワークスペースから）、許可リストの影響を受けずに直接承諾できます。**一度もサインアップしたことがない場合**、サインインの最初のステップ（検証コードの要求）は依然として許可リストのチェックを通過し、`ALLOW_SIGNUP=false` や `ALLOWED_EMAILS` / `ALLOWED_EMAIL_DOMAINS` によって拒否されたメールは**サインアップを完了できず、したがって招待を承諾できません**。
 
 ## ワークスペース作成をロックダウンする
 
@@ -148,7 +148,7 @@ S3 の前段に CloudFront を置く場合、3 つの変数が適用されます
 2. 管理者としてサインインし、共有ワークスペースを作成します。
 3. `DISABLE_WORKSPACE_CREATION=true` を設定してバックエンドを再起動します。この時点から、ユーザーは招待によってのみ参加できます。
 
-招待されたユーザーが最初の検証コードでサインアップを完了できるよう `ALLOW_SIGNUP=true` を維持したい場合は、`DISABLE_WORKSPACE_CREATION=true` を `ALLOWED_EMAIL_DOMAINS` / `ALLOWED_EMAILS` と組み合わせて、どのアドレスがサインアップできるかの範囲を指定してください。`ALLOW_SIGNUP=false` を設定すると、保留中の招待対象者がアカウントを作成すること自体も追加でブロックされます — すべてのメンバーがすでに Multica アカウントを持っているインスタンスでのみ有用です。
+招待されたユーザーが最初の検証コードでサインアップを完了できるよう `ALLOW_SIGNUP=true` を維持したい場合は、`DISABLE_WORKSPACE_CREATION=true` を `ALLOWED_EMAIL_DOMAINS` / `ALLOWED_EMAILS` と組み合わせて、どのアドレスがサインアップできるかの範囲を指定してください。`ALLOW_SIGNUP=false` を設定すると、保留中の招待対象者がアカウントを作成すること自体も追加でブロックされます — すべてのメンバーがすでに Si-Multica アカウントを持っているインスタンスでのみ有用です。
 
 ## レート制限（任意の Redis）
 
@@ -210,17 +210,17 @@ S3 の前段に CloudFront を置く場合、3 つの変数が適用されます
 **いずれかの必須変数が設定されていない場合の動作:**
 
 - 設定 → GitHub の `Connect GitHub` が**無効**になり、admin に「not configured」というヒントを表示します。
-- `/api/webhooks/github` エンドポイントは **`503 github webhooks not configured`** を返します — Multica はすべての署名を有効として扱うのではなく、secret なしではイベント処理を拒否します。
+- `/api/webhooks/github` エンドポイントは **`503 github webhooks not configured`** を返します — Si-Multica はすべての署名を有効として扱うのではなく、secret なしではイベント処理を拒否します。
 
 **任意の `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY` が設定されていない場合の動作:**
 
-- インストール直後、接続カードには一時的に `Connected to unknown` と表示されます。GitHub から `installation.created` webhook が届くと（通常は数秒以内）、Multica は行を実際の組織名/ユーザー名に更新し、リアルタイムブロードキャストを発行するため、開いている Settings → GitHub タブは手動更新なしで反映されます。
+- インストール直後、接続カードには一時的に `Connected to unknown` と表示されます。GitHub から `installation.created` webhook が届くと（通常は数秒以内）、Si-Multica は行を実際の組織名/ユーザー名に更新し、リアルタイムブロードキャストを発行するため、開いている Settings → GitHub タブは手動更新なしで反映されます。
 
 **注:** `GITHUB_WEBHOOK_SECRET` はインストールフローの state token の署名キーとして再利用されるため、運用者は secret を 1 つだけ管理すればよいです。これは GitHub App の *Client* secret では**ありません** — Client secret は OAuth 関連であり、この連携では使われません。完全な手順は [GitHub 連携 → セルフホストのセットアップ](/github-integration#self-host-setup)を参照してください。
 
 ## 使用量分析
 
-デフォルトでは、サーバーは Multica の公式 PostHog インスタンスにレポートします。オプトアウトするには `ANALYTICS_DISABLED=true` を設定してください。
+デフォルトでは、サーバーは Si-Multica の公式 PostHog インスタンスにレポートします。オプトアウトするには `ANALYTICS_DISABLED=true` を設定してください。
 
 | 変数 | デフォルト | 説明 |
 |---|---|---|

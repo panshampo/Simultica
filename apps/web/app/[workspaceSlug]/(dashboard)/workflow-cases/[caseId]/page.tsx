@@ -12,6 +12,5 @@ export default function Page({
   const { caseId } = use(params);
   const searchParams = useSearchParams();
   const runId = searchParams.get("run_id");
-  const nodeId = searchParams.get("node_id");
-  return <WorkflowCaseDetailPage caseId={caseId} initialRunId={runId} initialNodeId={nodeId} />;
+  return <WorkflowCaseDetailPage caseId={caseId} initialRunId={runId} />;
 }

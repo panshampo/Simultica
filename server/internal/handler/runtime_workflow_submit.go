@@ -32,7 +32,6 @@ type startRuntimeWorkflowParams struct {
 	Definition          json.RawMessage
 	InitialState        map[string]any
 	SourceSkills        []byte
-	RunKind             string
 	Label               string
 	// ProjectCaseStatus keeps the legacy behavior of mirroring run status onto
 	// the case. Only the debug/compatibility submit path sets it. The atomic
@@ -69,6 +68,7 @@ var runtimeWorkflowAllowedNodeTypes = map[string]bool{
 	"main_agent":     true,
 	"subissue":       true,
 	"condition":      true,
+	"transform":      true,
 	"merge":          true,
 	"final_response": true,
 }
@@ -88,22 +88,6 @@ var runtimeWorkflowAllowedCarrierKinds = map[string]bool{
 }
 
 var errWorkflowSidecarUnavailable = errors.New("workflow sidecar unavailable")
-
-var workflowRunKinds = map[string]bool{
-	"primary":    true,
-	"experiment": true,
-	"shadow":     true,
-	"replay":     true,
-	"debug":      true,
-}
-
-func normalizeWorkflowRunKind(kind string) string {
-	kind = strings.TrimSpace(kind)
-	if kind == "" {
-		return "primary"
-	}
-	return kind
-}
 
 func validateRuntimeWorkflowDefinition(raw json.RawMessage) (runtimeWorkflowDefinition, error) {
 	var def runtimeWorkflowDefinition
@@ -417,7 +401,6 @@ func (h *Handler) createAndStartWorkflowRun(ctx context.Context, params startRun
 		SourceSkills:        params.SourceSkills,
 		CaseID:              params.CaseID,
 		DefinitionVersionID: params.DefinitionVersionID,
-		RunKind:             normalizeWorkflowRunKind(params.RunKind),
 		Label:               strings.TrimSpace(params.Label),
 	})
 	if err != nil {
@@ -446,7 +429,6 @@ func (h *Handler) createAndStartWorkflowRun(ctx context.Context, params startRun
 		RunID:        run.ID,
 		Definition:   params.Definition,
 		InitialState: params.InitialState,
-		RunKind:      run.RunKind,
 		Label:        run.Label,
 	}); err != nil {
 		sidecarErr := fmt.Errorf("%w: %v", errWorkflowSidecarUnavailable, err)
@@ -490,7 +472,6 @@ type sidecarRunParams struct {
 	RunID        pgtype.UUID
 	Definition   json.RawMessage
 	InitialState map[string]any
-	RunKind      string
 	Label        string
 }
 
@@ -505,7 +486,6 @@ func (h *Handler) startSidecarRun(ctx context.Context, p sidecarRunParams) error
 		"case_id":       uuidToString(p.CaseID),
 		"definition":    json.RawMessage(p.Definition),
 		"initial_state": initial,
-		"run_kind":      p.RunKind,
 		"label":         p.Label,
 	}
 	if p.RootIssueID.Valid {

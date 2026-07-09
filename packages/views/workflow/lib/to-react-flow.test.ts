@@ -172,7 +172,7 @@ describe("workflowToReactFlow", () => {
     expect(nodesById.get("author")!.position.x).toBeLessThan(nodesById.get("review")!.position.x);
     expect(nodesById.get("review")!.position.x).toBeLessThan(nodesById.get("gate")!.position.x);
     expect(nodesById.get("final")!.position.x).toBeGreaterThan(nodesById.get("gate")!.position.x);
-    expect(nodesById.get("final")!.position.y).not.toBe(nodesById.get("gate")!.position.y);
+    expect(nodesById.get("final")!.position.y).toBe(nodesById.get("gate")!.position.y);
     expect(nodesDoNotOverlap(nodes)).toBe(true);
     expect(edges).toHaveLength(4);
     expect(edges).toEqual(
@@ -189,10 +189,35 @@ describe("workflowToReactFlow", () => {
     }));
     expect(elseEdge).toEqual(expect.objectContaining({
       type: "smoothstep",
-      sourceHandle: "source-bottom",
+      sourceHandle: "source-right",
       targetHandle: "target-left",
       data: expect.objectContaining({ routeKind: "else" }),
     }));
+  });
+
+  it("routes frontend bug investigation loop edges through separate lanes", () => {
+    const { nodes, edges } = workflowToReactFlow(frontendBugInvestigationDefinition);
+    const nodesById = new Map(nodes.map((node) => [node.id, node]));
+    const loopGate = nodesById.get("loop_gate")!;
+    const finalRouteGate = nodesById.get("final_route_gate")!;
+    const investigate = nodesById.get("investigate_and_verify")!;
+    const classify = nodesById.get("classify_and_record")!;
+    const loopBackEdge = edges.find((edge) => edge.id === "edge-5-to")!;
+    const classifyBackEdge = edges.find((edge) => edge.id === "edge-6-to")!;
+    const finalEdge = edges.find((edge) => edge.id === "edge-6-else")!;
+
+    expect(loopGate.position.y).toBe(nodesById.get("review_cleanup")!.position.y);
+    expect(finalRouteGate.position.y).toBe(nodesById.get("review_cleanup")!.position.y);
+    expect(nodesById.get("scope_and_baseline")!.position.y).toBe(loopGate.position.y);
+    expect(nodesById.get("final_report")!.position.y).toBe(loopGate.position.y);
+    expect(investigate.position.x).toBeLessThan(loopGate.position.x);
+    expect(classify.position.x).toBeLessThan(finalRouteGate.position.x);
+    expect(loopBackEdge.data).toEqual(expect.objectContaining({ routeKind: "back", lane: 1 }));
+    expect(classifyBackEdge.data).toEqual(expect.objectContaining({ routeKind: "back", lane: 2 }));
+    expect(loopBackEdge.style).toEqual(expect.objectContaining({ strokeDashoffset: 56 }));
+    expect(classifyBackEdge.style).toEqual(expect.objectContaining({ strokeDashoffset: 112 }));
+    expect(loopBackEdge.style).not.toEqual(classifyBackEdge.style);
+    expect(finalEdge.data).toEqual(expect.objectContaining({ routeKind: "else", lane: 2 }));
   });
 });
 
@@ -208,3 +233,37 @@ function nodesDoNotOverlap(nodes: ReturnType<typeof workflowToReactFlow>["nodes"
   }
   return true;
 }
+
+const frontendBugInvestigationDefinition: WorkflowDefinition = {
+  meta: { name: "Frontend Bug Investigation Workflow" },
+  state: { fields: [] },
+  nodes: [
+    { id: "scope_and_baseline", type: "agent", dispatch: "subissue" },
+    { id: "investigate_and_verify", type: "agent", dispatch: "subissue" },
+    { id: "classify_and_record", type: "agent", dispatch: "subissue" },
+    { id: "review_cleanup", type: "agent", dispatch: "subissue" },
+    { id: "loop_gate", type: "transform", dispatch: "inline" },
+    { id: "final_route_gate", type: "transform", dispatch: "inline" },
+    { id: "final_report", type: "final_response", dispatch: "main_issue_task" },
+  ],
+  routing: [
+    { from: "START", to: "scope_and_baseline" },
+    { from: "scope_and_baseline", to: "investigate_and_verify" },
+    { from: "investigate_and_verify", to: "classify_and_record" },
+    { from: "classify_and_record", to: "review_cleanup" },
+    { from: "review_cleanup", to: "loop_gate" },
+    {
+      from: "loop_gate",
+      condition: 'workflow_status == "fixable_auto" && next_target == "investigate_and_verify" && revisionCount < 2',
+      to: "investigate_and_verify",
+      else: "final_route_gate",
+    },
+    {
+      from: "final_route_gate",
+      condition: 'workflow_status == "fixable_auto" && next_target == "classify_and_record" && revisionCount < 2',
+      to: "classify_and_record",
+      else: "final_report",
+    },
+    { from: "final_report", to: "END" },
+  ],
+};

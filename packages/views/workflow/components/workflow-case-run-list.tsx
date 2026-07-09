@@ -13,6 +13,8 @@ export function WorkflowCaseRunList({
   cancellingRunId,
   activeStatuses,
   openRunHref,
+  versionHref,
+  versionLabelById = {},
 }: {
   runs: WorkflowRun[];
   selectedRunId?: string | null;
@@ -21,6 +23,8 @@ export function WorkflowCaseRunList({
   cancellingRunId?: string | null;
   activeStatuses?: Set<WorkflowRun["status"]>;
   openRunHref?: (runId: string) => string;
+  versionHref?: (versionId: string) => string;
+  versionLabelById?: Record<string, string>;
 }) {
   if (runs.length === 0) {
     return (
@@ -39,6 +43,7 @@ export function WorkflowCaseRunList({
         {runs.map((run) => {
           const selected = run.id === selectedRunId;
           const cancellable = Boolean(onCancelRun) && (activeStatuses ? activeStatuses.has(run.status) : false);
+          const versionLabel = run.definition_version_id ? (versionLabelById[run.definition_version_id] ?? shortId(run.definition_version_id)) : null;
           return (
             <li key={run.id} className={cn("flex items-center gap-1", selected && "bg-accent/60")}>
               <Button
@@ -53,9 +58,6 @@ export function WorkflowCaseRunList({
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className={statusClass(run.status)}>{run.status}</span>
-                    {run.run_kind && (
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{run.run_kind}</span>
-                    )}
                     <span className="truncate font-mono text-xs text-muted-foreground">{shortId(run.id)}</span>
                   </span>
                   <span className="mt-1 block truncate text-xs text-muted-foreground">
@@ -71,6 +73,14 @@ export function WorkflowCaseRunList({
                   className="mr-1 inline-flex h-7 items-center rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
                   Open
+                </AppLink>
+              )}
+              {run.definition_version_id && versionHref && (
+                <AppLink
+                  href={versionHref(run.definition_version_id)}
+                  className="mr-1 inline-flex h-7 items-center rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  {versionLabel ?? "Version"}
                 </AppLink>
               )}
               {cancellable && (

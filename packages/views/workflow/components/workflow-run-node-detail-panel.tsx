@@ -1,13 +1,15 @@
 "use client";
 
-import type { WorkflowRunNode } from "@multica/core/workflow/types";
+import type { WorkflowNode, WorkflowRunNode } from "@multica/core/workflow/types";
 import { AppLink } from "../../navigation";
 
 export function WorkflowRunNodeDetailPanel({
   node,
+  definitionNode,
   issueHref,
 }: {
   node?: WorkflowRunNode | null;
+  definitionNode?: WorkflowNode | null;
   issueHref?: (issueId: string) => string;
 }) {
   if (!node) {
@@ -19,6 +21,8 @@ export function WorkflowRunNodeDetailPanel({
   }
 
   const carrierIssueId = node.carrier_kind === "issue" ? issueIdFromCarrierRef(node.carrier_ref) : null;
+  const agentRoute = definitionNode?.config?.agent ?? definitionNode?.agent ?? null;
+  const systemPrompt = definitionNode?.config?.system ?? null;
 
   return (
     <section className="overflow-hidden rounded-lg border bg-card">
@@ -41,6 +45,20 @@ export function WorkflowRunNodeDetailPanel({
           >
             Open sub-issue
           </AppLink>
+        )}
+        {definitionNode && (
+          <div className="space-y-2 rounded-md border bg-background/60 p-2">
+            <div className="text-[11px] font-medium uppercase text-muted-foreground">Definition</div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <Detail label="Agent route" value={agentRoute} mono />
+              <Detail label="Definition type" value={definitionNode.type} />
+              <Detail label="Definition dispatch" value={definitionNode.dispatch ?? "-"} />
+              <Detail label="Carrier" value={definitionNode.carrier_kind ?? "-"} />
+            </div>
+            <JsonBlock label="Inputs" value={definitionNode.inputs} />
+            <JsonBlock label="Outputs" value={definitionNode.outputs} />
+            <JsonBlock label="System prompt" value={systemPrompt} />
+          </div>
         )}
         <JsonBlock label="Carrier ref" value={node.carrier_ref} />
         <JsonBlock label="Input" value={node.input_snapshot} />

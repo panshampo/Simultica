@@ -6,6 +6,7 @@ import { ArrowLeft, FolderGit2 } from "lucide-react";
 import { useWorkspaceId } from "@multica/core/hooks";
 import { useWorkspacePaths } from "@multica/core/paths";
 import {
+  workflowCaseDefinitionVersionsOptions,
   workflowCaseDetailOptions,
   workflowCaseRunsOptions,
 } from "@multica/core/workflow/queries";
@@ -30,11 +31,17 @@ export function WorkflowRunDetailPage({
   const paths = useWorkspacePaths();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(initialNodeId ?? null);
   const { data: workflowCase } = useQuery(workflowCaseDetailOptions(wsId, caseId));
+  const { data: versions = [] } = useQuery(workflowCaseDefinitionVersionsOptions(wsId, caseId));
   const { data: runs = [], isLoading } = useQuery(workflowCaseRunsOptions(wsId, caseId));
 
   const run = useMemo(() => runs.find((item) => item.id === runId) ?? null, [runs, runId]);
+  const runVersion = run?.definition_version_id
+    ? versions.find((version) => version.id === run.definition_version_id) ?? null
+    : null;
+  const runVersionLabel = runVersion ? `v${runVersion.version}` : (run?.definition_version_id ? shortId(run.definition_version_id) : "-");
   const nodes = run?.nodes ?? [];
   const selectedNode = nodes.find((node) => node.node_id === selectedNodeId) ?? null;
+  const selectedDefinitionNode = run?.definition_snapshot.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const nodeMissing = Boolean(initialNodeId) && !isLoading && Boolean(run) && !nodes.some((n) => n.node_id === initialNodeId);
 
   useEffect(() => {
@@ -75,9 +82,6 @@ export function WorkflowRunDetailPage({
             {run.label || `Run ${shortId(run.id)}`}
           </h1>
           <span className={runStatusClass(run.status)}>{run.status}</span>
-          {run.run_kind && (
-            <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{run.run_kind}</span>
-          )}
         </div>
         {workflowCase && (
           <AppLink
@@ -92,11 +96,16 @@ export function WorkflowRunDetailPage({
       <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <main className="min-w-0 space-y-4">
           <section className="rounded-lg border bg-card p-4">
-            <div className="grid gap-3 text-sm md:grid-cols-3 lg:grid-cols-6">
+            <div className="grid gap-3 text-sm md:grid-cols-3 lg:grid-cols-5">
               <Property label="Run" value={shortId(run.id)} mono />
-              <Property label="Kind" value={run.run_kind || "primary"} />
               <Property label="Status" value={run.status} />
-              <Property label="Version" value={run.definition_version_id ? shortId(run.definition_version_id) : "-"} mono />
+              <Property label="Version" value={run.definition_version_id ? undefined : "-"} mono>
+                {run.definition_version_id && (
+                  <AppLink href={paths.workflowCaseVersionDetail(caseId, run.definition_version_id)} className="underline underline-offset-2 hover:text-foreground">
+                    {runVersionLabel}
+                  </AppLink>
+                )}
+              </Property>
               <Property label="Started" value={run.started_at ? formatDateTime(run.started_at) : "-"} />
               <Property label="Completed" value={run.completed_at ? formatDateTime(run.completed_at) : "-"} />
             </div>
@@ -122,11 +131,20 @@ export function WorkflowRunDetailPage({
             />
           </section>
 
-          <NodeTable nodes={nodes} selectedNodeId={selectedNodeId} onSelectNode={setSelectedNodeId} />
+          <NodeTable
+            nodes={nodes}
+            selectedNodeId={selectedNodeId}
+            onSelectNode={setSelectedNodeId}
+            issueHref={(issueId) => paths.issueDetail(issueId)}
+          />
         </main>
 
         <aside className="space-y-4">
-          <WorkflowRunNodeDetailPanel node={selectedNode} issueHref={(issueId) => paths.issueDetail(issueId)} />
+          <WorkflowRunNodeDetailPanel
+            node={selectedNode}
+            definitionNode={selectedDefinitionNode}
+            issueHref={(issueId) => paths.issueDetail(issueId)}
+          />
         </aside>
       </div>
     </div>
@@ -137,10 +155,12 @@ function NodeTable({
   nodes,
   selectedNodeId,
   onSelectNode,
+  issueHref,
 }: {
   nodes: WorkflowRunNode[];
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
+  issueHref: (issueId: string) => string;
 }) {
   if (nodes.length === 0) {
     return (
@@ -157,13 +177,14 @@ function NodeTable({
       <ul className="divide-y">
         {nodes.map((node) => {
           const selected = node.node_id === selectedNodeId;
+          const carrierIssueId = node.carrier_kind === "issue" ? issueIdFromCarrierRef(node.carrier_ref) : null;
           return (
-            <li key={node.id}>
+            <li key={node.id} className={cn("flex items-center gap-2", selected && "bg-accent/60")}>
               <button
                 type="button"
                 className={cn(
-                  "flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent/40",
-                  selected && "bg-accent/60",
+                  "flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left text-sm hover:bg-accent/40",
+                  selected && "text-accent-foreground",
                 )}
                 onClick={() => onSelectNode(node.node_id)}
               >
@@ -172,6 +193,14 @@ function NodeTable({
                 <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{node.carrier_kind ?? node.dispatch}</span>
                 <span className={nodeStatusClass(node.status)}>{node.status}</span>
               </button>
+              {carrierIssueId && (
+                <AppLink
+                  href={issueHref(carrierIssueId)}
+                  className="mr-2 inline-flex h-7 shrink-0 items-center rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  Open issue
+                </AppLink>
+              )}
             </li>
           );
         })}
@@ -180,11 +209,21 @@ function NodeTable({
   );
 }
 
-function Property({ label, value, mono = false }: { label: string; value?: string; mono?: boolean }) {
+function issueIdFromCarrierRef(ref: unknown): string | null {
+  if (!ref || typeof ref !== "object") return null;
+  const rec = ref as Record<string, unknown>;
+  for (const key of ["issue_id", "sub_issue_id", "issueId", "subIssueId"]) {
+    const value = rec[key];
+    if (typeof value === "string" && value.trim() !== "") return value;
+  }
+  return null;
+}
+
+function Property({ label, value, mono = false, children }: { label: string; value?: string; mono?: boolean; children?: React.ReactNode }) {
   return (
     <div className="min-w-0">
       <div className="text-[11px] uppercase text-muted-foreground">{label}</div>
-      <div className={mono ? "mt-1 truncate font-mono text-xs" : "mt-1 truncate text-sm"}>{value ?? "-"}</div>
+      <div className={mono ? "mt-1 truncate font-mono text-xs" : "mt-1 truncate text-sm"}>{children ?? value ?? "-"}</div>
     </div>
   );
 }

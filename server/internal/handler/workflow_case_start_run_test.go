@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -31,7 +32,7 @@ func newRunSidecar(t *testing.T) *httptest.Server {
 	return sidecar
 }
 
-func TestStartWorkflowCaseRunUsesOnlineVersion(t *testing.T) {
+func TestStartWorkflowCaseRunUsesOnlineVersionWithoutRunKind(t *testing.T) {
 	ctx := context.Background()
 	sidecar := newRunSidecar(t)
 	t.Setenv("MULTICA_WORKFLOW_SIDECAR_URL", sidecar.URL)
@@ -41,7 +42,6 @@ func TestStartWorkflowCaseRunUsesOnlineVersion(t *testing.T) {
 	onlineVersionID := publishWorkflowCaseForTest(t, caseID)
 
 	rec := startWorkflowCaseRunViaHandler(t, caseID, map[string]any{
-		"run_kind":      "experiment",
 		"label":         "Approach A",
 		"initial_state": map[string]any{"task": "online run"},
 	})
@@ -55,20 +55,24 @@ func TestStartWorkflowCaseRunUsesOnlineVersion(t *testing.T) {
 	if resp.DefinitionVersionID == nil || *resp.DefinitionVersionID != onlineVersionID {
 		t.Fatalf("definition_version_id = %v, want online %s", resp.DefinitionVersionID, onlineVersionID)
 	}
-	if resp.RunKind != "experiment" {
-		t.Fatalf("run_kind = %q, want experiment", resp.RunKind)
-	}
 	if resp.Label != "Approach A" {
 		t.Fatalf("label = %q, want Approach A", resp.Label)
 	}
+	if strings.Contains(rec.Body.String(), "run_kind") {
+		t.Fatalf("response must not expose run_kind: %s", rec.Body.String())
+	}
 
-	// Start run must not project run status onto the case.
+	// Creating a run must not project run status onto the case, but it should
+	// update the case's current run pointer so the UI defaults to the latest run.
 	updatedCase, err := testHandler.Queries.GetWorkflowCase(ctx, parseUUID(caseID))
 	if err != nil {
 		t.Fatalf("load workflow case: %v", err)
 	}
 	if updatedCase.Status == "running" {
 		t.Fatalf("case status = %q, start run must not project run status", updatedCase.Status)
+	}
+	if !updatedCase.CurrentRunID.Valid || uuidToString(updatedCase.CurrentRunID) != resp.ID {
+		t.Fatalf("current_run_id = %v, want %s", uuidToString(updatedCase.CurrentRunID), resp.ID)
 	}
 }
 
@@ -77,7 +81,7 @@ func TestStartWorkflowCaseRunRejectsWithoutOnlineVersion(t *testing.T) {
 	caseID := createWorkflowCaseForTest(t, "start without online version")
 	upsertWorkflowCaseDefinitionForTest(t, caseID, workflowCaseConfirmDefinition())
 
-	rec := startWorkflowCaseRunViaHandler(t, caseID, map[string]any{"run_kind": "primary"})
+	rec := startWorkflowCaseRunViaHandler(t, caseID, map[string]any{})
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -116,11 +120,11 @@ func TestStartWorkflowCaseRunAllowsParallelActiveRuns(t *testing.T) {
 	upsertWorkflowCaseDefinitionForTest(t, caseID, workflowCaseConfirmDefinition())
 	publishWorkflowCaseForTest(t, caseID)
 
-	first := startWorkflowCaseRunViaHandler(t, caseID, map[string]any{"run_kind": "primary"})
+	first := startWorkflowCaseRunViaHandler(t, caseID, map[string]any{"label": "first"})
 	if first.Code != http.StatusAccepted {
 		t.Fatalf("first run: expected 202, got %d: %s", first.Code, first.Body.String())
 	}
-	second := startWorkflowCaseRunViaHandler(t, caseID, map[string]any{"run_kind": "experiment"})
+	second := startWorkflowCaseRunViaHandler(t, caseID, map[string]any{"label": "second"})
 	if second.Code != http.StatusAccepted {
 		t.Fatalf("second run: expected 202, got %d: %s", second.Code, second.Body.String())
 	}
@@ -134,13 +138,16 @@ func TestStartWorkflowCaseRunAllowsParallelActiveRuns(t *testing.T) {
 	}
 }
 
-func TestStartWorkflowCaseRunRejectsUnknownRunKind(t *testing.T) {
-	caseID := createWorkflowCaseForTest(t, "reject unknown run kind")
+func TestStartWorkflowCaseRunRejectsRunKind(t *testing.T) {
+	caseID := createWorkflowCaseForTest(t, "reject run kind")
 	upsertWorkflowCaseDefinitionForTest(t, caseID, workflowCaseConfirmDefinition())
 	publishWorkflowCaseForTest(t, caseID)
 
-	rec := startWorkflowCaseRunViaHandler(t, caseID, map[string]any{"run_kind": "bogus"})
+	rec := startWorkflowCaseRunViaHandler(t, caseID, map[string]any{"run_kind": "primary"})
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for unknown run_kind, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("expected 400 for removed run_kind, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "run_kind is no longer supported") {
+		t.Fatalf("unexpected body: %s", rec.Body.String())
 	}
 }

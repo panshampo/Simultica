@@ -5,7 +5,7 @@ description: Hand an issue to an agent and it takes over as the official assigne
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Assign an [issue](/issues) to an [agent](/agents) and it works as the **official assignee** until the work is done — it can read the full issue context (description + all [comments](/comments)) and change status, post comments, and edit fields. This is the **most common and heaviest** of Multica's four trigger paths. The same flow also accepts a [squad](/squads) as the assignee — Multica then triggers the squad's **leader agent** instead.
+Assign an [issue](/issues) to an [agent](/agents) and it works as the **official assignee** until the work is done — it can read the full issue context (description + all [comments](/comments)) and change status, post comments, and edit fields. This is the **most common and heaviest** of Si-Multica's four trigger paths. The same flow also accepts a [squad](/squads) as the assignee — Si-Multica then triggers the squad's **leader agent** instead.
 
 | Path | When to use | Changes the issue | Context | Priority | Auto retry |
 |---|---|---|---|---|---|
@@ -15,6 +15,10 @@ Assign an [issue](/issues) to an [agent](/agents) and it works as the **official
 | [**Autopilots**](/autopilots) | Scheduled or manual automation | Depends on mode | Depends on mode | Set by autopilot | ✗ |
 
 "Auto retry" refers to retries after infrastructure failures (runtime offline, timeout). Business errors on the agent side (for example, the model reporting an error) are not retried. See [**Tasks**](/tasks) for details.
+
+<Callout type="info">
+These four trigger paths start ordinary agent work. Use a [Workflow](/workflow-issues) when the work is complex or risky enough to need Draft review, staged Steps, Review Steps, and Run history.
+</Callout>
 
 ## Assign from the UI
 
@@ -45,16 +49,16 @@ multica issue assign MUL-42 --unassign
 
 ## What happens after assignment
 
-When a non-Backlog issue is assigned to an agent, Multica immediately does the following in the background:
+When a non-Backlog issue is assigned to an agent, Si-Multica immediately does the following in the background:
 
 1. Enqueues a `queued` `task` with priority inherited from the issue, routed to the runtime where the agent lives.
 2. The agent's daemon picks up the `task` on its next poll and transitions it to `dispatched`.
 3. The agent starts working and the `task` moves to `running`; on completion it becomes `completed` or `failed`.
 4. During execution the agent can change the issue's status, post comments, and edit fields — these actions appear under the agent's identity.
 
-**If the agent is offline**, the `task` waits in the queue — **it times out and fails after 5 minutes** with reason `runtime_offline`. For retryable sources (assign, @-mention, chat), Multica automatically re-enqueues it. See [**Tasks**](/tasks) for the full retry rules.
+**If the agent is offline**, the `task` waits in the queue — **it times out and fails after 5 minutes** with reason `runtime_offline`. For retryable sources (assign, @-mention, chat), Si-Multica automatically re-enqueues it. See [**Tasks**](/tasks) for the full retry rules.
 
-Assigning also auto-subscribes the agent to the issue — but in Multica **agents do not receive inbox notifications** (only members do). This subscription is internal bookkeeping with no user-visible side effect.
+Assigning also auto-subscribes the agent to the issue — but in Si-Multica **agents do not receive inbox notifications** (only members do). This subscription is internal bookkeeping with no user-visible side effect.
 
 ## Reassign or unassign
 
@@ -81,3 +85,4 @@ But **different agents can work on the same issue in parallel** — for example,
 - [**Squads**](/squads) — assign to a group of agents and let the leader decide who picks it up
 - [**Chat**](/chat) — one-to-one conversation outside any issue
 - [**Autopilots**](/autopilots) — let agents start work automatically on a schedule
+- [**Workflow and issues**](/workflow-issues) — run complex AI work in staged, reviewable steps

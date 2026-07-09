@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Download,
   HardDrive,
+  Link2,
   Loader2,
   Pencil,
   Plus,
@@ -44,7 +45,7 @@ import { RuntimeLocalSkillImportPanel } from "./runtime-local-skill-import-panel
 import { useT } from "../../i18n";
 import { isNameConflictError } from "../lib/utils";
 
-type Method = "chooser" | "manual" | "url" | "runtime";
+type Method = "chooser" | "manual" | "url" | "runtime" | "globalLink";
 
 function seedAfterCreate(
   qc: ReturnType<typeof useQueryClient>,
@@ -65,11 +66,12 @@ function MethodChooser({ onChoose }: { onChoose: (m: Method) => void }) {
   const methods: {
     key: Method;
     icon: typeof Plus;
-    titleKey: "manual" | "url" | "runtime";
+    titleKey: "manual" | "url" | "runtime" | "globalLink";
   }[] = [
     { key: "manual", icon: Plus, titleKey: "manual" },
     { key: "url", icon: Download, titleKey: "url" },
     { key: "runtime", icon: HardDrive, titleKey: "runtime" },
+    { key: "globalLink", icon: Link2, titleKey: "globalLink" },
   ];
   return (
     <div className="grid gap-2 p-5">
@@ -424,6 +426,155 @@ function UrlForm({
 }
 
 // ---------------------------------------------------------------------------
+// Global link form
+// ---------------------------------------------------------------------------
+
+function GlobalLinkForm({
+  onCreated,
+  onCancel,
+}: {
+  onCreated: (skill: Skill) => void;
+  onCancel: () => void;
+}) {
+  const { t } = useT("skills");
+  const qc = useQueryClient();
+  const wsId = useWorkspaceId();
+  const [targetPath, setTargetPath] = useState("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const fadeStyle = useScrollFade(scrollRef);
+
+  const submit = async () => {
+    const trimmedPath = targetPath.trim();
+    if (!trimmedPath) return;
+    setLoading(true);
+    setError("");
+    try {
+      const skill = await api.createGlobalSkillLink({
+        target_path: trimmedPath,
+        name: name.trim() || undefined,
+        description: description.trim() || undefined,
+      });
+      seedAfterCreate(qc, wsId, skill);
+      toast.success(t(($) => $.create.global_link.toast_created));
+      onCreated(skill);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : t(($) => $.create.global_link.fallback_error),
+      );
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <div
+        ref={scrollRef}
+        style={fadeStyle}
+        className="flex-1 min-h-0 space-y-4 overflow-y-auto px-5 py-4"
+      >
+        <div className="space-y-1.5">
+          <Label htmlFor="global-link-target" className="text-xs text-muted-foreground">
+            {t(($) => $.create.global_link.target_label)}
+          </Label>
+          <Input
+            id="global-link-target"
+            autoFocus
+            value={targetPath}
+            onChange={(e) => {
+              setTargetPath(e.target.value);
+              setError("");
+            }}
+            placeholder="/Users/bytedance/.agents/skills/frontend-bug-investigation"
+            className="font-mono text-sm"
+            onKeyDown={(e) => {
+              if (isImeComposing(e)) return;
+              if (e.key === "Enter") submit();
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            {t(($) => $.create.global_link.target_hint)}
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="global-link-name" className="text-xs text-muted-foreground">
+            {t(($) => $.create.global_link.name_label)}
+          </Label>
+          <Input
+            id="global-link-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t(($) => $.create.global_link.name_placeholder)}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="global-link-desc" className="text-xs text-muted-foreground">
+            <Pencil className="h-3 w-3" />
+            {t(($) => $.create.global_link.description_label)}
+          </Label>
+          <Textarea
+            id="global-link-desc"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={t(($) => $.create.global_link.description_placeholder)}
+            rows={3}
+            className="resize-none"
+          />
+        </div>
+
+        {error && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"
+          >
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="flex shrink-0 items-center justify-end gap-2 border-t bg-muted/30 px-5 py-3">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onCancel}
+          disabled={loading}
+        >
+          {t(($) => $.create.global_link.cancel)}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          className={managementActionButtonClass("save")}
+          onClick={submit}
+          disabled={!targetPath.trim() || loading}
+        >
+          {loading ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin" />
+              {t(($) => $.create.global_link.submitting)}
+            </>
+          ) : (
+            <>
+              <Link2 className="h-3 w-3" />
+              {t(($) => $.create.global_link.submit)}
+            </>
+          )}
+        </Button>
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Root dialog
 // ---------------------------------------------------------------------------
 
@@ -520,6 +671,12 @@ export function CreateSkillDialog({
           <RuntimeLocalSkillImportPanel
             onImported={handleCreated}
             onBulkDone={onClose}
+          />
+        )}
+        {method === "globalLink" && (
+          <GlobalLinkForm
+            onCreated={handleCreated}
+            onCancel={() => setMethod("chooser")}
           />
         )}
       </DialogContent>

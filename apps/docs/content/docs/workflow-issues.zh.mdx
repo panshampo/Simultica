@@ -1,12 +1,12 @@
 ---
-title: Workflow 和 Issue 如何协作
-description: 解释 skill、issue、runtime workflow、子 issue 和 workflow_run 之间的关系。
+title: Workflow
+description: 用 Draft、Active Workflow、Run、Step 和 Review Step 分阶段运行复杂 AI 工作。
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 import { Mermaid } from "@/components/mermaid";
 
-在 Multica 里，**skill 是能力**，**issue 是目标**，**runtime workflow 是执行计划**，`workflow_run` 是用户可见的执行记录。
+在 Si-Multica 里，**skill 是能力**，**issue 是目标**，**Workflow 是复杂 AI 工作怎么运行**，**Run 是用户可见的执行记录**。
 
 这页有两条阅读路径：
 
@@ -15,10 +15,10 @@ import { Mermaid } from "@/components/mermaid";
 
 ## 先记住一句话
 
-当 issue 分配给智能体后，issue 是用户目标的容器。主 agent 负责规划。它读取 issue 上下文和自己挂载的 skills，提交 runtime workflow draft。Backend 校验 draft，创建 `workflow_run`，然后启动 agent-runtime sidecar。Sidecar 执行校验后的 workflow snapshot，并持续更新 `workflow_run`，让 UI 有唯一清晰的事实源。
+当一个 AI 任务太复杂或风险太高，不能放心黑盒交给 agent 时，就应该使用 Workflow。Agent 先起草怎么跑，人审计和编辑 Draft，然后设为 Active Workflow。每次 Run 都按 Active Workflow 的快照执行，通过 `workflow_run` 展示 Step 进度，并在 Review Step 暂停等待人通过或不通过。
 
 <Callout type="info">
-Skill 不是一次运行。Skill 是可复用的知识和 workflow 结构，主 agent 可以在为具体 issue 规划 run 时使用它。
+Skill 不是一次运行。Skill 是可复用的知识和 workflow 结构，agent 可以在为具体目标起草 Workflow 时使用它。
 </Callout>
 
 ## 一条 issue 的执行生命周期
@@ -26,41 +26,47 @@ Skill 不是一次运行。Skill 是可复用的知识和 workflow 结构，主 
 <Mermaid chart={`
 flowchart LR
   User["用户"] --> Issue["主 issue<br/>目标容器"]
-  Issue --> MainAgent["主 agent<br/>规划者和最终负责人"]
-  MainAgent --> Backend["Simultica backend<br/>校验和副作用闸门"]
-  Backend --> Run["workflow_run<br/>用户可见执行记录"]
+  Issue --> MainAgent["Agent<br/>起草 Workflow"]
+  MainAgent --> Draft["Draft<br/>人可编辑"]
+  Draft --> Active["Active Workflow<br/>新 Run 使用"]
+  Active --> Backend["Simultica backend<br/>校验和副作用闸门"]
+  Backend --> Run["Run / workflow_run<br/>用户可见执行记录"]
   Backend --> Sidecar["agent-runtime sidecar<br/>执行编排层"]
-  Sidecar --> Dispatch{"dispatch"}
+  Sidecar --> Dispatch{"Step dispatch"}
   Dispatch --> SubIssue["subissue<br/>子 issue + task"]
   Dispatch --> Inline["inline<br/>内部执行"]
-  Dispatch --> MainTask["main_issue_task<br/>主 agent review/final"]
+  Dispatch --> Review["review step<br/>通过或不通过"]
   SubIssue --> Run
   Inline --> Run
-  MainTask --> Run
+  Review --> Run
   Run --> Issue
 `} />
 
 关键边界是：
 
-- **主 agent 规划** 当前 issue 的 workflow。
-- **Backend 校验** workflow，并负责会改变产品状态的副作用。
+- **Agent 起草** 复杂工作应该怎么跑。
+- **人审计** Draft，并把它设为 Active Workflow。
+- **Backend 校验** Active Workflow，并负责会改变产品状态的副作用。
 - **Sidecar 执行** backend 已校验的 snapshot。
 - **`workflow_run` 记录** 用户在 UI 里看到的状态。
+- **Workflow path 决定** 每个 Step 之后怎么走，包括 Review Step 通过或不通过后的路径。
 
 ## 心智模型
 
-可以把系统理解成一条从抽象能力到具体执行记录的链路：
+可以把系统理解成一条从可复用能力到具体运行记录的链路：
 
 | 概念 | 它回答什么问题 | 主要使用者 |
 |---|---|---|
 | Skill | 这个 agent 能反复使用什么能力？ | Agent 作者、主 agent |
 | Skill workflow | 这个 skill 提供什么可复用子图？ | 主 agent、skill 编辑者 |
 | 主 issue | 用户到底想完成什么？ | 用户、operator |
-| Runtime workflow | 针对当前 issue 的最终执行计划是什么？ | 主 agent、backend、sidecar |
-| Workflow node | 执行计划里的某一步是什么？ | Sidecar、workflow UI |
+| Workflow Draft | Agent 建议这件事应该怎么跑？ | Agent、人 |
+| Active Workflow | 新 Run 会按哪套流程执行？ | 用户、backend、sidecar |
+| Step | Run 中一个可观察阶段是什么？ | Sidecar、workflow UI |
+| Review Step | 哪一步必须等人通过或不通过？ | 用户、operator |
 | Dispatch | 这一步通过什么载体执行？ | Backend 校验、sidecar |
 | 子 issue | 哪个子任务被派给了子 agent？ | Operator、子 agent |
-| `workflow_run` | 这次执行发生了什么？ | UI、operator、developer |
+| Run / `workflow_run` | 这次执行发生了什么？ | UI、operator、developer |
 
 ## 概念表
 
@@ -74,27 +80,31 @@ flowchart LR
 
 ### Skill
 
-Skill 是可复用能力包。它可以包含指令、示例、工具说明、参考文件和 workflow template。Skill 本身不是一次执行。
+Skill 是可复用能力包。它可以包含指令、示例、工具说明、参考文件和 workflow shape。Skill 本身不是一次执行。
 
 ### Skill workflow
 
-Skill workflow 是 skill 内的可复用模板或子图。主 agent 可以完整复用、裁剪、和其他 skill workflow 拼接，或按当前 issue 修改。
+Skill workflow 是 skill 内的可复用 workflow 形态或子图。主 agent 可以完整复用、裁剪、和其他 skill workflow 拼接，或按当前 issue 修改。
 
-### Runtime workflow
+### Workflow
 
-Runtime workflow 是主 agent 为当前 issue 提交、并由 backend 校验后的最终执行图。一旦写入 `workflow_run.definition_snapshot`，它就是 sidecar 执行的 snapshot。
+Workflow 是复杂 AI 工作的运行流程。Agent 先创建 Draft，人审计后设为 Active Workflow，新的 Run 会基于 Active Workflow 执行。
 
-### Workflow node
+### Step
 
-Workflow node 是图里的一步。Node 不天然等于子 agent，也不天然等于子 issue。`type` 表示这一步做什么，`dispatch` 表示这一步通过什么载体执行。
+Step 是图里的一个可观察阶段。Step 不天然等于子 agent，也不天然等于子 issue。`type` 表示这一步做什么，`dispatch` 表示这一步通过什么载体执行。
 
-### `workflow_run`
+### Review Step
 
-`workflow_run` 是用户可见的执行记录。它保存 workflow snapshot、状态、当前节点、节点状态、输出、错误，以及 sub issue id / task id 等引用。
+Review Step 会暂停 Run，让人只做一个决策：通过或不通过。这个决策成为 Step output，后续路径由 workflow path 决定。
+
+### Run / `workflow_run`
+
+`workflow_run` 是用户可见的执行记录。它保存 workflow snapshot、状态、当前 step、step 状态、输出、错误、review decision，以及 sub issue id / task id 等引用。
 
 ## 原生 issue 模式 vs workflow-managed 模式
 
-Multica 里有两种都合理的执行模型。
+Si-Multica 里有两种都合理的执行模型。
 
 ### 原生 issue 模式
 
@@ -102,7 +112,7 @@ Multica 里有两种都合理的执行模型。
 
 ### Workflow-managed 模式
 
-Workflow-managed 模式里，`workflow_run` 是控制器。Workflow-managed 子 issue 只是 `dispatch=subissue` 节点的执行载体。子 issue 完成后，结果回到 workflow run，由图决定下一步。
+Workflow-managed 模式里，`workflow_run` 是控制器。Workflow-managed 子 issue 只是 `dispatch=subissue` Step 的执行载体。子 issue 完成后，结果回到 Run，由图决定下一步。
 
 <Mermaid chart={`
 flowchart TB
@@ -114,38 +124,52 @@ flowchart TB
   subgraph Managed["Workflow-managed 模式"]
     ManagedChild["Workflow-managed 子 issue done"] --> Sidecar["Sidecar 读取结果"]
     Sidecar --> Run["更新 workflow_run"]
-    Run --> Next["推进下一个 workflow node"]
+    Run --> Next["推进下一个 workflow step"]
   end
 `} />
 
 <Callout type="warning">
-Workflow-managed 子 issue 不应该同时触发原生 parent auto-wake。否则系统会出现两个控制器：workflow run 和父 issue assignee。
+Workflow-managed 子 issue 不应该同时触发原生 parent auto-wake。否则系统会出现两个控制器：Run 和父 issue assignee。
 </Callout>
 
 ## Dispatch 和执行载体
 
 | Dispatch | 执行载体 | 是否创建 Simultica 子 issue | 用户看到什么 |
 |---|---|---:|---|
-| `subissue` | 子 issue + task | 是 | 节点状态、输出、子 issue 链接 |
-| `inline` | Sidecar 或 backend 内部执行 | 否 | 节点状态、内部结果 |
-| `main_issue_task` | 主 issue 上的 review/final task | 否 | 主 agent 节点和最终汇总 |
+| `subissue` | 子 issue + task | 是 | Step 状态、输出、子 issue 链接 |
+| `inline` | Sidecar 或 backend 内部执行 | 否 | Step 状态、内部结果 |
+| `human_gate` | Review Step | 否 | 审批状态和 review decision |
+| `main_issue_task` | 主 issue 上的 review/final task | 否 | 主 agent step 和最终汇总 |
 | `direct_subagent` | 预留给未来 direct subagent session | 否 | 当前不作为产品承诺 |
 
-只有 `dispatch=subissue` 会创建子 issue。其他 workflow node 仍然可以在 workflow 图里展示，但不会创建子 issue。
+只有 `dispatch=subissue` 会创建子 issue。其他 Step 仍然可以在 workflow 图里展示，但不会创建子 issue。
+
+## Review Step 决策
+
+Review Step 的语义刻意保持很窄：
+
+```text
+Review Step 等待
+  -> 用户通过或不通过
+  -> decision 写成 step output
+  -> workflow path 决定下一个 step
+```
+
+审批动作不允许用户随意选择下一个 Step，也不允许用户直接编辑正在运行的 Workflow。如果 reject 后需要返工，Workflow 必须显式定义这条路径。
 
 ## 进度事实源在哪里
 
-对用户来说，进度在主 issue 的 workflow panel 里。对开发者来说，用户可见状态在 `workflow_run` 里。
+对用户来说，进度在 Run detail 和 workflow panel 里。对开发者来说，用户可见状态在 `workflow_run` 里。
 
 agent-runtime 使用的 LangGraph checkpoint 是另一件事：它是引擎恢复用的内部状态，不是 UI 事实源。
 
 ## 停止与重新规划
 
-当前 runtime workflow 是 snapshot。如果计划错了，产品模型是：
+当前 Run 使用的是一个 snapshot。如果计划错了，产品模型是：
 
 1. Stop 或 cancel 当前 run。
 2. 保留旧的 `workflow_run` 记录，方便审计和回看。
-3. 重新规划，并用新的 snapshot 创建新的 run。
+3. 重新规划或编辑 Draft，设为 Active Workflow，再用新的 snapshot 创建新的 Run。
 
 这样旧执行不会被原地改写，用户也能理解每次运行发生过什么。
 
@@ -155,7 +179,7 @@ agent-runtime 使用的 LangGraph checkpoint 是另一件事：它是引擎恢�
 
 | 区域 | 文件 |
 |---|---|
-| 产品设计 | `docs/superpowers/specs/2026-06-27-simultica-runtime-workflow-planning-design.md`, `docs/superpowers/specs/2026-06-27-simultica-workflow-issue-relationship-explainer.md` |
+| 产品设计 | `docs/superpowers/specs/2026-07-09-simultica-workflow-product-positioning.md`, `docs/superpowers/specs/2026-07-09-simultica-workflow-product-alignment-technical-design.md` |
 | Backend submit 和 run API | `server/internal/handler/runtime_workflow_submit.go`, `server/internal/handler/workflow_run.go` |
 | Workflow run 存储 | `server/pkg/db/queries/workflow_run.sql` |
 | 前端类型和查询 | `packages/core/workflow/types.ts`, `packages/core/workflow/queries.ts` |
@@ -167,8 +191,9 @@ agent-runtime 使用的 LangGraph checkpoint 是另一件事：它是引擎恢�
 
 给 operator：
 
-- 先打开主 issue，看 workflow panel。
-- 如果某个节点创建了子 issue，再打开子 issue 看子 agent 细节。
+- 先打开 Run detail 或 workflow panel。
+- 如果某个 Step 创建了子 issue，再打开子 issue 看子 agent 细节。
+- 如果 Review Step 正在等待，在 Run detail 中通过或不通过。
 - 确认 run 是 `running`、`failed`、`cancelled` 还是 `done`。
 - 如果 runtime 离线，去 Runtimes 页面和 daemon status 看本机执行环境。
 
@@ -177,7 +202,7 @@ agent-runtime 使用的 LangGraph checkpoint 是另一件事：它是引擎恢�
 - 查 `workflow_run.status`、`current_node`、`nodes_state` 和 `error`。
 - 查 runtime workflow submit path 的 backend validation error。
 - 查 sidecar logs，重点看 build、polling、cancel 和 node execution failure。
-- 确认失败节点是 `subissue`、`inline` 还是 `main_issue_task`。
+- 确认失败 Step 是 `subissue`、`inline`、`human_gate` 还是 `main_issue_task`。
 - UI 状态绑定 `workflow_run`，不要绑定 LangGraph checkpoint。
 
 ## 下一步

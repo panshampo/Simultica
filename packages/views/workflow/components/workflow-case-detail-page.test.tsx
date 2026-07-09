@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   validateWorkflowCaseDefinition: vi.fn(),
   publishWorkflowCaseDefinition: vi.fn(),
   startWorkflowCaseRun: vi.fn(),
+  updateWorkflowCase: vi.fn(),
   cancelWorkflowCaseRun: vi.fn(),
   deleteWorkflowCase: vi.fn(),
   upsertWorkflowCaseDefinitionDraft: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock("@multica/core/api", () => ({
     validateWorkflowCaseDefinition: mocks.validateWorkflowCaseDefinition,
     publishWorkflowCaseDefinition: mocks.publishWorkflowCaseDefinition,
     startWorkflowCaseRun: mocks.startWorkflowCaseRun,
+    updateWorkflowCase: mocks.updateWorkflowCase,
     cancelWorkflowCaseRun: mocks.cancelWorkflowCaseRun,
     deleteWorkflowCase: mocks.deleteWorkflowCase,
     upsertWorkflowCaseDefinitionDraft: mocks.upsertWorkflowCaseDefinitionDraft,
@@ -48,6 +50,7 @@ vi.mock("@multica/core/paths", () => ({
   useWorkspacePaths: () => ({
     workflowCases: () => "/workflow-cases",
     workflowCaseDetail: (id: string) => `/workflow-cases/${id}`,
+    workflowCaseVersionDetail: (caseId: string, versionId: string) => `/workflow-cases/${caseId}/versions/${versionId}`,
     workflowCaseRunDetail: (caseId: string, runId: string, nodeId?: string) => {
       const base = `/workflow-cases/${caseId}/runs/${runId}`;
       return nodeId ? `${base}?node_id=${nodeId}` : base;
@@ -94,14 +97,64 @@ describe("WorkflowCaseDetailPage", () => {
     mocks.upsertWorkflowCaseDefinitionDraft.mockResolvedValue(makeDraft());
     mocks.publishWorkflowCaseDefinition.mockResolvedValue({ version: makeVersion() });
     mocks.startWorkflowCaseRun.mockResolvedValue(makeRun({ id: "run-2", status: "running" }));
+    mocks.updateWorkflowCase.mockResolvedValue(makeCase());
     mocks.cancelWorkflowCaseRun.mockResolvedValue(makeRun({ id: "run-active", status: "cancelled" }));
     mocks.deleteWorkflowCase.mockResolvedValue(undefined);
+  });
+
+  it("renders Overview as the default metadata tab without definition or run controls", async () => {
+    renderPage();
+
+    expect(await screen.findByText("Workflow case title")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("tab", { name: "Settings" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Archive case" })).toBeInTheDocument();
+    expect(screen.getByText("Lifecycle")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create run" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Validate draft" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Workflow YAML")).not.toBeInTheDocument();
+  });
+
+  it("creates a run from the Runs tab without run_kind", async () => {
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("tab", { name: "Runs" }));
+    await userEvent.click(screen.getByRole("button", { name: "Create run" }));
+
+    await waitFor(() => {
+      expect(mocks.startWorkflowCaseRun).toHaveBeenCalledWith("case-1", {
+        label: undefined,
+        initial_state: {},
+      });
+    });
+    expect(mocks.startWorkflowCaseRun.mock.calls[0]?.[1]).not.toHaveProperty("run_kind");
+  });
+
+  it("updates case metadata from Overview", async () => {
+    mocks.updateWorkflowCase.mockResolvedValue(makeCase({ title: "Renamed workflow case", description: "Updated" }));
+    renderPage();
+
+    await screen.findByRole("tab", { name: "Overview" });
+    await userEvent.clear(screen.getByLabelText("Case title"));
+    await userEvent.type(screen.getByLabelText("Case title"), "Renamed workflow case");
+    await userEvent.clear(screen.getByLabelText("Description"));
+    await userEvent.type(screen.getByLabelText("Description"), "Updated");
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(mocks.updateWorkflowCase).toHaveBeenCalledWith("case-1", expect.objectContaining({
+        title: "Renamed workflow case",
+        description: "Updated",
+      }));
+    });
   });
 
   it("gates publish on validation, then starts an online-version run without a version id", async () => {
     renderPage();
 
     expect(await screen.findByText("Workflow case title")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Definition" }));
     expect(screen.getByRole("button", { name: "Publish online version" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Validate draft" }));
@@ -112,29 +165,31 @@ describe("WorkflowCaseDetailPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Publish online version" }));
     await waitFor(() => expect(mocks.publishWorkflowCaseDefinition).toHaveBeenCalledWith("case-1"));
 
-    fireEvent.click(screen.getByRole("button", { name: "Start run" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Runs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create run" }));
     await waitFor(() => {
       expect(mocks.startWorkflowCaseRun).toHaveBeenCalledWith("case-1", {
-        run_kind: "primary",
         label: undefined,
         initial_state: {},
       });
     });
-    // Start run must never carry a definition_version_id.
+    expect(mocks.startWorkflowCaseRun.mock.calls[0]?.[1]).not.toHaveProperty("run_kind");
+    // Create run must never carry a definition_version_id.
     expect(mocks.startWorkflowCaseRun.mock.calls[0]?.[1]).not.toHaveProperty("definition_version_id");
   });
 
-  it("disables Start run and publishing when there is no online version", async () => {
+  it("disables Create run and publishing when there is no online version", async () => {
     mocks.getWorkflowCase.mockResolvedValue(makeCase({ online_version_id: null }));
 
     renderPage();
 
     expect(await screen.findByText("Workflow case title")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start run" })).toBeDisabled();
-    expect(screen.getByText("Publish an online version before starting a run.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Runs" }));
+    expect(screen.getByRole("button", { name: "Create run" })).toBeDisabled();
+    expect(screen.getByText("Publish an online version before creating a run.")).toBeInTheDocument();
   });
 
-  it("marks the online version and shows historical versions without a Start run row action", async () => {
+  it("marks the online version and shows historical versions on Overview", async () => {
     mocks.getWorkflowCase.mockResolvedValue(makeCase({ online_version_id: "version-2" }));
     mocks.listWorkflowCaseDefinitionVersions.mockResolvedValue([
       makeVersion({ id: "version-1", version: 1 }),
@@ -143,22 +198,37 @@ describe("WorkflowCaseDetailPage", () => {
 
     renderPage();
 
+    await screen.findByRole("tab", { name: "Overview" });
     expect(await screen.findByText("Online")).toBeInTheDocument();
     expect(screen.getByText("Historical")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Start run from/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open v1" })).toHaveAttribute(
+      "href",
+      "/workflow-cases/case-1/versions/version-1",
+    );
+    expect(screen.getByRole("link", { name: "Open v2" })).toHaveAttribute(
+      "href",
+      "/workflow-cases/case-1/versions/version-2",
+    );
+    expect(screen.queryByRole("button", { name: /Create run from/i })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("tab", { name: "Definition" }));
+    expect(screen.queryByText("Historical")).not.toBeInTheDocument();
   });
 
   it("renders multiple parallel active runs and cancels a single run", async () => {
     mocks.getWorkflowCase.mockResolvedValue(makeCase({ online_version_id: "version-1" }));
     mocks.listWorkflowCaseRuns.mockResolvedValue([
-      makeRun({ id: "run-a", status: "running", run_kind: "primary" }),
-      makeRun({ id: "run-b", status: "running", run_kind: "experiment" }),
+      makeRun({ id: "run-a", status: "running" }),
+      makeRun({ id: "run-b", status: "running" }),
     ]);
 
     renderPage();
 
+    await userEvent.click(await screen.findByRole("tab", { name: "Runs" }));
     expect(await screen.findByText("run-a")).toBeInTheDocument();
     expect(screen.getByText("run-b")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "v1" })).toHaveLength(2);
+    expect(screen.queryAllByText("v1")).toHaveLength(2);
     const cancelButtons = screen.getAllByRole("button", { name: "Cancel" });
     expect(cancelButtons.length).toBe(2);
     fireEvent.click(cancelButtons[0]!);
@@ -176,11 +246,12 @@ describe("WorkflowCaseDetailPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole("button", { name: "Delete case" }));
+    await screen.findByRole("tab", { name: "Overview" });
+    await user.click(screen.getByRole("button", { name: "Delete permanently" }));
     // The dialog's confirm action carries the alert-dialog-action data-slot.
     const dialogConfirm = await waitFor(() => {
       const match = screen
-        .getAllByRole("button", { name: "Delete case" })
+        .getAllByRole("button", { name: "Delete permanently" })
         .find((b) => b.getAttribute("data-slot") === "alert-dialog-action");
       if (!match) throw new Error("dialog confirm not mounted yet");
       return match;
@@ -197,6 +268,7 @@ describe("WorkflowCaseDetailPage", () => {
 
     renderPage();
 
+    await userEvent.click(await screen.findByRole("tab", { name: "Definition" }));
     expect(await screen.findByText("No definition draft is available for this workflow case.")).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "Create starter draft" }).at(-1)!);
     expect(await screen.findByLabelText("Workflow YAML")).toBeInTheDocument();

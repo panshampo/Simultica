@@ -901,7 +901,6 @@ type WorkflowRun struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 	CaseID              pgtype.UUID        `json:"case_id"`
 	DefinitionVersionID pgtype.UUID        `json:"definition_version_id"`
-	RunKind             string             `json:"run_kind"`
 	Label               string             `json:"label"`
 }
 

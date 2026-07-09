@@ -1,0 +1,222 @@
+---
+title: Product domain model
+description: How Skills, IssueTemplates, Issues, Workflows, Runs, and related entities fit together.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Mermaid } from "@/components/mermaid";
+import { ProductDomainDiagram } from "@/components/product-domain-diagram";
+
+The core Si-Multica product model is: **Issues hold goals and collaboration, Skills hold reusable capability, IssueTemplates create issues, Workflows define how complex AI work runs, and Runs record executions.**
+
+This page is not a how-to guide. It is the shared mental model for product, design, frontend, backend, and runtime work. Use it to avoid mixing skills, issue templates, issues, runs, and tasks into one overloaded concept.
+
+## Domain map
+
+**User goals enter through Issues; repeated issue creation enters through IssueTemplates; reusable agent capability enters through Skills; Workflow turns complex AI work into a draft, an active workflow, and auditable runs.**
+
+<ProductDomainDiagram />
+
+There are three boundaries to keep clear:
+
+- **Goal boundary**: the Issue describes what the user wants done.
+- **Template boundary**: IssueTemplate only creates Issues; it does not create Agents, Skills, or Workflows.
+- **Capability boundary**: Skills reuse agent capability and workflow shapes.
+- **Execution boundary**: Workflow and Run manage complex AI work instead of hiding execution inside Skills or Issues.
+
+## Core entities
+
+**Each entity answers one primary question. When reading code or designing UI, first decide which question the information belongs to.**
+
+| Entity | Question it answers | It is not |
+|---|---|---|
+| Workspace | Which collaboration space owns these people, agents, issues, and skills? | A runtime |
+| Agent | Who executes work, with which AI coding tool and configuration? | A single task |
+| Skill | What knowledge, methods, files, and workflow shapes can an agent reuse? | A run or a goal |
+| IssueTemplate | What defaults create an issue directly, or let automation create an issue? | A mechanism for creating Agents, Skills, or Workflows |
+| Issue | What does the user want done, and where does collaboration happen? | A workflow editor |
+| Workflow | How should this complex AI job run? | A single execution log |
+| Draft | What plan is the agent or human still editing? | The active workflow |
+| Active Workflow | What plan is used for new runs? | A separate entity users manage directly |
+| Snapshot | What immutable workflow state did a run use? | A mutable draft |
+| Run | Which snapshot ran, where is execution now, and what happened? | A Skill or a LangGraph checkpoint |
+| Step | What is one observable stage in a run? | The whole workflow |
+| Review Step | Where must a human approve or reject before the path continues? | A free-form rerouting tool |
+| Run node | What is the runtime projection of one workflow step? | The design-time step itself |
+| Task | What queued unit should an agent runtime execute? | The user goal itself |
+
+## Skill
+
+**A Skill is a capability pack. It makes an agent better at a category of work, but it is not a concrete goal or a single execution.**
+
+A Skill usually contains:
+
+- `SKILL.md`: trigger rules, method, constraints, and checklists.
+- Supporting files: scripts, references, examples.
+- `workflow.yaml`: optional workflow shape that describes the recommended steps for the skill.
+
+The product role of a Skill is reusable capability. The same Skill can be attached to many Agents, and its workflow shape can be shown as read-only or copied into a Workflow draft.
+
+<Callout type="info">
+Changing a Skill affects future tasks and future runs. Existing Run records keep their own execution snapshot; they are not rewritten when a Skill changes later.
+</Callout>
+
+## IssueTemplate
+
+**In the current product model, the Templates feature means IssueTemplate. It only creates Issues directly or lets Automation create Issues automatically.**
+
+IssueTemplate stores issue creation defaults:
+
+| Field | Purpose |
+|---|---|
+| Issue title template | Title of the created issue |
+| Issue body template | Description of the created issue |
+| assignee / priority / labels | Default owner, priority, and labels for the new issue |
+| default metadata / execution spec | Default context needed by automation or downstream execution |
+
+IssueTemplate has two product paths:
+
+- **Manual instantiation**: a user creates an issue directly from a template.
+- **Automation reference**: an Automation uses an IssueTemplate when it fires on a schedule or webhook.
+
+IssueTemplate does not create Agents, import Skills, or generate Workflow drafts. Do not call a Skill workflow shape a Template; it is a workflow shape or reusable subgraph provided by a Skill.
+
+## Issue
+
+**An Issue is the goal container and collaboration surface. It holds the request, discussion, status, owner, and final result.**
+
+An Issue can be handled by a human or assigned to an Agent. When assigned to an Agent, the system creates a Task so the local daemon and AI coding tool can execute it.
+
+Issues appear in two common roles:
+
+| Role | Meaning | Controller |
+|---|---|---|
+| Native issue | A standalone work item, optionally with parent/child relationships | Issue assignee |
+| Workflow-managed issue | The carrier for a workflow step | `workflow_run` |
+
+A workflow-managed child issue is not a new workflow controller. It is the execution surface for a `dispatch=subissue` step. When it completes, the result returns to the Run, and the workflow path decides the next step.
+
+## Workflow
+
+**A Workflow is the runbook for complex AI work: the agent drafts how it should run, a human inspects and sets it active, and every Run follows the active workflow snapshot.**
+
+Workflow answers “how should this complex AI job run?” It does not answer “where is this single execution right now?”
+
+A Workflow usually contains:
+
+- Metadata: title, description, owner agent, status.
+- Draft: the editable plan, usually generated by an agent and then inspected by a human.
+- Active Workflow: the plan used for new Runs.
+- Snapshots: immutable historical states used for audit and run provenance.
+- Runs: executions created from the Active Workflow.
+
+The Workflow UI should keep three areas separate:
+
+| Area | Belongs here | Does not belong here |
+|---|---|---|
+| Overview | Metadata, lifecycle, active workflow summary, recent runs | Workflow editing controls |
+| Workflow | Draft editing, validation, setting the draft active, snapshot history | Run execution controls |
+| Runs | Create runs, list runs, open run detail, review pending steps | Editing the workflow draft |
+
+<Callout type="warning">
+Creating a run means “create a new Run from the current Active Workflow.” Do not model this as debug, experiment, or replay. In the current product model, a run is just a run.
+</Callout>
+
+## Draft, Active Workflow, and Snapshot
+
+**Draft and Active Workflow are states of the same Workflow. Snapshots exist for audit and reproducibility, not as a primary object users manage day to day.**
+
+<Mermaid chart={`
+flowchart LR
+  Draft["Draft<br/>editable"] --> Validate["Validate"]
+  Validate --> SetActive["Set active"]
+  SetActive --> Active["Active Workflow<br/>used by new runs"]
+  Active --> Snapshot["Snapshot<br/>immutable audit record"]
+  Snapshot --> Run["Run<br/>stores snapshot reference"]
+`} />
+
+Snapshots are not just backups. They provide three product guarantees:
+
+- **Reviewability**: users can open a historical snapshot and inspect how the workflow looked then.
+- **Provenance**: run detail can show which snapshot this run used.
+- **Execution stability**: run snapshots do not change when Drafts or Skills change later.
+
+## Run
+
+**A Run is one execution record. It connects a workflow snapshot, run status, step states, and external carriers.**
+
+A Run answers:
+
+- Which workflow snapshot did this run use?
+- Which execution snapshot was stored for reproducibility?
+- Is the run `running`, `failed`, `cancelled`, or `done`?
+- Which step is current?
+- What are each step’s status, input, output, and error?
+- Which steps created child issues or tasks?
+
+`workflow_run` is the UI source of truth. The LangGraph checkpoint inside agent-runtime is internal engine recovery state and should not be used as the UI fact source.
+
+## Review Step
+
+**A Review Step pauses a Run and asks a human for one decision: approve or reject. The workflow path, not the approval button, decides what happens next.**
+
+Review Step semantics:
+
+```text
+Run reaches Review Step
+  -> user reviews the step inputs
+  -> user chooses Approve or Reject
+  -> the decision becomes step output
+  -> workflow path decides the next step
+```
+
+Review Step does not let users edit the running workflow, pick an arbitrary next step, or change the run snapshot. If rejection should trigger rework, the workflow must define that path explicitly.
+
+## Task, Run, and Issue
+
+**Task is a queue item, Run is a workflow execution record, and Issue is the collaboration goal. They can be linked, but they should not replace each other.**
+
+| Object | Lifecycle driver | User interpretation |
+|---|---|---|
+| Issue | Humans, agents, workflow carriers | “The thing I want done” |
+| Task | Server queue, daemon, AI coding tool | “One piece of work dispatched to an agent” |
+| Run | Workflow API, backend, sidecar | “One execution of one active workflow snapshot” |
+
+Assigning a native issue to an Agent creates a Task. A Run `subissue` step also creates a child issue, which then creates a Task. The UI should not force users to infer the main path from raw tasks; users should navigate from Run steps to the concrete issue or task.
+
+## Recommended product language
+
+**UI copy should reflect entity boundaries. Users should not need database table names to understand what they are doing.**
+
+| Scenario | Prefer | Avoid |
+|---|---|---|
+| Create a run | Create run | Debug run, Start experiment |
+| Open historical workflow | Open snapshot | Re-run from version |
+| Show run provenance | Snapshot v3 | Snapshot id only |
+| Inspect a step | Step details | Node metadata |
+| Open a child issue | Open issue | Open carrier ref |
+| Edit workflow | Edit draft | Edit current run |
+| Set the workflow live | Set active | Publish version |
+| Human approval | Review step | Approval gate |
+
+## Common mistakes
+
+**Most design confusion comes from merging capability, issue templates, goals, and execution records into one object.**
+
+| Mistake | Correct model |
+|---|---|
+| Skill is a run | Skill is capability; run is execution |
+| Templates can create any object | In the current product model, Templates only manage IssueTemplates |
+| IssueTemplate keeps controlling an issue | IssueTemplate only provides defaults when an issue is created; the issue owns its own truth after creation |
+| Issue is the workflow | Issue is the goal container; Workflow is the runbook |
+| Workflow is Run | Workflow is the runbook; Run is one execution |
+| Every workflow step creates a child issue | Only `dispatch=subissue` creates a child issue |
+| `workflow_run` is the LangGraph checkpoint | `workflow_run` is the UI source of truth; checkpoint is runtime recovery state |
+| Historical snapshots can be edited | Snapshots are immutable; edit Draft and set it active again |
+
+## Next steps
+
+- [Workflow and issues](/workflow-issues) - understand Workflows, Runs, child issues, and sidecar execution in depth.
+- [Skills](/skills) - understand Skills as reusable capability packs.
+- [Issues and projects](/issues) - understand native issue collaboration.
+- [Create and configure agents](/agents-create) - understand Agents, runtimes, and Skill attachment.

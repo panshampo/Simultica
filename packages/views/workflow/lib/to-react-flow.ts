@@ -3,6 +3,7 @@ import type { WorkflowDefinition, WorkflowEdge, WorkflowNode, WorkflowNodeRunSta
 
 const COLUMN_GAP = 360;
 const ROW_GAP = 180;
+const EDGE_LANE_GAP = 56;
 export const WORKFLOW_NODE_WIDTH = 208;
 export const WORKFLOW_NODE_HEIGHT = 104;
 const MAX_CONDITION_LABEL_LENGTH = 44;
@@ -12,6 +13,10 @@ export type WorkflowCanvasNodeData = {
   label: string;
   type: string;
   dispatch: string;
+  agentRoute: string | null;
+  inputs: string[];
+  outputs: string[];
+  systemPrompt: string | null;
   carrierLabel: string;
   status: WorkflowNodeRunState["status"] | "pending";
   subIssueId: string | null;
@@ -26,9 +31,11 @@ export type WorkflowCanvasNodeData = {
 
 type LayoutPoint = { layer: number; row: number };
 type WorkflowEdgeKind = "forward" | "condition" | "else" | "back";
+type EdgePlan = { routeKind: WorkflowEdgeKind; lane: number };
 
 export type WorkflowCanvasEdgeData = {
   routeKind: WorkflowEdgeKind;
+  lane: number;
   fullLabel: string | null;
   selectedByRouteDecision: boolean;
   mutedByRouteDecision: boolean;
@@ -43,6 +50,7 @@ export function workflowToReactFlow(
   opts: { draggable?: boolean; selectableEdges?: boolean; selectedNodeId?: string | null; selectedEdgeId?: string | null } = {},
 ): { nodes: Node<WorkflowCanvasNodeData>[]; edges: Edge[] } {
   const layout = computeLayout(definition);
+  const edgePlans = computeEdgePlans(definition.routing, layout);
   const nodeById = new Map(definition.nodes.map((node) => [node.id, node]));
   const nodes: Node<WorkflowCanvasNodeData>[] = [];
 
@@ -63,6 +71,10 @@ export function workflowToReactFlow(
         label: nodeId,
         type: node.type,
         dispatch,
+        agentRoute: node.config?.agent ?? node.agent ?? null,
+        inputs: node.inputs ?? [],
+        outputs: node.outputs ?? [],
+        systemPrompt: node.config?.system ?? null,
         carrierLabel: carrierLabel(node.type, carrierKind),
         status: state?.status ?? "pending",
         subIssueId: state?.sub_issue_id ?? null,
@@ -82,6 +94,7 @@ export function workflowToReactFlow(
 	      const id = `edge-${index}-to`;
 	      result.push(buildEdge({
 	        id,
+	        plan: edgePlans.get(id),
 	        route: edge,
 	        source: edge.from,
 	        target: edge.to,
@@ -96,6 +109,7 @@ export function workflowToReactFlow(
 	      const id = `edge-${index}-else`;
 	      result.push(buildEdge({
 	        id,
+	        plan: edgePlans.get(id),
 	        route: edge,
 	        source: edge.from,
 	        target: edge.else,
@@ -114,6 +128,7 @@ export function workflowToReactFlow(
 
 function buildEdge({
   id,
+  plan,
   route,
   source,
   target,
@@ -124,6 +139,7 @@ function buildEdge({
   opts,
 }: {
   id: string;
+  plan?: EdgePlan;
   route: WorkflowEdge;
   source: string;
   target: string;
@@ -136,8 +152,9 @@ function buildEdge({
   const sourcePoint = layout.get(source);
   const targetPoint = layout.get(target);
   const routeKind: WorkflowEdgeKind =
-    sourcePoint && targetPoint && targetPoint.layer <= sourcePoint.layer ? "back" : kindHint;
-  const handles = edgeHandles(routeKind, sourcePoint, targetPoint);
+    plan?.routeKind ?? (sourcePoint && targetPoint && targetPoint.layer <= sourcePoint.layer ? "back" : kindHint);
+  const lane = plan?.lane ?? 0;
+  const handles = edgeHandles(routeKind, sourcePoint, targetPoint, lane);
   const routeDecision = runState[source]?.route_decision;
   const selectedByRouteDecision = Boolean(routeDecision && routeDecision.selected_route === target);
   const mutedByRouteDecision = Boolean(routeDecision && !selectedByRouteDecision);
@@ -156,6 +173,7 @@ function buildEdge({
     interactionWidth: 28,
     data: {
       routeKind,
+      lane,
       fullLabel,
       selectedByRouteDecision,
       mutedByRouteDecision,
@@ -163,6 +181,7 @@ function buildEdge({
     } satisfies WorkflowCanvasEdgeData,
     style: edgeStyle({
       routeKind,
+      lane,
       selected: opts.selectedEdgeId === id,
       selectedByRouteDecision,
       mutedByRouteDecision,
@@ -172,6 +191,7 @@ function buildEdge({
       fill: "#475569",
       fontSize: 11,
       fontWeight: 500,
+      transform: lane ? `translateY(${lane * 8}px)` : undefined,
     },
     labelBgStyle: {
       fill: "rgba(255,255,255,0.92)",
@@ -185,9 +205,12 @@ function edgeHandles(
   routeKind: WorkflowEdgeKind,
   sourcePoint: LayoutPoint | undefined,
   targetPoint: LayoutPoint | undefined,
+  lane = 0,
 ): { sourceHandle: string; targetHandle: string } {
   if (routeKind === "back") {
-    return { sourceHandle: "source-top", targetHandle: "target-top" };
+    return lane % 2 === 0
+      ? { sourceHandle: "source-bottom", targetHandle: "target-bottom" }
+      : { sourceHandle: "source-top", targetHandle: "target-top" };
   }
   if (sourcePoint && targetPoint && targetPoint.row > sourcePoint.row) {
     return { sourceHandle: "source-bottom", targetHandle: "target-left" };
@@ -210,12 +233,14 @@ function displayEdgeLabel(label?: string): string | undefined {
 
 function edgeStyle({
   routeKind,
+  lane,
   selected,
   selectedByRouteDecision,
   mutedByRouteDecision,
   completedPath,
 }: {
   routeKind: WorkflowEdgeKind;
+  lane: number;
   selected: boolean;
   selectedByRouteDecision: boolean;
   mutedByRouteDecision: boolean;
@@ -236,6 +261,7 @@ function edgeStyle({
     strokeLinejoin: "round",
     strokeWidth: selected || selectedByRouteDecision ? 2.75 : completedPath ? 2 : 1.5,
     opacity: mutedByRouteDecision ? 0.28 : routeKind === "else" ? 0.78 : 1,
+    strokeDashoffset: lane ? lane * EDGE_LANE_GAP : undefined,
     ...(routeKind === "else" ? { strokeDasharray: "3 5" } : {}),
     ...(routeKind === "back" ? { strokeDasharray: "8 5" } : {}),
   };
@@ -283,6 +309,41 @@ function carrierLabel(type: string, carrierKind: string): string {
     default:
       return `${type} · inline`;
   }
+}
+
+function computeEdgePlans(routing: WorkflowEdge[], layout: Map<string, LayoutPoint>): Map<string, EdgePlan> {
+  const plans = new Map<string, EdgePlan>();
+  let backLane = 0;
+  let branchLane = 0;
+
+  routing.forEach((route, index) => {
+    if (route.from !== "START" && route.to !== "END") {
+      const id = `edge-${index}-to`;
+      const routeKind = inferRouteKind(route.from, route.to, route.condition ? "condition" : "forward", layout);
+      const lane = routeKind === "back" ? ++backLane : routeKind === "condition" ? ++branchLane : 0;
+      plans.set(id, { routeKind, lane });
+    }
+    if (route.else && route.from !== "START" && route.else !== "END") {
+      const id = `edge-${index}-else`;
+      const routeKind = inferRouteKind(route.from, route.else, "else", layout);
+      const lane = routeKind === "back" ? ++backLane : ++branchLane;
+      plans.set(id, { routeKind, lane });
+    }
+  });
+
+  return plans;
+}
+
+function inferRouteKind(
+  source: string,
+  target: string,
+  fallback: Exclude<WorkflowEdgeKind, "back">,
+  layout: Map<string, LayoutPoint>,
+): WorkflowEdgeKind {
+  const sourcePoint = layout.get(source);
+  const targetPoint = layout.get(target);
+  if (sourcePoint && targetPoint && targetPoint.layer <= sourcePoint.layer) return "back";
+  return fallback;
 }
 
 function computeLayers(definition: WorkflowDefinition): Map<string, number> {
@@ -351,6 +412,9 @@ function computeLayout(definition: WorkflowDefinition): Map<string, LayoutPoint>
 
       for (const route of definition.routing) {
         if (route.from !== id || !route.else || route.else === "END" || !nodeIds.has(route.else)) continue;
+        const toLayer = layers.get(route.to);
+        const isLoopGate = toLayer !== undefined && toLayer <= layer;
+        if (isLoopGate) continue;
         const elseLayer = layers.get(route.else);
         if (elseLayer === undefined || elseLayer <= layer) continue;
         preferredRows.set(route.else, Math.max(preferredRows.get(route.else) ?? 0, row + 1));

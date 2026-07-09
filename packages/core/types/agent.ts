@@ -420,6 +420,21 @@ export interface Skill extends SkillSummary {
   files: SkillFile[];
 }
 
+export interface SkillHealth {
+  status: "ok" | "warning" | "broken";
+  reasons: string[];
+  resolved_path?: string;
+  content_hash?: string;
+  updated_at?: string;
+  has_workflow: boolean;
+}
+
+export interface SkillWorkflowValidationResponse {
+  health: SkillHealth;
+  validation?: unknown;
+  error?: string;
+}
+
 export interface SkillFile {
   id: string;
   skill_id: string;
@@ -435,6 +450,12 @@ export interface CreateSkillRequest {
   content?: string;
   config?: Record<string, unknown>;
   files?: { path: string; content: string }[];
+}
+
+export interface CreateGlobalSkillLinkRequest {
+  target_path: string;
+  name?: string;
+  description?: string;
 }
 
 export interface UpdateSkillRequest {

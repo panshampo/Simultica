@@ -78,5 +78,6 @@ describe("desktop WorkflowCase routes", () => {
   it("matches WorkflowCase list and detail tab paths", () => {
     expect(matchRoutes(appRoutes, "/acme/workflow-cases")).not.toBeNull();
     expect(matchRoutes(appRoutes, "/acme/workflow-cases/case-1")).not.toBeNull();
+    expect(matchRoutes(appRoutes, "/acme/workflow-cases/case-1/versions/version-1")).not.toBeNull();
   });
 });

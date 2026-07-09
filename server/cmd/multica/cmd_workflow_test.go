@@ -91,15 +91,15 @@ func TestBuildWorkflowCaseDefinitionDraftBody(t *testing.T) {
 }
 
 func TestBuildWorkflowCaseRunStartBody(t *testing.T) {
-	body, err := buildWorkflowCaseRunStartBody("experiment", "Approach A", "")
+	body, err := buildWorkflowCaseRunStartBody("Approach A", "")
 	if err != nil {
 		t.Fatalf("buildWorkflowCaseRunStartBody: %v", err)
 	}
-	if body["run_kind"] != "experiment" {
-		t.Fatalf("run_kind = %#v", body["run_kind"])
-	}
 	if body["label"] != "Approach A" {
 		t.Fatalf("label = %#v", body["label"])
+	}
+	if _, ok := body["run_kind"]; ok {
+		t.Fatalf("run_kind must not be present: %#v", body)
 	}
 	if _, ok := body["definition_version_id"]; ok {
 		t.Fatalf("run start body must not include definition_version_id: %#v", body)
@@ -110,12 +110,12 @@ func TestBuildWorkflowCaseRunStartBody(t *testing.T) {
 }
 
 func TestBuildWorkflowCaseRunStartBodyDefaultsPrimaryWithoutLabel(t *testing.T) {
-	body, err := buildWorkflowCaseRunStartBody("primary", "", "")
+	body, err := buildWorkflowCaseRunStartBody("", "")
 	if err != nil {
 		t.Fatalf("buildWorkflowCaseRunStartBody: %v", err)
 	}
-	if body["run_kind"] != "primary" {
-		t.Fatalf("run_kind = %#v", body["run_kind"])
+	if _, ok := body["run_kind"]; ok {
+		t.Fatalf("run_kind must not be present: %#v", body)
 	}
 	if _, ok := body["label"]; ok {
 		t.Fatalf("empty label must be omitted: %#v", body)

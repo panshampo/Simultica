@@ -7,11 +7,19 @@ import type { Skill, SkillSummary } from "@multica/core/types";
  * `{ type: "manual" }` for them to keep the consumer code uniform.
  */
 export type OriginInfo = {
-  type: "runtime_local" | "clawhub" | "skills_sh" | "github" | "manual";
+  type:
+    | "runtime_local"
+    | "clawhub"
+    | "skills_sh"
+    | "github"
+    | "global_link"
+    | "manual";
   provider?: string;
   runtime_id?: string;
   source_path?: string;
   source_url?: string;
+  target_path?: string;
+  resolved_path?: string;
 };
 
 export function readOrigin(skill: SkillSummary): OriginInfo {
@@ -22,7 +30,22 @@ export function readOrigin(skill: SkillSummary): OriginInfo {
   if (raw?.type === "clawhub") return raw;
   if (raw?.type === "skills_sh") return raw;
   if (raw?.type === "github") return raw;
+  if (raw?.type === "global_link") return raw;
   return { type: "manual" };
+}
+
+export function readSkillHealth(skill: SkillSummary) {
+  const raw = (skill.config?.health ?? null) as
+    | {
+        status?: "ok" | "warning" | "broken";
+        reasons?: string[];
+        resolved_path?: string;
+        content_hash?: string;
+        updated_at?: string;
+        has_workflow?: boolean;
+      }
+    | null;
+  return raw ?? null;
 }
 
 /**

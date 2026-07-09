@@ -2,12 +2,11 @@
 INSERT INTO workflow_run (
     workspace_id, root_issue_id, skill_id, planner_task_id, status,
     current_node, nodes_state, definition_snapshot, source_skills,
-    case_id, definition_version_id, run_kind, label, started_at
+    case_id, definition_version_id, label, started_at
 ) VALUES (
     $1, $2, $3, sqlc.narg('planner_task_id'), $4,
     $5, $6, $7, sqlc.arg('source_skills'),
     sqlc.narg('case_id'), sqlc.narg('definition_version_id'),
-    COALESCE(sqlc.narg('run_kind'), 'primary'),
     COALESCE(sqlc.narg('label'), ''),
     now()
 )

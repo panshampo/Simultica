@@ -5,8 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestCreateWorkflowCaseStandalone(t *testing.T) {
@@ -44,6 +48,26 @@ func TestCreateWorkflowCaseStandalone(t *testing.T) {
 	}
 	if resp.Status != "draft" {
 		t.Fatalf("status = %q, want draft", resp.Status)
+	}
+}
+
+func TestFrontendBugInvestigationRegisteredWorkflowValidates(t *testing.T) {
+	workflowPath := filepath.Join("..", "..", ".agents", "skills", "frontend-bug-investigation", "workflow.yaml")
+	raw, err := os.ReadFile(workflowPath)
+	if err != nil {
+		t.Fatalf("read registered frontend-bug-investigation workflow: %v", err)
+	}
+	var draft map[string]any
+	if err := yaml.Unmarshal(raw, &draft); err != nil {
+		t.Fatalf("parse registered frontend-bug-investigation workflow: %v", err)
+	}
+
+	caseID := createWorkflowCaseForTest(t, "Frontend bug investigation workflow")
+	upsertWorkflowCaseDefinitionForTest(t, caseID, draft)
+	resp := validateWorkflowCaseDefinitionForTest(t, caseID)
+
+	if !resp.Valid {
+		t.Fatalf("frontend-bug-investigation workflow must validate, errors: %+v", resp.Errors)
 	}
 }
 

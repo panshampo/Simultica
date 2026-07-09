@@ -114,14 +114,28 @@ func writeSkillImportDuplicateConflict(w http.ResponseWriter, existing ExistingS
 	})
 }
 
-func skillToResponse(s db.Skill) SkillResponse {
+func rawSkillToResponse(s db.Skill) SkillResponse {
 	return SkillResponse{
 		ID:          uuidToString(s.ID),
 		WorkspaceID: uuidToString(s.WorkspaceID),
 		Name:        s.Name,
 		Description: s.Description,
 		Content:     s.Content,
-		Config:      decodeSkillConfig(s.Config),
+		Config:      enrichSkillConfig(s.Config),
+		CreatedBy:   uuidToPtr(s.CreatedBy),
+		CreatedAt:   timestampToString(s.CreatedAt),
+		UpdatedAt:   timestampToString(s.UpdatedAt),
+	}
+}
+
+func (h *Handler) skillToResponse(s db.Skill) SkillResponse {
+	return SkillResponse{
+		ID:          uuidToString(s.ID),
+		WorkspaceID: uuidToString(s.WorkspaceID),
+		Name:        s.Name,
+		Description: s.Description,
+		Content:     s.Content,
+		Config:      h.skillConfigForResponse(s),
 		CreatedBy:   uuidToPtr(s.CreatedBy),
 		CreatedAt:   timestampToString(s.CreatedAt),
 		UpdatedAt:   timestampToString(s.UpdatedAt),
@@ -155,7 +169,7 @@ func decodeSkillConfig(raw []byte) any {
 	return config
 }
 
-func skillSummaryToResponse(
+func (h *Handler) skillSummaryToResponse(
 	id, workspaceID pgtype.UUID,
 	name, description string,
 	config []byte,
@@ -167,10 +181,19 @@ func skillSummaryToResponse(
 		WorkspaceID: uuidToString(workspaceID),
 		Name:        name,
 		Description: description,
-		Config:      decodeSkillConfig(config),
-		CreatedBy:   uuidToPtr(createdBy),
-		CreatedAt:   timestampToString(createdAt),
-		UpdatedAt:   timestampToString(updatedAt),
+		Config: h.skillConfigForResponse(db.Skill{
+			ID:          id,
+			WorkspaceID: workspaceID,
+			Name:        name,
+			Description: description,
+			Config:      config,
+			CreatedBy:   createdBy,
+			CreatedAt:   createdAt,
+			UpdatedAt:   updatedAt,
+		}),
+		CreatedBy: uuidToPtr(createdBy),
+		CreatedAt: timestampToString(createdAt),
+		UpdatedAt: timestampToString(updatedAt),
 	}
 }
 
@@ -538,7 +561,7 @@ func (h *Handler) ListSkills(w http.ResponseWriter, r *http.Request) {
 
 	resp := make([]SkillSummaryResponse, len(skills))
 	for i, s := range skills {
-		resp[i] = skillSummaryToResponse(
+		resp[i] = h.skillSummaryToResponse(
 			s.ID, s.WorkspaceID, s.Name, s.Description, s.Config,
 			s.CreatedBy, s.CreatedAt, s.UpdatedAt,
 		)
@@ -573,6 +596,23 @@ func (h *Handler) GetSkill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	responseConfig := h.skillConfigForResponse(skill)
+	if skillOriginType(responseConfig) == originTypeGlobalLink {
+		bundle := h.resolvedSkillBundle(r.Context(), skill)
+		resp := h.skillToResponse(skill)
+		resp.Content = bundle.Content
+		config := responseConfig
+		config["source_type"] = bundle.SourceType
+		config["has_workflow"] = bundle.Health.HasWorkflow
+		config["health"] = skillHealthToConfig(bundle.Health)
+		resp.Config = config
+		writeJSON(w, http.StatusOK, SkillWithFilesResponse{
+			SkillResponse: resp,
+			Files:         bundle.Files,
+		})
+		return
+	}
+
 	files, err := h.Queries.ListSkillFiles(r.Context(), skill.ID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list skill files")
@@ -585,7 +625,7 @@ func (h *Handler) GetSkill(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, SkillWithFilesResponse{
-		SkillResponse: skillToResponse(skill),
+		SkillResponse: h.skillToResponse(skill),
 		Files:         fileResps,
 	})
 }
@@ -774,7 +814,7 @@ func (h *Handler) UpdateSkill(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := SkillWithFilesResponse{
-		SkillResponse: skillToResponse(skill),
+		SkillResponse: h.skillToResponse(skill),
 		Files:         fileResps,
 	}
 	wsID := h.resolveWorkspaceID(r)
@@ -809,6 +849,72 @@ func (h *Handler) DeleteSkill(w http.ResponseWriter, r *http.Request) {
 
 type ImportSkillRequest struct {
 	URL string `json:"url"`
+}
+
+func (h *Handler) CreateGlobalSkillLink(w http.ResponseWriter, r *http.Request) {
+	workspaceID := h.resolveWorkspaceID(r)
+	creatorID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+	workspaceUUID, ok := parseUUIDOrBadRequest(w, workspaceID, "workspace_id")
+	if !ok {
+		return
+	}
+
+	var req CreateGlobalSkillLinkRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	resp, err := h.createGlobalSkillLink(r.Context(), workspaceUUID, parseUUID(creatorID), req)
+	if err != nil {
+		if isUniqueViolation(err) {
+			writeError(w, http.StatusConflict, "a skill with this name already exists")
+			return
+		}
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	actorType, actorID := h.resolveActor(r, creatorID, workspaceID)
+	h.publish(protocol.EventSkillCreated, workspaceID, actorType, actorID, map[string]any{"skill": resp})
+	writeJSON(w, http.StatusCreated, resp)
+}
+
+func (h *Handler) RefreshSkill(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	skill, ok := h.loadSkillForUser(w, r, id)
+	if !ok {
+		return
+	}
+	if !h.canManageSkill(w, r, skill) {
+		return
+	}
+	bundle := h.resolvedSkillBundle(r.Context(), skill)
+	writeJSON(w, http.StatusOK, bundle)
+}
+
+func (h *Handler) ValidateSkillWorkflow(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	skill, ok := h.loadSkillForUser(w, r, id)
+	if !ok {
+		return
+	}
+	bundle := h.resolvedSkillBundle(r.Context(), skill)
+	resp := SkillWorkflowValidationResponse{Health: bundle.Health}
+	if bundle.Health.Status == "broken" {
+		resp.Error = strings.Join(bundle.Health.Reasons, "; ")
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+	if bundle.Workflow == nil {
+		resp.Error = "workflow.yaml not found"
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+	resp.Validation = validateSkillWorkflowYAML(bundle.Workflow.Content)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // Per-import bundle limits. These mirror the local-runtime importer so that
@@ -2164,7 +2270,7 @@ func (h *Handler) UpsertSkillFile(w http.ResponseWriter, r *http.Request) {
 
 	wsID := uuidToString(updatedSkill.WorkspaceID)
 	actorType, actorID := h.resolveActor(r, requestUserID(r), wsID)
-	h.publish(protocol.EventSkillUpdated, wsID, actorType, actorID, map[string]any{"skill": skillToResponse(updatedSkill)})
+	h.publish(protocol.EventSkillUpdated, wsID, actorType, actorID, map[string]any{"skill": h.skillToResponse(updatedSkill)})
 	writeJSON(w, http.StatusOK, skillFileToResponse(sf))
 }
 
@@ -2204,7 +2310,7 @@ func (h *Handler) DeleteSkillFile(w http.ResponseWriter, r *http.Request) {
 	}
 	wsID := uuidToString(updatedSkill.WorkspaceID)
 	actorType, actorID := h.resolveActor(r, requestUserID(r), wsID)
-	h.publish(protocol.EventSkillUpdated, wsID, actorType, actorID, map[string]any{"skill": skillToResponse(updatedSkill)})
+	h.publish(protocol.EventSkillUpdated, wsID, actorType, actorID, map[string]any{"skill": h.skillToResponse(updatedSkill)})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -2225,7 +2331,7 @@ func (h *Handler) ListAgentSkills(w http.ResponseWriter, r *http.Request) {
 
 	resp := make([]SkillSummaryResponse, len(skills))
 	for i, s := range skills {
-		resp[i] = skillSummaryToResponse(
+		resp[i] = h.skillSummaryToResponse(
 			s.ID, s.WorkspaceID, s.Name, s.Description, s.Config,
 			s.CreatedBy, s.CreatedAt, s.UpdatedAt,
 		)
@@ -2365,7 +2471,7 @@ func (h *Handler) writeUpdatedAgentSkills(w http.ResponseWriter, r *http.Request
 
 	resp := make([]SkillSummaryResponse, len(skills))
 	for i, s := range skills {
-		resp[i] = skillSummaryToResponse(
+		resp[i] = h.skillSummaryToResponse(
 			s.ID, s.WorkspaceID, s.Name, s.Description, s.Config,
 			s.CreatedBy, s.CreatedAt, s.UpdatedAt,
 		)

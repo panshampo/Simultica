@@ -5,7 +5,7 @@ description: 把 issue 交给智能体，它作为正式负责人一直工作到
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-把 [issue](/issues) 分配给 [智能体](/agents)，它会作为**正式负责人**一直工作到结束——能读到 issue 的完整上下文（描述 + 所有 [评论](/comments)），也能改状态、发评论、改字段。这是 Multica 四种触发方式里**最常见也最"重"**的一种。同样的流程也接受 [小队（squad）](/squads) 作为 assignee——这种情况下 Multica 会触发小队的**队长智能体**。
+把 [issue](/issues) 分配给 [智能体](/agents)，它会作为**正式负责人**一直工作到结束——能读到 issue 的完整上下文（描述 + 所有 [评论](/comments)），也能改状态、发评论、改字段。这是 Si-Multica 四种触发方式里**最常见也最"重"**的一种。同样的流程也接受 [小队（squad）](/squads) 作为 assignee——这种情况下 Si-Multica 会触发小队的**队长智能体**。
 
 | 方式 | 何时用 | 改 issue | 上下文 | 优先级 | 自动重试 |
 |---|---|---|---|---|---|
@@ -15,6 +15,10 @@ import { Callout } from "fumadocs-ui/components/callout";
 | [**Autopilots**](/autopilots) | 定时 / 手动自动化 | 视模式 | 视模式 | autopilot 自定 | ✗ |
 
 "自动重试"指基础设施故障（运行时离线、超时）导致的重试；智能体侧业务错误（比如模型自己报错）不会自动重试。详见 [**执行任务**](/tasks)。
+
+<Callout type="info">
+这四种触发方式启动的是普通 agent 工作。如果任务复杂或风险较高，需要 Draft 审计、分阶段 Step、Review Step 和 Run 历史，请使用 [Workflow](/workflow-issues)。
+</Callout>
 
 ## 在界面里分配
 
@@ -45,16 +49,16 @@ multica issue assign MUL-42 --unassign
 
 ## 分配之后会发生什么
 
-非 Backlog 的 issue 分配给智能体之后，Multica 会立刻在后台做以下事情：
+非 Backlog 的 issue 分配给智能体之后，Si-Multica 会立刻在后台做以下事情：
 
 1. 入队一个 `queued` 状态的 `task`，优先级继承自 issue，路由到该智能体所在的运行时
 2. 该智能体的守护进程下次轮询时把 `task` 领走，状态变成 `dispatched`
 3. 智能体开始执行，`task` 转成 `running`；完成后转成 `completed` / `failed`
 4. 执行过程中智能体可以改 issue 状态、发评论、改字段——这些动作以智能体的身份出现
 
-**如果智能体离线**，`task` 会在队列里等——**5 分钟没被领走就超时失败**，失败原因 `runtime_offline`。对可重试的来源（分配、@ 提及、对话），Multica 会自动重新排队；完整重试规则见 [**执行任务**](/tasks)。
+**如果智能体离线**，`task` 会在队列里等——**5 分钟没被领走就超时失败**，失败原因 `runtime_offline`。对可重试的来源（分配、@ 提及、对话），Si-Multica 会自动重新排队；完整重试规则见 [**执行任务**](/tasks)。
 
-分配还会自动把这个智能体加进 issue 的订阅列表——但 Multica 里**智能体不接收 inbox 通知**（只有成员收）。这个订阅只是内部 bookkeeping，用户侧没有可见的副作用。
+分配还会自动把这个智能体加进 issue 的订阅列表——但 Si-Multica 里**智能体不接收 inbox 通知**（只有成员收）。这个订阅只是内部 bookkeeping，用户侧没有可见的副作用。
 
 ## 换分配人或取消分配
 
@@ -81,3 +85,4 @@ multica issue assign MUL-42 --unassign
 - [**小队**](/squads) —— 把 issue 分给一组智能体，由队长决定谁接手
 - [**对话**](/chat) —— 脱离 issue 和智能体一对一聊
 - [**Autopilots**](/autopilots) —— 让智能体定时自动开工
+- [**Workflow 和 Issue 如何协作**](/workflow-issues) —— 用可审计的分阶段 Step 运行复杂 AI 工作

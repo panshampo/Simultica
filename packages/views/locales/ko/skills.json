@@ -6,10 +6,22 @@
     "new_skill": "새 스킬",
     "search_placeholder": "스킬 검색...",
     "scopes": {
-      "all": { "label": "전체", "description": "이 워크스페이스의 모든 스킬" },
-      "used": { "label": "사용 중", "description": "하나 이상의 에이전트에 할당된 스킬" },
-      "unused": { "label": "미사용", "description": "어떤 에이전트에도 할당되지 않은 스킬" },
-      "mine": { "label": "내가 만든 스킬", "description": "내가 생성한 스킬" }
+      "all": {
+        "label": "전체",
+        "description": "이 워크스페이스의 모든 스킬"
+      },
+      "used": {
+        "label": "사용 중",
+        "description": "하나 이상의 에이전트에 할당된 스킬"
+      },
+      "unused": {
+        "label": "미사용",
+        "description": "어떤 에이전트에도 할당되지 않은 스킬"
+      },
+      "mine": {
+        "label": "내가 만든 스킬",
+        "description": "내가 생성한 스킬"
+      }
     },
     "empty": {
       "title": "아직 스킬이 없습니다",
@@ -54,7 +66,14 @@
     "source_runtime_unknown": "런타임에서 가져옴",
     "source_clawhub": "ClawHub에서 가져옴",
     "source_skills_sh": "Skills.sh에서 가져옴",
-    "source_github": "GitHub에서 가져옴"
+    "source_github": "GitHub에서 가져옴",
+    "source_global_link": "Global skill link",
+    "source_global_link_broken": "Broken global link",
+    "workflow_yes": "워크플로 있음",
+    "workflow_no": "워크플로 없음",
+    "source_workspace_files": "Workspace files",
+    "source_local_import": "Local import",
+    "source_imported_snapshot": "Imported snapshot"
   },
   "detail": {
     "all_skills": "모든 스킬",
@@ -79,7 +98,8 @@
       "origin_github": "가져옴 · GitHub",
       "origin_workspace": "워크스페이스",
       "updated_label": "{{when}} 수정됨",
-      "by_creator": "{{name}}님"
+      "by_creator": "{{name}}님",
+      "origin_global_link": "Global skill link"
     },
     "conflict_banner": {
       "title": "다른 사람이 이 스킬을 업데이트했습니다",
@@ -147,6 +167,22 @@
         "reserved": "SKILL.md는 메인 파일용으로 예약되어 있습니다.",
         "exists": "이 경로에 이미 파일이 있습니다."
       }
+    },
+    "global_link": {
+      "ready": "Linked to global skill library",
+      "broken": "Global skill link is broken",
+      "validate_workflow": "Validate workflow"
+    },
+    "toast_workflow_valid": "Workflow is valid",
+    "toast_workflow_invalid": "Workflow has validation errors",
+    "toast_workflow_validate_failed": "Failed to validate workflow",
+    "source_type": {
+      "workspace_files": "Workspace files",
+      "imported_snapshot": "Imported snapshot",
+      "local_import_snapshot": "Local runtime snapshot",
+      "global_link": "Global skill link",
+      "global_link_broken": "Broken global skill link",
+      "workspace_storage": "Stored inside this workspace"
     }
   },
   "create": {
@@ -170,6 +206,10 @@
       "runtime": {
         "title": "런타임에서 복사",
         "desc": "로컬 런타임을 스캔해 디스크에 있는 스킬을 이 워크스페이스로 승격합니다."
+      },
+      "globalLink": {
+        "title": "Link global skill",
+        "desc": "Reference a skill from the global skill library without copying its files."
       }
     },
     "method_card": {
@@ -178,7 +218,9 @@
       "url_title": "URL에서 가져오기",
       "url_desc": "ClawHub 또는 Skills.sh의 공개 스킬을 가져옵니다.",
       "runtime_title": "런타임에서 복사",
-      "runtime_desc": "로컬 런타임에 이미 설치된 스킬을 워크스페이스로 가져옵니다."
+      "runtime_desc": "로컬 런타임에 이미 설치된 스킬을 워크스페이스로 가져옵니다.",
+      "globalLink_title": "Link global skill",
+      "globalLink_desc": "Use a skill directly from ~/.agents/skills and keep it synced."
     },
     "manual": {
       "name_label": "이름",
@@ -205,6 +247,19 @@
       "fallback_error": "가져오기 실패",
       "cancel": "취소",
       "toast_imported": "스킬을 가져왔습니다"
+    },
+    "global_link": {
+      "target_label": "Target path",
+      "target_hint": "Path must be inside an allowed global skill root and contain SKILL.md.",
+      "name_label": "Name override",
+      "name_placeholder": "Leave empty to read from SKILL.md",
+      "description_label": "Description override",
+      "description_placeholder": "Leave empty to read from SKILL.md",
+      "fallback_error": "Failed to link global skill",
+      "cancel": "Cancel",
+      "submit": "Link skill",
+      "submitting": "Linking...",
+      "toast_created": "Global skill linked"
     }
   },
   "runtime_import": {

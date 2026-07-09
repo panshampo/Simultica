@@ -67,8 +67,8 @@ export function WorkflowCanvas({
   const activeSelectedNodeId = selectedNodeId ?? localSelectedNodeId;
   const activeSelectedEdgeId = selectedEdgeId ?? localSelectedEdgeId;
   const { nodes: baseNodes, edges: baseEdges } = useMemo(
-    () => workflowToReactFlow(definition, runState ?? {}, { draggable: editable, selectableEdges: true }),
-    [definition, editable, runState],
+    () => workflowToReactFlow(definition, runState ?? {}, { draggable: true, selectableEdges: true }),
+    [definition, runState],
   );
   const selectedNode = useMemo(() => baseNodes.find((node) => node.id === activeSelectedNodeId), [activeSelectedNodeId, baseNodes]);
   const selectedEdge = useMemo(() => baseEdges.find((edge) => edge.id === activeSelectedEdgeId), [activeSelectedEdgeId, baseEdges]);
@@ -143,7 +143,7 @@ export function WorkflowCanvas({
       nodeBasePatch={nodeBasePatch}
       selectionPatch={selectionPatch}
       hoverPatch={hoverPatch}
-      editable={editable}
+      structureEditable={editable}
       onConnect={onConnect}
       onSelectNode={(id) => {
         setLocalSelectedNodeId(id);
@@ -297,7 +297,7 @@ function WorkflowCanvasInner(props: {
   nodeBasePatch: NodeBasePatch;
   selectionPatch: SelectionPatch;
   hoverPatch: HoverPatch;
-  editable: boolean;
+  structureEditable: boolean;
   onConnect?: (connection: Connection) => void;
   onSelectNode: (id: string) => void;
   onSelectEdge: (id: string) => void;
@@ -319,7 +319,7 @@ function WorkflowCanvasInnerInner({
   nodeBasePatch,
   selectionPatch,
   hoverPatch,
-  editable,
+  structureEditable,
   onConnect,
   onSelectNode,
   onSelectEdge,
@@ -333,7 +333,7 @@ function WorkflowCanvasInnerInner({
   nodeBasePatch: NodeBasePatch;
   selectionPatch: SelectionPatch;
   hoverPatch: HoverPatch;
-  editable: boolean;
+  structureEditable: boolean;
   onConnect?: (connection: Connection) => void;
   onSelectNode: (id: string) => void;
   onSelectEdge: (id: string) => void;
@@ -455,9 +455,9 @@ function WorkflowCanvasInnerInner({
       nodeTypes={nodeTypes}
       fitView
       fitViewOptions={{ padding: 0.25 }}
-      nodesDraggable={editable}
-      nodesConnectable={editable}
-      elementsSelectable={editable}
+      nodesDraggable
+      nodesConnectable={structureEditable}
+      elementsSelectable={structureEditable}
       elevateEdgesOnSelect
       onConnect={onConnect}
       onNodeClick={(_, node: Node<WorkflowCanvasNodeData>) => {
@@ -593,6 +593,10 @@ function WorkflowSelectionOverlay({
             <DetailSection title="Definition">
               <DetailRow label="Type" value={node.data.type} />
               <DetailRow label="Dispatch" value={node.data.dispatch} />
+              {node.data.agentRoute && <DetailRow label="Agent route" value={node.data.agentRoute} />}
+              {node.data.inputs.length > 0 && <DetailRow label="Inputs" value={node.data.inputs.join(", ")} />}
+              {node.data.outputs.length > 0 && <DetailRow label="Outputs" value={node.data.outputs.join(", ")} />}
+              {node.data.systemPrompt && <DetailBlock label="System prompt" value={node.data.systemPrompt} />}
             </DetailSection>
             {(node.data.traexSessionId || node.data.mainIssueTaskId || node.data.error) && (
               <DetailSection title="Runtime">
@@ -650,6 +654,17 @@ function DetailRow({ label, value, tone, valueClassName }: { label: string; valu
   );
 }
 
+function DetailBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="space-y-1 px-2.5 py-1.5">
+      <div className="text-[11px] text-muted-foreground">{label}</div>
+      <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/45 p-2 font-mono text-[11px] leading-4 text-foreground">
+        {value}
+      </pre>
+    </div>
+  );
+}
+
 const WorkflowNode = memo(function WorkflowNode({ data }: NodeProps) {
   const node = data as WorkflowCanvasNodeData & {
     editable?: boolean;
@@ -686,6 +701,7 @@ const WorkflowNode = memo(function WorkflowNode({ data }: NodeProps) {
     >
       <Handle id="target-left" type="target" position={Position.Left} className="!bg-muted-foreground" />
       <Handle id="target-top" type="target" position={Position.Top} className="!bg-muted-foreground" />
+      <Handle id="target-bottom" type="target" position={Position.Bottom} className="!bg-muted-foreground" />
       <div className={cn("absolute inset-y-0 left-0 w-1", statusRailClass(node.status))} aria-hidden="true" />
       <div className="flex items-start justify-between gap-3 pl-1">
         <span className="min-w-0 truncate font-mono text-xs font-semibold leading-5 text-foreground">{node.label}</span>

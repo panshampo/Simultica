@@ -6,6 +6,17 @@ import type { WorkflowDefinition } from "@multica/core/workflow/types";
 let mockSetNodes: ((updater: unknown) => void) | null = null;
 let mockSetEdges: ((updater: unknown) => void) | null = null;
 
+type MockFlowNode = {
+  id: string;
+  draggable?: boolean;
+  data: {
+    carrierLabel?: string;
+    hoveredRelated?: boolean;
+    mutedByHover?: boolean;
+    runningNow?: boolean;
+  };
+};
+
 vi.mock("@xyflow/react", () => ({
   Background: () => <div data-testid="background" />,
   Controls: () => <div data-testid="controls" />,
@@ -20,6 +31,8 @@ vi.mock("@xyflow/react", () => ({
     edges,
     defaultNodes,
     defaultEdges,
+    nodesDraggable,
+    nodesConnectable,
     nodeTypes,
     children,
     onNodeClick,
@@ -29,10 +42,12 @@ vi.mock("@xyflow/react", () => ({
     onEdgeMouseLeave,
     onEdgeClick,
   }: {
-    nodes?: Array<{ id: string; data: { carrierLabel?: string; hoveredRelated?: boolean; mutedByHover?: boolean; runningNow?: boolean } }>;
+    nodes?: MockFlowNode[];
     edges?: Array<{ id: string; label?: string; data?: { fullLabel?: string; hovered?: boolean; mutedByHover?: boolean } }>;
-    defaultNodes?: Array<{ id: string; data: { carrierLabel?: string; hoveredRelated?: boolean; mutedByHover?: boolean; runningNow?: boolean } }>;
+    defaultNodes?: MockFlowNode[];
     defaultEdges?: Array<{ id: string; label?: string; data?: { fullLabel?: string; hovered?: boolean; mutedByHover?: boolean } }>;
+    nodesDraggable?: boolean;
+    nodesConnectable?: boolean;
     nodeTypes: Record<string, React.ComponentType<{ data: unknown }>>;
     children: React.ReactNode;
     onNodeClick?: (event: unknown, node: { id: string }) => void;
@@ -54,13 +69,18 @@ vi.mock("@xyflow/react", () => ({
     const renderedEdges = edges ?? internalEdges;
 
     return (
-    <div data-testid="react-flow">
+    <div
+      data-testid="react-flow"
+      data-nodes-draggable={String(Boolean(nodesDraggable))}
+      data-nodes-connectable={String(Boolean(nodesConnectable))}
+    >
       {renderedNodes.map((node) => {
         const NodeComponent = nodeTypes.workflow;
         return (
           <div
             key={node.id}
             data-testid={`node-wrapper-${node.id}`}
+            data-draggable={String(Boolean(node.draggable))}
             onClick={() => onNodeClick?.({}, node)}
             onMouseEnter={() => onNodeMouseEnter?.({}, node)}
             onMouseLeave={() => onNodeMouseLeave?.()}
@@ -125,9 +145,18 @@ describe("WorkflowCanvas", () => {
       "source-bottom",
       "source-right",
       "source-top",
+      "target-bottom",
       "target-left",
       "target-top",
     ]);
+  });
+
+  it("allows temporary node dragging in read-only canvases without enabling connections", () => {
+    render(<WorkflowCanvas definition={definition} />);
+
+    expect(screen.getByTestId("react-flow")).toHaveAttribute("data-nodes-draggable", "true");
+    expect(screen.getByTestId("react-flow")).toHaveAttribute("data-nodes-connectable", "false");
+    expect(screen.getByTestId("node-wrapper-node_a")).toHaveAttribute("data-draggable", "true");
   });
 
   it("preserves full edge labels and marks related graph elements while hovering an edge", () => {
@@ -236,6 +265,22 @@ describe("WorkflowCanvas", () => {
     expect(screen.getByText("a_very_long_condition_expression == true && second_check == true")).toBeInTheDocument();
   });
 
+  it("shows node definition route and prompt in the details overlay", () => {
+    render(<WorkflowCanvas definition={definitionWithPrompt} />);
+
+    fireEvent.click(screen.getByText("investigate"));
+
+    expect(screen.getByText("Node details")).toBeInTheDocument();
+    expect(screen.getByText("Agent route")).toBeInTheDocument();
+    expect(screen.getByText("frontend-bug-investigation")).toBeInTheDocument();
+    expect(screen.getByText("Inputs")).toBeInTheDocument();
+    expect(screen.getByText("task, scope_result")).toBeInTheDocument();
+    expect(screen.getByText("Outputs")).toBeInTheDocument();
+    expect(screen.getByText("investigation_report")).toBeInTheDocument();
+    expect(screen.getByText("System prompt")).toBeInTheDocument();
+    expect(screen.getByText("Investigate the target platform and capture browser evidence.")).toBeInTheDocument();
+  });
+
   it("keeps the details overlay inside the active canvas container in fullscreen", () => {
     render(<WorkflowCanvas definition={branchDefinition} fullscreenTitle="Runtime workflow" />);
 
@@ -279,4 +324,21 @@ const branchDefinition: WorkflowDefinition = {
     { from: "START", to: "start" },
     { from: "start", to: "selected", condition: "a_very_long_condition_expression == true && second_check == true", else: "fallback" },
   ],
+};
+
+const definitionWithPrompt: WorkflowDefinition = {
+  meta: { name: "prompted", version: "1" },
+  state: { fields: [] },
+  nodes: [{
+    id: "investigate",
+    type: "agent",
+    dispatch: "subissue",
+    agent: "frontend-bug-investigation",
+    inputs: ["task", "scope_result"],
+    outputs: ["investigation_report"],
+    config: {
+      system: "Investigate the target platform and capture browser evidence.",
+    },
+  }],
+  routing: [{ from: "START", to: "investigate" }],
 };

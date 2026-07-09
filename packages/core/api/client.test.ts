@@ -291,13 +291,17 @@ describe("ApiClient", () => {
 
     await client.createWorkflowCase({ title: "Case", description: "" });
     await client.createWorkflowCaseFromIssue("issue-1", { owner_agent_id: "agent-1" });
+    await client.updateWorkflowCase("case-1", {
+      title: "Renamed case",
+      description: "Updated description",
+    });
     await client.getIssueWorkflowContext("issue-1");
     await client.listWorkflowCaseDefinitionVersions("case-1");
+    await client.getWorkflowCaseDefinitionVersion("case-1", "version-1");
     await client.publishWorkflowCaseDefinition("case-1");
     await client.listWorkflowCaseRuns("case-1");
     await client.getWorkflowCaseCurrentRun("case-1");
     await client.startWorkflowCaseRun("case-1", {
-      run_kind: "experiment",
       label: "Approach A",
       initial_state: {},
     });
@@ -322,11 +326,20 @@ describe("ApiClient", () => {
         body: JSON.stringify({ owner_agent_id: "agent-1" }),
       },
       {
+        url: "https://api.example.test/api/workflow-cases/case-1",
+        method: "PATCH",
+        body: JSON.stringify({ title: "Renamed case", description: "Updated description" }),
+      },
+      {
         url: "https://api.example.test/api/issues/issue-1/workflow-context",
         method: "GET",
       },
       {
         url: "https://api.example.test/api/workflow-cases/case-1/definition/versions",
+        method: "GET",
+      },
+      {
+        url: "https://api.example.test/api/workflow-cases/case-1/definition/versions/version-1",
         method: "GET",
       },
       {
@@ -345,7 +358,7 @@ describe("ApiClient", () => {
       {
         url: "https://api.example.test/api/workflow-cases/case-1/runs",
         method: "POST",
-        body: JSON.stringify({ run_kind: "experiment", label: "Approach A", initial_state: {} }),
+        body: JSON.stringify({ label: "Approach A", initial_state: {} }),
       },
       {
         url: "https://api.example.test/api/workflow-cases/case-1/runs/run-1/cancel",

@@ -6,10 +6,22 @@
     "new_skill": "新規スキル",
     "search_placeholder": "スキルを検索…",
     "scopes": {
-      "all": { "label": "すべて", "description": "このワークスペースのすべてのスキル" },
-      "used": { "label": "使用中", "description": "1 つ以上のエージェントに割り当てられたスキル" },
-      "unused": { "label": "未使用", "description": "どのエージェントにも割り当てられていないスキル" },
-      "mine": { "label": "自分が作成", "description": "あなたが作成したスキル" }
+      "all": {
+        "label": "すべて",
+        "description": "このワークスペースのすべてのスキル"
+      },
+      "used": {
+        "label": "使用中",
+        "description": "1 つ以上のエージェントに割り当てられたスキル"
+      },
+      "unused": {
+        "label": "未使用",
+        "description": "どのエージェントにも割り当てられていないスキル"
+      },
+      "mine": {
+        "label": "自分が作成",
+        "description": "あなたが作成したスキル"
+      }
     },
     "empty": {
       "title": "まだスキルがありません",
@@ -54,7 +66,14 @@
     "source_runtime_unknown": "ランタイムから",
     "source_clawhub": "ClawHub から",
     "source_skills_sh": "Skills.sh から",
-    "source_github": "GitHub から"
+    "source_github": "GitHub から",
+    "source_global_link": "Global skill link",
+    "source_global_link_broken": "Broken global link",
+    "workflow_yes": "ワークフローあり",
+    "workflow_no": "ワークフローなし",
+    "source_workspace_files": "Workspace files",
+    "source_local_import": "Local import",
+    "source_imported_snapshot": "Imported snapshot"
   },
   "detail": {
     "all_skills": "すべてのスキル",
@@ -79,7 +98,8 @@
       "origin_github": "インポート済み · GitHub",
       "origin_workspace": "ワークスペース",
       "updated_label": "{{when}} に更新",
-      "by_creator": "{{name}}"
+      "by_creator": "{{name}}",
+      "origin_global_link": "Global skill link"
     },
     "conflict_banner": {
       "title": "他のユーザーがこのスキルを更新しました",
@@ -145,6 +165,22 @@
         "reserved": "SKILL.md はメインファイル用に予約されています。",
         "exists": "このパスにはすでにファイルが存在します。"
       }
+    },
+    "global_link": {
+      "ready": "Linked to global skill library",
+      "broken": "Global skill link is broken",
+      "validate_workflow": "Validate workflow"
+    },
+    "toast_workflow_valid": "Workflow is valid",
+    "toast_workflow_invalid": "Workflow has validation errors",
+    "toast_workflow_validate_failed": "Failed to validate workflow",
+    "source_type": {
+      "workspace_files": "Workspace files",
+      "imported_snapshot": "Imported snapshot",
+      "local_import_snapshot": "Local runtime snapshot",
+      "global_link": "Global skill link",
+      "global_link_broken": "Broken global skill link",
+      "workspace_storage": "Stored inside this workspace"
     }
   },
   "create": {
@@ -168,6 +204,10 @@
       "runtime": {
         "title": "ランタイムからコピー",
         "desc": "ローカルランタイムをスキャンし、ディスク上のスキルの 1 つをこのワークスペースに昇格します。"
+      },
+      "globalLink": {
+        "title": "Link global skill",
+        "desc": "Reference a skill from the global skill library without copying its files."
       }
     },
     "method_card": {
@@ -176,7 +216,9 @@
       "url_title": "URL からインポート",
       "url_desc": "ClawHub または Skills.sh の公開スキルを取得します。",
       "runtime_title": "ランタイムからコピー",
-      "runtime_desc": "ローカルランタイムにすでにインストールされているスキルを昇格します。"
+      "runtime_desc": "ローカルランタイムにすでにインストールされているスキルを昇格します。",
+      "globalLink_title": "Link global skill",
+      "globalLink_desc": "Use a skill directly from ~/.agents/skills and keep it synced."
     },
     "manual": {
       "name_label": "名前",
@@ -203,6 +245,19 @@
       "fallback_error": "インポートに失敗しました",
       "cancel": "キャンセル",
       "toast_imported": "スキルをインポートしました"
+    },
+    "global_link": {
+      "target_label": "Target path",
+      "target_hint": "Path must be inside an allowed global skill root and contain SKILL.md.",
+      "name_label": "Name override",
+      "name_placeholder": "Leave empty to read from SKILL.md",
+      "description_label": "Description override",
+      "description_placeholder": "Leave empty to read from SKILL.md",
+      "fallback_error": "Failed to link global skill",
+      "cancel": "Cancel",
+      "submit": "Link skill",
+      "submitting": "Linking...",
+      "toast_created": "Global skill linked"
     }
   },
   "runtime_import": {

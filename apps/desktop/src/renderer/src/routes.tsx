@@ -19,7 +19,7 @@ import { AttachmentPreviewRoute } from "./pages/attachment-preview-page";
 import { IssuesPage } from "@multica/views/issues/components";
 import { ProjectsPage } from "@multica/views/projects/components";
 import { TemplatesPage, TemplateDetailPage } from "@multica/views/templates";
-import { WorkflowCaseDetailPage, WorkflowCaseListPage, WorkflowRunDetailPage } from "@multica/views/workflow";
+import { WorkflowCaseDetailPage, WorkflowCaseListPage, WorkflowCaseVersionPage, WorkflowRunDetailPage } from "@multica/views/workflow";
 import { DashboardPage } from "@multica/views/dashboard";
 import { AutopilotsPage } from "@multica/views/autopilots/components";
 import { MyIssuesPage } from "@multica/views/my-issues";
@@ -82,7 +82,6 @@ function DesktopWorkflowCaseDetailRoute() {
     <WorkflowCaseDetailPage
       caseId={caseId}
       initialRunId={searchParams.get("run_id")}
-      initialNodeId={searchParams.get("node_id")}
     />
   );
 }
@@ -97,6 +96,11 @@ function DesktopWorkflowRunDetailRoute() {
       initialNodeId={searchParams.get("node_id")}
     />
   );
+}
+
+function DesktopWorkflowCaseVersionRoute() {
+  const { caseId = "", versionId = "" } = useParams();
+  return <WorkflowCaseVersionPage caseId={caseId} versionId={versionId} />;
 }
 
 /**
@@ -196,6 +200,11 @@ export const appRoutes: RouteObject[] = [
             path: "workflow-cases/:caseId",
             element: <DesktopWorkflowCaseDetailRoute />,
             handle: { title: "WorkflowCase" },
+          },
+          {
+            path: "workflow-cases/:caseId/versions/:versionId",
+            element: <DesktopWorkflowCaseVersionRoute />,
+            handle: { title: "WorkflowCaseVersion" },
           },
           {
             path: "workflow-cases/:caseId/runs/:runId",

@@ -172,8 +172,6 @@ export type WorkflowRunStatus =
   | "cancelling"
   | "cancelled";
 
-export type WorkflowRunKind = "primary" | "experiment" | "shadow" | "replay" | "debug";
-
 export interface WorkflowRunNode {
   id: string;
   run_id: string;
@@ -218,7 +216,6 @@ export interface WorkflowRun {
   planner_task_id?: string | null;
   source_skills?: Array<{ id?: string; name?: string }>;
   status: WorkflowRunStatus;
-  run_kind?: WorkflowRunKind | string;
   label?: string;
   current_node: string;
   nodes_state: Record<string, WorkflowNodeRunState>;

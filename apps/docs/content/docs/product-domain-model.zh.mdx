@@ -1,0 +1,222 @@
+---
+title: 产品领域模型
+description: 讲清 Skill、IssueTemplate、Issue、Workflow、Run 等核心概念的定位和关系。
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+import { Mermaid } from "@/components/mermaid";
+import { ProductDomainDiagram } from "@/components/product-domain-diagram";
+
+Si-Multica 的核心产品模型可以用一句话理解：**Issue 是目标和协作现场，Skill 是可复用能力，IssueTemplate 是创建 issue 的模板，Workflow 定义复杂 AI 工作怎么运行，Run 记录一次实际执行。**
+
+这页不是操作指南。它用于统一产品、设计、前端、后端和 runtime 对核心实体的理解，避免把 skill、issue template、issue、run、task 混在一起。
+
+## 领域总图
+
+**结论：用户目标从 Issue 进入系统；重复 issue 创建从 IssueTemplate 进入系统；可复用 agent 能力从 Skill 进入系统；Workflow 把复杂 AI 工作变成草稿、生效流程和可审计运行记录。**
+
+<ProductDomainDiagram />
+
+图里有三条重要边界：
+
+- **目标边界**：Issue 负责表达用户想完成什么。
+- **模板边界**：IssueTemplate 只负责重复创建 issue，不负责创建 agent、skill 或 Workflow。
+- **能力边界**：Skill 负责复用 agent 能力和 workflow 形态。
+- **执行边界**：Workflow / Run 负责管理复杂 AI 工作的运行，不把一次执行塞进 Skill 或 Issue。
+
+## 核心实体
+
+**结论：每个实体只回答一个核心问题。读代码或设计 UI 时，先判断当前信息属于哪一个问题。**
+
+| 实体 | 它回答的问题 | 不是 |
+|---|---|---|
+| Workspace | 这组人、智能体、issue、skill 属于哪个协作空间？ | 运行环境 |
+| Agent | 谁来执行工作？它使用哪种 AI 编程工具和配置？ | 一次任务 |
+| Skill | Agent 可以复用什么知识、方法、文件和 workflow 形态？ | 一次运行，也不是目标 |
+| IssueTemplate | 用什么默认内容直接创建 issue，或让 automation 创建 issue？ | 创建 Agent、Skill 或 Workflow 的机制 |
+| Issue | 用户想完成什么？协作上下文在哪里？ | workflow 编辑器 |
+| Workflow | 这类复杂 AI 工作应该怎么运行？ | 单次执行日志 |
+| Draft | Agent 或人还在编辑的流程草稿是什么？ | 生效流程 |
+| Active Workflow | 新 run 会使用哪套流程？ | 用户每天单独管理的实体 |
+| Snapshot | 某次 run 使用的不可变流程状态是什么？ | 可被直接改写的草稿 |
+| Run | 某次执行用了哪个快照，执行到哪里，结果如何？ | Skill，也不是 LangGraph checkpoint |
+| Step | run 中一个可观察阶段是什么？ | 整个 workflow |
+| Review Step | 哪一步必须等人通过或不通过后再继续？ | 临时改路径工具 |
+| Run node | run 中某个 step 的运行态投影是什么？ | step 的设计定义本身 |
+| Task | 某个 agent runtime 要执行的一条队列任务是什么？ | 用户目标本身 |
+
+## Skill
+
+**结论：Skill 是能力包。它让 agent 更会做某类事，但它不代表某个具体目标，也不代表某次执行。**
+
+Skill 通常包含：
+
+- `SKILL.md`：触发条件、工作方法、约束、检查清单。
+- supporting files：脚本、参考资料、示例。
+- `workflow.yaml`：可选的 workflow 形态，用来表达这个 skill 推荐的工作步骤。
+
+Skill 的产品定位是“可复用能力”。同一个 Skill 可以挂到多个 Agent，也可以被 Workflow 读取并展示为只读或可复制的 workflow 形态。
+
+<Callout type="info">
+修改 Skill 内容只影响之后的新任务或新 run。已经创建的 Run 会保留自己的执行快照，不会被 Skill 的后续改动原地改写。
+</Callout>
+
+## IssueTemplate
+
+**结论：当前产品里的 Templates 功能指 IssueTemplate。它只用于直接创建 issue，或被 Automation 引用后自动创建 issue。**
+
+IssueTemplate 保存一组 issue 创建默认值：
+
+| 字段 | 用途 |
+|---|---|
+| issue 标题模板 | 创建出来的 issue 标题 |
+| issue 正文模板 | 创建出来的 issue 描述 |
+| assignee / priority / labels | 新 issue 的默认执行人、优先级和标签 |
+| default metadata / execution spec | automation 或后续执行需要的默认上下文 |
+
+IssueTemplate 只有两条产品路径：
+
+- **手动实例化**：用户在模板页直接从模板创建一个 issue。
+- **Automation 引用**：Automation 到点或被 webhook 触发时，引用 IssueTemplate 自动创建 issue。
+
+IssueTemplate 不负责创建 Agent，不负责导入 Skill，也不负责生成 Workflow draft。Skill 里的 workflow shape 也不要叫 Template；它是 Skill 提供的 workflow 形态或可复用子图。
+
+## Issue
+
+**结论：Issue 是目标容器和协作现场。它承载需求、讨论、状态、负责人和最终结果。**
+
+Issue 可以由人处理，也可以分配给 Agent。被分配给 Agent 后，系统会创建 Task，让本地 daemon 和 AI 编程工具执行。
+
+Issue 有两种常见角色：
+
+| 角色 | 含义 | 控制器 |
+|---|---|---|
+| 普通 issue | 一条独立工作项，可能有父子关系 | issue assignee |
+| Workflow-managed issue | 某个 workflow step 的执行载体 | `workflow_run` |
+
+Workflow-managed 子 issue 不是新的 workflow 控制器。它只是 `dispatch=subissue` step 的执行现场，完成后结果回到 Run，由 workflow path 决定下一步。
+
+## Workflow
+
+**结论：Workflow 是复杂 AI 工作的运行流程。Agent 先起草怎么跑，人审计和编辑后设为 Active Workflow，每次 Run 都按当时的 Active Workflow 快照执行。**
+
+Workflow 解决的是“这类复杂 AI 工作应该怎么跑”的问题，而不是“某次运行执行到哪一步”的问题。
+
+一个 Workflow 通常包含：
+
+- 元信息：标题、描述、owner agent、状态。
+- Draft：可编辑流程草稿，通常由 agent 起草，再由人审计和编辑。
+- Active Workflow：当前生效、会被新 Run 使用的流程。
+- Snapshots：用于审计和追踪的不可变历史快照。
+- Runs：基于 Active Workflow 创建的一次次执行。
+
+Workflow UI 应该保持三层分工：
+
+| 区域 | 应该放什么 | 不应该放什么 |
+|---|---|---|
+| Overview | 元信息、生命周期、Active Workflow 摘要、最近 Runs | workflow 编辑控件 |
+| Workflow | Draft 编辑、校验、设为 Active、Snapshot 历史 | Run 执行控制 |
+| Runs | 创建 run、查看 run 列表、进入 run detail、处理待 Review 的 Step | 编辑 workflow 草稿 |
+
+<Callout type="warning">
+创建 run 的语义是“从当前 Active Workflow 创建一个新的 Run”。不要把它解释成 debug、experiment、replay 等 run kind。当前产品模型里，run 就是 run。
+</Callout>
+
+## Draft、Active Workflow 和 Snapshot
+
+**结论：Draft 和 Active Workflow 是同一个 Workflow 的状态；Snapshot 用于审计和复现，不是用户每天要管理的主实体。**
+
+<Mermaid chart={`
+flowchart LR
+  Draft["Draft<br/>可编辑"] --> Validate["Validate<br/>校验"]
+  Validate --> SetActive["Set active<br/>设为生效"]
+  SetActive --> Active["Active Workflow<br/>新 Run 使用"]
+  Active --> Snapshot["Snapshot<br/>不可变审计记录"]
+  Snapshot --> Run["Run<br/>保存快照引用"]
+`} />
+
+Snapshot 的作用不是“多一个备份”。它有三个产品价值：
+
+- **回看**：用户能打开历史快照，看到当时的 workflow 是什么样。
+- **追踪**：run detail 能说明这次 run 基于哪个快照。
+- **稳定执行**：run 使用的快照不会因为 Draft 或 Skill 后续变化而改变。
+
+## Run
+
+**结论：Run 是一次执行记录。它连接 workflow 快照、运行状态、step 状态和外部载体。**
+
+Run 至少回答这些问题：
+
+- 这次 run 基于哪个 workflow 快照？
+- 为了复现，这次 run 保存了哪个执行快照？
+- 当前状态是 `running`、`failed`、`cancelled` 还是 `done`？
+- 当前 step 是哪一个？
+- 每个 step 的状态、输入、输出、错误是什么？
+- 哪些 step 创建了子 issue 或 task？
+
+`workflow_run` 是 UI 的事实源。agent-runtime 的 LangGraph checkpoint 是执行引擎恢复用的内部状态，不应该当作 UI 事实源。
+
+## Review Step
+
+**结论：Review Step 会暂停 Run，让人只做一个决策：通过或不通过。后续路径由 workflow 自己决定，不由审批按钮临时决定。**
+
+Review Step 的语义：
+
+```text
+Run 执行到 Review Step
+  -> 用户查看这个 step 的输入材料
+  -> 用户选择 Approve 或 Reject
+  -> 决策成为 step output
+  -> workflow path 决定下一步
+```
+
+Review Step 不允许用户在运行中编辑 workflow，不允许用户随手选择跳到哪个 step，也不改变 run 使用的快照。如果 reject 后需要返工，workflow 必须显式定义这条路径。
+
+## Task、Run 和 Issue 的区别
+
+**结论：Task 是执行队列项，Run 是 workflow 执行记录，Issue 是协作目标。三者可以关联，但不要互相替代。**
+
+| 对象 | 生命周期由谁推动 | 用户怎么理解 |
+|---|---|---|
+| Issue | 人、Agent、workflow carrier | “我要完成的事情” |
+| Task | Server 队列、daemon、AI 编程工具 | “某个 agent 被派发的一次工作” |
+| Run | Workflow API、backend、sidecar | “某个 Active Workflow 快照的一次执行” |
+
+普通 issue 分配给 Agent 会产生 Task。Run 的 `subissue` step 也会创建子 issue，并让子 issue 产生 Task。最终 UI 不应该让用户去猜哪个 task 是主线，而应该从 Run step 进入对应 issue 或 task。
+
+## 推荐产品语言
+
+**结论：UI 文案要体现实体边界。用户不应该需要理解数据库表名才能做判断。**
+
+| 场景 | 推荐说法 | 避免说法 |
+|---|---|---|
+| 创建 run | Create run | Debug run, Start experiment |
+| 打开历史流程 | Open snapshot | Re-run from version |
+| 查看 run 使用的流程 | Snapshot v3 | 只有 Snapshot id |
+| 查看步骤 | Step details | Node metadata |
+| 打开子 issue | Open issue | Open carrier ref |
+| 编辑 workflow | Edit draft | Edit current run |
+| 设置生效流程 | Set active | Publish version |
+| 人工审批 | Review step | Approval gate |
+
+## 常见误判
+
+**结论：大多数设计混乱来自把“能力、issue 模板、目标、执行记录”混成一个东西。**
+
+| 误判 | 正确理解 |
+|---|---|
+| Skill 是一次运行 | Skill 是能力包，run 才是一次执行 |
+| Templates 能创建任意对象 | 当前产品语义下 Templates 只管理 IssueTemplate |
+| IssueTemplate 会持续控制 issue | IssueTemplate 只在创建 issue 时提供默认值；issue 创建后拥有自己的事实 |
+| Issue 等于 workflow | Issue 是目标容器，Workflow 是运行流程 |
+| Workflow 等于 Run | Workflow 是运行流程，Run 是一次执行 |
+| 每个 workflow step 都创建子 issue | 只有 `dispatch=subissue` 创建子 issue |
+| `workflow_run` 等于 LangGraph checkpoint | `workflow_run` 是 UI 事实源，checkpoint 是 runtime 内部恢复状态 |
+| 历史 Snapshot 可以继续编辑 | Snapshot 是不可变的；要改就编辑 Draft，再重新设为 Active |
+
+## 下一步
+
+- [Workflow 和 Issue 如何协作](/workflow-issues) - 深入理解 Workflow、Run、子 issue 和 sidecar 的执行关系。
+- [Skills](/skills) - 理解 Skill 作为可复用能力包的角色。
+- [Issue 与 project](/issues) - 理解普通 issue 协作模型。
+- [创建和配置智能体](/agents-create) - 理解 Agent、运行时和 Skill 绑定。

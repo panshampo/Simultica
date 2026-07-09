@@ -36,11 +36,13 @@ export function WorkflowEditor({
   initialYaml,
   agents,
   onSaved,
+  readOnly = false,
 }: {
   skillId: string;
   initialYaml?: string;
   agents: Pick<Agent, "id" | "name">[];
   onSaved?: (yaml: string) => void;
+  readOnly?: boolean;
 }) {
   const { t } = useT("skills");
   const [definition, setDefinition] = useState<WorkflowDefinition>(() => {
@@ -66,6 +68,7 @@ export function WorkflowEditor({
   const selectedEdge = selection?.type === "edge" ? definition.routing[selection.index] : null;
   const validationIssues = validateWorkflowDefinition(definition);
   const blockingValidation = validationIssues.find((issue) => issue.severity === "error");
+  const showValidation = !readOnly;
 
   function updateNode(index: number, patch: Partial<WorkflowNode>) {
     updateDefinition((prev) => ({
@@ -85,6 +88,7 @@ export function WorkflowEditor({
   }
 
   function addNode() {
+    if (readOnly) return;
     updateDefinition((prev) => {
       const node = { id: `node${prev.nodes.length + 1}`, type: "llm" as const, config: {} };
       setSelection({ type: "node", id: node.id });
@@ -93,6 +97,7 @@ export function WorkflowEditor({
   }
 
   function addNextNode(afterId: string) {
+    if (readOnly) return;
     updateDefinition((prev) => {
       const node = { id: `node${prev.nodes.length + 1}`, type: "llm" as const, config: {} };
       setSelection({ type: "node", id: node.id });
@@ -105,6 +110,7 @@ export function WorkflowEditor({
   }
 
   function removeSelectedNode() {
+    if (readOnly) return;
     if (!selectedNode) return;
     const removedId = selectedNode.id;
     updateDefinition((prev) => ({
@@ -116,6 +122,7 @@ export function WorkflowEditor({
   }
 
   function updateEdge(index: number, patch: Partial<WorkflowEdge>) {
+    if (readOnly) return;
     updateDefinition((prev) => ({
       ...prev,
       routing: prev.routing.map((edge, i) => (i === index ? { ...edge, ...patch } : edge)),
@@ -123,6 +130,7 @@ export function WorkflowEditor({
   }
 
   function addEdge() {
+    if (readOnly) return;
     updateDefinition((prev) => ({
       ...prev,
       routing: [...prev.routing, { from: prev.nodes[0]?.id ?? "START", to: prev.nodes[1]?.id ?? "END" }],
@@ -131,6 +139,7 @@ export function WorkflowEditor({
   }
 
   function connectEdge(connection: Connection) {
+    if (readOnly) return;
     if (!connection.source || !connection.target || connection.source === connection.target) return;
     updateDefinition((prev) => ({
       ...prev,
@@ -148,12 +157,14 @@ export function WorkflowEditor({
   }
 
   function removeSelectedEdge() {
+    if (readOnly) return;
     if (selection?.type !== "edge") return;
     updateDefinition((prev) => ({ ...prev, routing: prev.routing.filter((_, i) => i !== selection.index) }));
     setSelection(null);
   }
 
   async function save() {
+    if (readOnly) return;
     setSaving(true);
     setError(null);
     try {
@@ -251,7 +262,7 @@ export function WorkflowEditor({
               YAML
             </Button>
           </div>
-          {mode === "structured" && (
+          {mode === "structured" && !readOnly && (
             <Button
               type="button"
               size="xs"
@@ -266,14 +277,21 @@ export function WorkflowEditor({
               State fields
             </Button>
           )}
-          <span className="text-xs text-muted-foreground">
-            {validationIssues.length === 0 ? "Valid" : validationIssues[0]?.message}
-          </span>
-          <Button type="button" size="xs" className={managementActionButtonClass("save")} onClick={save} disabled={saving}>
-            {saving ? "Saving..." : "Save workflow"}
-          </Button>
+          {showValidation && (
+            <span className="text-xs text-muted-foreground">
+              {validationIssues.length === 0 ? "Valid" : validationIssues[0]?.message}
+            </span>
+          )}
+          {readOnly && (
+            <span className="text-xs text-muted-foreground">Read-only</span>
+          )}
+          {!readOnly && (
+            <Button type="button" size="xs" className={managementActionButtonClass("save")} onClick={save} disabled={saving}>
+              {saving ? "Saving..." : "Save workflow"}
+            </Button>
+          )}
+          </div>
         </div>
-      </div>
 
       {error && <div className="border-b px-4 py-2 text-sm text-destructive">{error}</div>}
 
@@ -282,12 +300,16 @@ export function WorkflowEditor({
           <div className={sidePanel ? "grid h-full min-h-[640px] grid-cols-[minmax(0,1fr)_340px] gap-4" : "grid h-full min-h-[640px] grid-cols-1"}>
             <div className="relative h-full min-h-[640px]">
               <div className="absolute left-3 top-3 z-20 flex items-center gap-2 rounded-md border bg-background/95 p-1 shadow-sm backdrop-blur">
-                <Button type="button" size="xs" variant="outline" className={managementActionButtonClass("create")} onClick={addNode}>
-                  Add node
-                </Button>
-                <Button type="button" size="xs" variant="outline" className={managementActionButtonClass("create")} onClick={addEdge}>
-                  Add edge
-                </Button>
+                {!readOnly && (
+                  <>
+                    <Button type="button" size="xs" variant="outline" className={managementActionButtonClass("create")} onClick={addNode}>
+                      Add node
+                    </Button>
+                    <Button type="button" size="xs" variant="outline" className={managementActionButtonClass("create")} onClick={addEdge}>
+                      Add edge
+                    </Button>
+                  </>
+                )}
                 <Button type="button" size="xs" variant="outline" className={managementActionButtonClass("configure")} onClick={() => setLayoutVersion((v) => v + 1)}>
                   Auto layout
                 </Button>
@@ -295,7 +317,7 @@ export function WorkflowEditor({
               <WorkflowCanvas
                 key={layoutVersion}
                 definition={definition}
-                editable
+                editable={!readOnly}
                 selectedNodeId={selectedNodeId}
                 selectedEdgeId={selectedEdgeId}
                 onSelectNode={(id) => setSelection({ type: "node", id })}
@@ -305,8 +327,8 @@ export function WorkflowEditor({
                   setSelection({ type: "edge", index: Number(match[1]) });
                 }}
                 onPaneClick={() => setSelection(null)}
-                onConnect={connectEdge}
-                onAddNextNode={addNextNode}
+                onConnect={readOnly ? undefined : connectEdge}
+                onAddNextNode={readOnly ? undefined : addNextNode}
                 className="h-full min-h-[640px]"
                 fullscreenTitle="Skill workflow"
                 hideSelectionOverlay
@@ -316,7 +338,7 @@ export function WorkflowEditor({
                   </div>
                 ) : null}
               />
-              {validationIssues.length > 0 && (
+              {showValidation && validationIssues.length > 0 && (
                 <div className="absolute bottom-3 left-3 right-3 z-20 max-h-40 overflow-y-auto rounded-md border bg-background/95 p-2 shadow-sm backdrop-blur">
                   <WorkflowValidationPanel issues={validationIssues} />
                 </div>
@@ -325,17 +347,23 @@ export function WorkflowEditor({
             {sidePanel}
           </div>
         ) : (
-          <WorkflowYamlEditor
-            yaml={yamlDraft}
-            error={yamlError}
-            onYamlChange={setYamlDraft}
-            onError={setYamlError}
-            onParsed={(next) => {
-              updateDefinition(next);
-              setSelection(null);
-              setMode("structured");
-            }}
-          />
+          readOnly ? (
+            <pre className="h-full min-h-[24rem] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-xs text-muted-foreground">
+              {yamlDraft}
+            </pre>
+          ) : (
+            <WorkflowYamlEditor
+              yaml={yamlDraft}
+              error={yamlError}
+              onYamlChange={setYamlDraft}
+              onError={setYamlError}
+              onParsed={(next) => {
+                updateDefinition(next);
+                setSelection(null);
+                setMode("structured");
+              }}
+            />
+          )
         )}
       </div>
     </div>

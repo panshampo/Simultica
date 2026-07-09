@@ -1,11 +1,11 @@
 ---
 title: モバイルアプリ (iOS)
-description: まだ App Store にないオープンソースの Multica iOS アプリを、自分の iPhone に自分でビルドする方法。
+description: まだ App Store にないオープンソースの Si-Multica iOS アプリを、自分の iPhone に自分でビルドする方法。
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 
-Multica の iOS クライアントはオープンソースで、web、desktop、バックエンドとともに[メインリポジトリ](https://github.com/multica-ai/multica)に含まれています。まだ App Store にはなく、その状況が変わるまでは、iPhone で使いたい人がソースから自分でビルドします。ビルドは初回は約 10〜20 分、それ以降は約 2 分かかり、[multica.ai](https://multica.ai) と同じバックエンドと通信するため、既存のアカウントがそのまま使えます。
+Si-Multica の iOS クライアントはオープンソースで、web、desktop、バックエンドとともに[メインリポジトリ](https://github.com/multica-ai/multica)に含まれています。まだ App Store にはなく、その状況が変わるまでは、iPhone で使いたい人がソースから自分でビルドします。ビルドは初回は約 10〜20 分、それ以降は約 2 分かかり、[multica.ai](https://multica.ai) と同じバックエンドと通信するため、既存のアカウントがそのまま使えます。
 
 <Callout type="info">
 このページは**個人利用**向けです。アプリ開発者はリポジトリの [`apps/mobile/README.md`](https://github.com/multica-ai/multica/blob/main/apps/mobile/README.md) を読んでください — dev / staging のバリアントと全スクリプト一覧を扱っています。
@@ -16,7 +16,7 @@ Multica の iOS クライアントはオープンソースで、web、desktop、
 - Xcode がインストールされた **Mac**（App Store から無料で入手できます）。
 - Xcode → Settings → Accounts に追加した無料の **Apple ID**。有料の Apple Developer Program アカウントは任意で、7 日間の署名期間を 1 年に延長するだけです — 下記の [7 日制限](#7-day-signing-limit)を参照してください。
 - USB ケーブルで接続され、[Developer Mode が有効になった](https://docs.expo.dev/guides/ios-developer-mode/) **iPhone**（設定 → プライバシーとセキュリティ → デベロッパモード）。
-- チェックアウトした Multica のソースコード:
+- チェックアウトした Si-Multica のソースコード:
 
   ```bash
   git clone https://github.com/multica-ai/multica.git
@@ -48,7 +48,7 @@ Xcode は Apple ID が自動的に所有する "Personal Team" でビルドに�
 
 ## 更新
 
-まだ自動更新はありません。Multica のコードベースが進んだら、pull して再ビルドしてください。
+まだ自動更新はありません。Si-Multica のコードベースが進んだら、pull して再ビルドしてください。
 
 ```bash
 git pull
@@ -60,7 +60,7 @@ Xcode がネイティブコンパイルをキャッシュするため、以降�
 
 ## なぜまだ App Store にないのか
 
-iOS アプリはまだ速いペースで動いています — チームは今のところ App Store の審査サイクルよりも、リリースして反復改善することを好んでいます。正式な App Store リリースの前に TestFlight ベータが最も可能性の高い次のステップです。それまでは、上記の自前ビルドが iOS で Multica を使う唯一の方法です。
+iOS アプリはまだ速いペースで動いています — チームは今のところ App Store の審査サイクルよりも、リリースして反復改善することを好んでいます。正式な App Store リリースの前に TestFlight ベータが最も可能性の高い次のステップです。それまでは、上記の自前ビルドが iOS で Si-Multica を使う唯一の方法です。
 
 TestFlight が公開されたときに通知を受け取りたい場合は、[GitHub リポジトリ](https://github.com/multica-ai/multica)を watch してください。
 

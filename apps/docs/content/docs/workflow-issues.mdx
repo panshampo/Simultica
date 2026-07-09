@@ -1,24 +1,24 @@
 ---
-title: Workflow and issues
-description: How skills, issues, runtime workflows, sub-issues, and workflow runs fit together.
+title: Workflows
+description: Run complex AI work as Drafts, Active Workflows, Runs, Steps, and Review Steps.
 ---
 
 import { Callout } from "fumadocs-ui/components/callout";
 import { Mermaid } from "@/components/mermaid";
 
-In Multica, a **skill** is capability, an **issue** is the goal, a **runtime workflow** is the plan, and `workflow_run` is the visible execution record.
+In Si-Multica, a **skill** is capability, an **issue** is the goal, a **Workflow** is how complex AI work should run, and a **Run** is the visible execution record.
 
 This page has two paths:
 
 - If you operate agents day to day, start with the lifecycle and glossary.
-- If you maintain Multica or agent-runtime, read the control boundaries and implementation map.
+- If you maintain Si-Multica or agent-runtime, read the control boundaries and implementation map.
 
 ## The short version
 
-When an issue is assigned to an agent, the issue is the user's goal container. The main agent owns the plan. It reads the issue context and its attached skills, then submits a runtime workflow draft. The backend validates that draft, creates a `workflow_run`, and starts the agent-runtime sidecar. The sidecar executes the validated workflow snapshot and keeps updating `workflow_run` so the UI has one clear source of truth.
+When a task is too complex or risky to hand to an agent as a black box, use a Workflow. The agent drafts how the work should run. A human inspects and edits the Draft, then sets it as the Active Workflow. Each Run follows the Active Workflow snapshot, reports Step progress through `workflow_run`, and pauses at Review Steps until a human approves or rejects.
 
 <Callout type="info">
-Skills are not runs. A skill is reusable knowledge and workflow structure that an agent may use when planning a run for a specific issue.
+Skills are not runs. A skill is reusable knowledge and workflow structure that an agent may use when drafting a Workflow for a specific goal.
 </Callout>
 
 ## The lifecycle
@@ -26,41 +26,47 @@ Skills are not runs. A skill is reusable knowledge and workflow structure that a
 <Mermaid chart={`
 flowchart LR
   User["User"] --> Issue["Main issue<br/>goal container"]
-  Issue --> MainAgent["Main agent<br/>planner and final owner"]
-  MainAgent --> Backend["Simultica backend<br/>validation and side effects"]
-  Backend --> Run["workflow_run<br/>visible execution record"]
+  Issue --> MainAgent["Agent<br/>drafts workflow"]
+  MainAgent --> Draft["Draft<br/>human-editable"]
+  Draft --> Active["Active Workflow<br/>used by new runs"]
+  Active --> Backend["Simultica backend<br/>validation and side effects"]
+  Backend --> Run["Run / workflow_run<br/>visible execution record"]
   Backend --> Sidecar["agent-runtime sidecar<br/>execution orchestrator"]
-  Sidecar --> Dispatch{"dispatch"}
-  Dispatch --> SubIssue["subissue<br/>child issue + task"]
-  Dispatch --> Inline["inline<br/>internal execution"]
-  Dispatch --> MainTask["main_issue_task<br/>main agent review/final"]
+  Sidecar --> Step{"Step dispatch"}
+  Step --> SubIssue["subissue<br/>child issue + task"]
+  Step --> Inline["inline<br/>internal execution"]
+  Step --> Review["review step<br/>approve or reject"]
   SubIssue --> Run
   Inline --> Run
-  MainTask --> Run
+  Review --> Run
   Run --> Issue
 `} />
 
 The important ownership split is:
 
-- **Main agent plans** the workflow for the issue.
-- **Backend validates** the workflow and owns product side effects.
+- **Agent drafts** how the complex work should run.
+- **Human inspects** the Draft and sets it as the Active Workflow.
+- **Backend validates** the Active Workflow and owns product side effects.
 - **Sidecar executes** the backend-validated snapshot.
 - **`workflow_run` records** what users see in the UI.
+- **Workflow paths decide** what happens after each Step, including Review Step approval or rejection.
 
 ## The mental model
 
-Think of the system as a chain of increasingly concrete artifacts:
+Think of the system as a chain from reusable capability to a concrete run:
 
 | Thing | What it answers | Who mainly uses it |
 |---|---|---|
 | Skill | What can this agent know or do repeatedly? | Agent authors and main agents |
 | Skill workflow | What reusable subgraph can this skill offer? | Main agents and skill editors |
 | Main issue | What does the user want done? | Users and operators |
-| Runtime workflow | What is the issue-specific execution plan? | Main agents, backend, sidecar |
-| Workflow node | What is one step in the plan? | Sidecar and workflow UI |
-| Dispatch | What carrier executes this node? | Backend validation and sidecar |
+| Workflow Draft | How does the agent propose this work should run? | Agents and humans |
+| Active Workflow | What plan is approved for new runs? | Users, backend, sidecar |
+| Step | What is one observable stage in the run? | Sidecar and workflow UI |
+| Review Step | Where must a human approve or reject? | Users and operators |
+| Dispatch | What carrier executes this step? | Backend validation and sidecar |
 | Sub-issue | What work item was created for a sub-agent? | Operators and sub-agents |
-| `workflow_run` | What happened during this execution? | UI, operators, developers |
+| Run / `workflow_run` | What happened during this execution? | UI, operators, developers |
 
 ## Glossary
 
@@ -74,27 +80,31 @@ The main agent is the planner, orchestrator, and final owner. It reads the main 
 
 ### Skill
 
-A skill is a reusable knowledge pack. It may contain instructions, examples, tools guidance, reference files, and workflow templates. A skill is not a single execution.
+A skill is a reusable knowledge pack. It may contain instructions, examples, tools guidance, reference files, and workflow shapes. A skill is not a single execution.
 
 ### Skill workflow
 
-A skill workflow is a reusable template or subgraph inside a skill. The main agent may reuse it as-is, trim it, combine it with other skill workflows, or modify it for the current issue.
+A skill workflow is a reusable workflow shape or subgraph inside a skill. The main agent may reuse it as-is, trim it, combine it with other skill workflows, or modify it for the current issue.
 
-### Runtime workflow
+### Workflow
 
-A runtime workflow is the final issue-specific execution graph submitted by the main agent and validated by the backend. Once stored in `workflow_run.definition_snapshot`, it is the snapshot that the sidecar executes.
+A Workflow is the runbook for complex AI work. The agent creates a Draft, a human inspects it, and the approved plan becomes the Active Workflow used for new Runs.
 
-### Workflow node
+### Step
 
-A workflow node is one step in the graph. A node is not automatically a sub-agent or a sub-issue. The node's `type` says what it does; the node's `dispatch` says how it is carried out.
+A Step is one observable stage in the graph. A Step is not automatically a sub-agent or a sub-issue. Its `type` says what it does; its `dispatch` says how it is carried out.
 
-### `workflow_run`
+### Review Step
 
-`workflow_run` is the visible execution record. It stores the workflow snapshot, status, current node, node states, outputs, errors, and references such as sub-issue ids or task ids.
+A Review Step pauses the Run and asks a human for one decision: approve or reject. The decision becomes Step output. The workflow path decides what happens next.
+
+### Run / `workflow_run`
+
+`workflow_run` is the visible execution record. It stores the workflow snapshot, status, current step, step states, outputs, errors, review decisions, and references such as sub-issue ids or task ids.
 
 ## Native issue mode vs workflow-managed mode
 
-Multica supports two valid execution models.
+Si-Multica supports two valid execution models.
 
 ### Native issue mode
 
@@ -102,7 +112,7 @@ Native issue mode is the ordinary parent/child issue collaboration model. A chil
 
 ### Workflow-managed mode
 
-Workflow-managed mode uses `workflow_run` as the controller. A workflow-managed child issue is only the carrier for a `dispatch=subissue` node. When that child issue completes, the result goes back to the workflow run so the graph can advance.
+Workflow-managed mode uses `workflow_run` as the controller. A workflow-managed child issue is only the carrier for a `dispatch=subissue` Step. When that child issue completes, the result goes back to the Run so the graph can advance.
 
 <Mermaid chart={`
 flowchart TB
@@ -114,38 +124,52 @@ flowchart TB
   subgraph Managed["Workflow-managed mode"]
     ManagedChild["Workflow-managed child issue done"] --> Sidecar["Sidecar reads result"]
     Sidecar --> Run["Update workflow_run"]
-    Run --> Next["Advance next workflow node"]
+    Run --> Next["Advance next workflow step"]
   end
 `} />
 
 <Callout type="warning">
-A workflow-managed sub-issue should not also trigger the native parent auto-wake path. That would create two controllers: the workflow run and the parent issue assignee.
+A workflow-managed sub-issue should not also trigger the native parent auto-wake path. That would create two controllers: the Run and the parent issue assignee.
 </Callout>
 
 ## Dispatch and carrier
 
 | Dispatch | Carrier | Creates a Simultica child issue? | What users see |
 |---|---|---:|---|
-| `subissue` | Child issue + task | Yes | Node status, output, and child issue link |
-| `inline` | Sidecar or backend internal execution | No | Node status and internal result |
-| `main_issue_task` | Main issue task for review/final | No | A main-agent node and final summary |
+| `subissue` | Child issue + task | Yes | Step status, output, and child issue link |
+| `inline` | Sidecar or backend internal execution | No | Step status and internal result |
+| `human_gate` | Review Step | No | Approval state and review decision |
+| `main_issue_task` | Main issue task for review/final | No | A main-agent step and final summary |
 | `direct_subagent` | Reserved for a future direct subagent session | No | Not a current product promise |
 
-Only `dispatch=subissue` creates a sub-issue. Other workflow nodes can still be visible in the workflow graph without creating child issues.
+Only `dispatch=subissue` creates a sub-issue. Other Steps can still be visible in the workflow graph without creating child issues.
+
+## Review Step decisions
+
+Review Steps are intentionally narrow:
+
+```text
+Review Step waits
+  -> user approves or rejects
+  -> decision is written as step output
+  -> workflow path decides next step
+```
+
+The review action does not let the user pick an arbitrary next Step or edit the running workflow. If rejection should trigger rework, the Workflow must define that path.
 
 ## Where progress lives
 
-For users, progress lives in the workflow panel on the main issue. For developers, the user-visible state lives in `workflow_run`.
+For users, progress lives in the Run detail and workflow panel. For developers, the user-visible state lives in `workflow_run`.
 
 The LangGraph checkpoint used by agent-runtime is different: it is internal engine recovery state. Do not use it as the UI fact source.
 
 ## Stop and replan
 
-The current runtime workflow is a snapshot. If the plan is wrong, the product model is:
+The current Run uses a snapshot. If the plan is wrong, the product model is:
 
 1. Stop or cancel the current run.
 2. Preserve its `workflow_run` record for auditability.
-3. Replan and create a new run with a new snapshot.
+3. Replan or edit the Draft, set it active, and create a new Run with a new snapshot.
 
 This keeps the old execution understandable instead of mutating history in place.
 
@@ -155,7 +179,7 @@ Start from these files when maintaining the workflow and issue path:
 
 | Area | Files |
 |---|---|
-| Product design | `docs/superpowers/specs/2026-06-27-simultica-runtime-workflow-planning-design.md`, `docs/superpowers/specs/2026-06-27-simultica-workflow-issue-relationship-explainer.md` |
+| Product design | `docs/superpowers/specs/2026-07-09-simultica-workflow-product-positioning.md`, `docs/superpowers/specs/2026-07-09-simultica-workflow-product-alignment-technical-design.md` |
 | Backend submit and run APIs | `server/internal/handler/runtime_workflow_submit.go`, `server/internal/handler/workflow_run.go` |
 | Workflow run storage | `server/pkg/db/queries/workflow_run.sql` |
 | Frontend types and queries | `packages/core/workflow/types.ts`, `packages/core/workflow/queries.ts` |
@@ -167,8 +191,9 @@ Start from these files when maintaining the workflow and issue path:
 
 For operators:
 
-- Open the main issue and check the workflow panel first.
-- If a node created a sub-issue, open that child issue for sub-agent details.
+- Open the Run detail or workflow panel first.
+- If a Step created a sub-issue, open that child issue for sub-agent details.
+- If a Review Step is waiting, approve or reject it from the Run detail.
 - Check whether the run is `running`, `failed`, `cancelled`, or `done`.
 - If the runtime is offline, check the Runtimes page and daemon status.
 
@@ -177,7 +202,7 @@ For developers:
 - Check `workflow_run.status`, `current_node`, `nodes_state`, and `error`.
 - Check backend validation errors from the runtime workflow submit path.
 - Check sidecar logs for build, polling, cancellation, or node execution failures.
-- Verify whether the failing node is `subissue`, `inline`, or `main_issue_task`.
+- Verify whether the failing Step is `subissue`, `inline`, `human_gate`, or `main_issue_task`.
 - Keep UI state tied to `workflow_run`, not to LangGraph checkpoints.
 
 ## Next steps

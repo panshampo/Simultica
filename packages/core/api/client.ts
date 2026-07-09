@@ -36,6 +36,8 @@ import type {
   Skill,
   SkillSummary,
   CreateSkillRequest,
+  CreateGlobalSkillLinkRequest,
+  SkillWorkflowValidationResponse,
   UpdateSkillRequest,
   SetAgentSkillsRequest,
   PersonalAccessToken,
@@ -141,7 +143,6 @@ import type {
   WorkflowDefinitionDraft,
   WorkflowDefinitionVersion,
   WorkflowRun,
-  WorkflowRunKind,
   WorkflowValidationReport,
 } from "../workflow/types";
 import type {
@@ -608,6 +609,18 @@ export class ApiClient {
     return this.fetch(`/api/workflow-cases/${caseId}`);
   }
 
+  async updateWorkflowCase(caseId: string, data: {
+    title?: string;
+    description?: string;
+    owner_agent_id?: string | null;
+    status?: "draft" | "archived";
+  }): Promise<WorkflowCase> {
+    return this.fetch(`/api/workflow-cases/${caseId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
   async deleteWorkflowCase(caseId: string): Promise<void> {
     await this.fetch(`/api/workflow-cases/${caseId}`, { method: "DELETE" });
   }
@@ -624,6 +637,10 @@ export class ApiClient {
   async listWorkflowCaseDefinitionVersions(caseId: string): Promise<WorkflowDefinitionVersion[]> {
     const resp = await this.fetch<{ versions: WorkflowDefinitionVersion[] }>(`/api/workflow-cases/${caseId}/definition/versions`);
     return resp.versions;
+  }
+
+  async getWorkflowCaseDefinitionVersion(caseId: string, versionId: string): Promise<WorkflowDefinitionVersion> {
+    return this.fetch(`/api/workflow-cases/${caseId}/definition/versions/${versionId}`);
   }
 
   async upsertWorkflowCaseDefinitionDraft(caseId: string, data: {
@@ -657,7 +674,6 @@ export class ApiClient {
   }
 
   async startWorkflowCaseRun(caseId: string, data?: {
-    run_kind?: WorkflowRunKind;
     label?: string;
     initial_state?: Record<string, unknown>;
   }): Promise<WorkflowRun> {
@@ -1625,10 +1641,29 @@ export class ApiClient {
     });
   }
 
+  async createGlobalSkillLink(data: CreateGlobalSkillLinkRequest): Promise<Skill> {
+    return this.fetch("/api/skills/global-links", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
   async updateSkill(id: string, data: UpdateSkillRequest): Promise<Skill> {
     return this.fetch(`/api/skills/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
+    });
+  }
+
+  async refreshSkill(id: string): Promise<unknown> {
+    return this.fetch(`/api/skills/${id}/refresh`, {
+      method: "POST",
+    });
+  }
+
+  async validateSkillWorkflow(id: string): Promise<SkillWorkflowValidationResponse> {
+    return this.fetch(`/api/skills/${id}/workflow/validate`, {
+      method: "POST",
     });
   }
 

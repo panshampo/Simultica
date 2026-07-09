@@ -6,6 +6,7 @@ export const workflowRunKeys = {
   caseDetail: (wsId: string, caseId: string) => ["workflow-case", wsId, caseId] as const,
   caseDefinition: (wsId: string, caseId: string) => ["workflow-case-definition", wsId, caseId] as const,
   caseDefinitionVersions: (wsId: string, caseId: string) => ["workflow-case-definition-versions", wsId, caseId] as const,
+  caseDefinitionVersion: (wsId: string, caseId: string, versionId: string) => ["workflow-case-definition-version", wsId, caseId, versionId] as const,
   caseRuns: (wsId: string, caseId: string) => ["workflow-case-runs", wsId, caseId] as const,
   issueContext: (wsId: string, issueId: string) => ["workflow-context", wsId, issueId] as const,
   caseCurrentRun: (wsId: string, caseId: string) => ["workflow-case-current-run", wsId, caseId] as const,
@@ -40,6 +41,14 @@ export function workflowCaseDefinitionVersionsOptions(wsId: string, caseId: stri
     queryKey: workflowRunKeys.caseDefinitionVersions(wsId, caseId),
     queryFn: () => api.listWorkflowCaseDefinitionVersions(caseId),
     enabled: !!wsId && !!caseId,
+  });
+}
+
+export function workflowCaseDefinitionVersionOptions(wsId: string, caseId: string, versionId: string) {
+  return queryOptions({
+    queryKey: workflowRunKeys.caseDefinitionVersion(wsId, caseId, versionId),
+    queryFn: () => api.getWorkflowCaseDefinitionVersion(caseId, versionId),
+    enabled: !!wsId && !!caseId && !!versionId,
   });
 }
 
