@@ -578,9 +578,14 @@ function WorkflowCaseDefinitionPanel({
         ) : (
           <div className="rounded-lg border border-dashed bg-background/60 p-4">
             <p className="text-sm text-muted-foreground">No definition draft is available for this workflow case.</p>
-            <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setEditingDraft(true)}>
-              Create starter draft
-            </Button>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => setEditingDraft(true)}>
+                Create starter draft
+              </Button>
+              <Button type="button" size="sm" variant="outline" disabled title="Coming soon">
+                Generate draft with agent
+              </Button>
+            </div>
           </div>
         )}
       </section>

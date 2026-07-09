@@ -711,6 +711,16 @@ export class ApiClient {
     });
   }
 
+  async generateWorkflowDraft(
+    caseId: string,
+    data?: { instruction?: string; source_issue_id?: string | null },
+  ): Promise<{ status: string; message: string }> {
+    return this.fetch(`/api/workflow-cases/${caseId}/draft/generate`, {
+      method: "POST",
+      body: JSON.stringify(data ?? {}),
+    });
+  }
+
   async createIssue(data: CreateIssueRequest): Promise<Issue> {
     return this.fetch("/api/issues", {
       method: "POST",

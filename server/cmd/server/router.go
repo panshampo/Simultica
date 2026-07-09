@@ -922,6 +922,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Post("/runs/{runId}/steps/{stepId}/review", h.ReviewWorkflowRunStep)
 					r.Get("/definition", h.GetWorkflowCaseDefinition)
 					r.Put("/definition/draft", h.UpsertWorkflowCaseDefinitionDraft)
+					r.Post("/draft/generate", h.GenerateWorkflowDraft)
 					r.Post("/definition/validate", h.ValidateWorkflowCaseDefinitionDraft)
 					r.Post("/definition/publish", h.PublishWorkflowCaseDefinition)
 					r.Get("/definition/versions", h.ListWorkflowCaseDefinitionVersions)
