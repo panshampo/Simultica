@@ -76,3 +76,18 @@ UPDATE workflow_run_node SET
     updated_at = now()
 WHERE run_id = $1 AND node_id = $2
 RETURNING *;
+
+-- name: GetWorkflowRunNode :one
+SELECT * FROM workflow_run_node
+WHERE run_id = $1 AND node_id = $2;
+
+-- name: MarkWorkflowRunNodeReviewed :one
+UPDATE workflow_run_node
+SET status = 'succeeded',
+    output_snapshot = sqlc.arg('output_snapshot')::jsonb,
+    completed_at = now(),
+    updated_at = now()
+WHERE run_id = $1
+  AND node_id = $2
+  AND status = 'pending_review'
+RETURNING *;

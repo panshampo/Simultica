@@ -138,6 +138,43 @@ func (q *Queries) CreateWorkflowRunNodeEvent(ctx context.Context, arg CreateWork
 	return i, err
 }
 
+const getWorkflowRunNode = `-- name: GetWorkflowRunNode :one
+SELECT id, workspace_id, case_id, run_id, node_id, node_type, dispatch, status, attempt, input_snapshot, output_snapshot, error, logs, carrier_ref, started_at, completed_at, created_at, updated_at, carrier_kind FROM workflow_run_node
+WHERE run_id = $1 AND node_id = $2
+`
+
+type GetWorkflowRunNodeParams struct {
+	RunID  pgtype.UUID `json:"run_id"`
+	NodeID string      `json:"node_id"`
+}
+
+func (q *Queries) GetWorkflowRunNode(ctx context.Context, arg GetWorkflowRunNodeParams) (WorkflowRunNode, error) {
+	row := q.db.QueryRow(ctx, getWorkflowRunNode, arg.RunID, arg.NodeID)
+	var i WorkflowRunNode
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.CaseID,
+		&i.RunID,
+		&i.NodeID,
+		&i.NodeType,
+		&i.Dispatch,
+		&i.Status,
+		&i.Attempt,
+		&i.InputSnapshot,
+		&i.OutputSnapshot,
+		&i.Error,
+		&i.Logs,
+		&i.CarrierRef,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CarrierKind,
+	)
+	return i, err
+}
+
 const getWorkflowRunNodeByIssueCarrier = `-- name: GetWorkflowRunNodeByIssueCarrier :one
 SELECT id, workspace_id, case_id, run_id, node_id, node_type, dispatch, status, attempt, input_snapshot, output_snapshot, error, logs, carrier_ref, started_at, completed_at, created_at, updated_at, carrier_kind FROM workflow_run_node
 WHERE workspace_id = $1
@@ -275,6 +312,51 @@ func (q *Queries) ListWorkflowRunNodes(ctx context.Context, runID pgtype.UUID) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const markWorkflowRunNodeReviewed = `-- name: MarkWorkflowRunNodeReviewed :one
+UPDATE workflow_run_node
+SET status = 'succeeded',
+    output_snapshot = $3::jsonb,
+    completed_at = now(),
+    updated_at = now()
+WHERE run_id = $1
+  AND node_id = $2
+  AND status = 'pending_review'
+RETURNING id, workspace_id, case_id, run_id, node_id, node_type, dispatch, status, attempt, input_snapshot, output_snapshot, error, logs, carrier_ref, started_at, completed_at, created_at, updated_at, carrier_kind
+`
+
+type MarkWorkflowRunNodeReviewedParams struct {
+	RunID          pgtype.UUID `json:"run_id"`
+	NodeID         string      `json:"node_id"`
+	OutputSnapshot []byte      `json:"output_snapshot"`
+}
+
+func (q *Queries) MarkWorkflowRunNodeReviewed(ctx context.Context, arg MarkWorkflowRunNodeReviewedParams) (WorkflowRunNode, error) {
+	row := q.db.QueryRow(ctx, markWorkflowRunNodeReviewed, arg.RunID, arg.NodeID, arg.OutputSnapshot)
+	var i WorkflowRunNode
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.CaseID,
+		&i.RunID,
+		&i.NodeID,
+		&i.NodeType,
+		&i.Dispatch,
+		&i.Status,
+		&i.Attempt,
+		&i.InputSnapshot,
+		&i.OutputSnapshot,
+		&i.Error,
+		&i.Logs,
+		&i.CarrierRef,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.CarrierKind,
+	)
+	return i, err
 }
 
 const projectWorkflowRunNodeEvent = `-- name: ProjectWorkflowRunNodeEvent :one
