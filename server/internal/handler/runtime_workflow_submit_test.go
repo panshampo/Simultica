@@ -87,6 +87,38 @@ func TestSubmitRuntimeWorkflowAcceptsMainIssueTaskNode(t *testing.T) {
 	}
 }
 
+func TestSubmitRuntimeWorkflowAcceptsHumanReviewNode(t *testing.T) {
+	issueID := createIssueForTimeline(t, "runtime workflow human review")
+	sidecar := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"status":"accepted"}`))
+	}))
+	defer sidecar.Close()
+	t.Setenv("MULTICA_WORKFLOW_SIDECAR_URL", sidecar.URL)
+	body := validRuntimeWorkflowSubmitBody()
+	def := body["definition"].(map[string]any)
+	def["nodes"] = append(def["nodes"].([]map[string]any), map[string]any{
+		"id":       "human_final_review",
+		"type":     "human_review",
+		"dispatch": "human_gate",
+		"outputs":  []string{"review_decision", "review_comment"},
+	})
+	def["routing"] = []map[string]any{
+		{"from": "START", "to": "implement"},
+		{"from": "implement", "to": "human_final_review"},
+		{"from": "human_final_review", "condition": `review_decision == "approved"`, "to": "END", "else": "implement"},
+	}
+	req := newRequest("POST", "/api/issues/"+issueID+"/runtime-workflows?workspace_id="+testWorkspaceID, body)
+	req = withURLParam(req, "id", issueID)
+	w := httptest.NewRecorder()
+
+	testHandler.SubmitRuntimeWorkflow(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestSubmitRuntimeWorkflowAcceptsCanonicalCarrierAndProjectsCarrierKind(t *testing.T) {
 	issueID := createIssueForTimeline(t, "runtime workflow canonical carrier")
 	var sidecarPayload map[string]any

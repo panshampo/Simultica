@@ -71,6 +71,7 @@ var runtimeWorkflowAllowedNodeTypes = map[string]bool{
 	"transform":      true,
 	"merge":          true,
 	"final_response": true,
+	"human_review":   true,
 }
 
 var runtimeWorkflowAllowedDispatches = map[string]bool{
@@ -78,6 +79,7 @@ var runtimeWorkflowAllowedDispatches = map[string]bool{
 	"direct_subagent": true,
 	"inline":          true,
 	"main_issue_task": true,
+	"human_gate":      true,
 }
 
 var runtimeWorkflowAllowedCarrierKinds = map[string]bool{
@@ -160,10 +162,12 @@ func normalizeRuntimeWorkflowCarrier(node runtimeWorkflowNode) (string, string, 
 	}
 	if carrierKind != "" {
 		carrierDispatch := dispatchFromCarrierKind(carrierKind)
-		if dispatch != "" && dispatch != carrierDispatch {
+		if dispatch != "" && dispatch != carrierDispatch && !(dispatch == "human_gate" && carrierDispatch == "inline") {
 			return "", "", fmt.Errorf("conflicting carrier_kind %q and dispatch %q for node %q", carrierKind, dispatch, node.ID)
 		}
-		dispatch = carrierDispatch
+		if dispatch == "" {
+			dispatch = carrierDispatch
+		}
 	}
 	if dispatch == "" {
 		dispatch = inferRuntimeWorkflowDispatch(node.Type)
