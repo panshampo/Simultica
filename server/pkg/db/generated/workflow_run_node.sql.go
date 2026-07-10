@@ -363,6 +363,7 @@ const projectWorkflowRunNodeEvent = `-- name: ProjectWorkflowRunNodeEvent :one
 UPDATE workflow_run_node SET
     status = CASE $3::text
         WHEN 'node_started' THEN 'running'
+        WHEN 'node_review_requested' THEN 'pending_review'
         WHEN 'node_blocked' THEN 'blocked'
         WHEN 'node_succeeded' THEN 'succeeded'
         WHEN 'node_failed' THEN 'failed'

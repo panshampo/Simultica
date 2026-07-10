@@ -180,6 +180,70 @@ func (h *Handler) ReviewWorkflowRunStep(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// GetWorkflowRunStepReview reports the current review state of a step so the
+// sidecar (or any poller) can wait for a decision. It returns the node status
+// and, once decided, the review decision recorded in output_snapshot.
+func (h *Handler) GetWorkflowRunStepReview(w http.ResponseWriter, r *http.Request) {
+	c, ok := h.workflowCaseFromRequest(w, r)
+	if !ok {
+		return
+	}
+	runID, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "runId"), "workflow run id")
+	if !ok {
+		return
+	}
+	stepID := strings.TrimSpace(chi.URLParam(r, "stepId"))
+	if stepID == "" {
+		writeError(w, http.StatusBadRequest, "step id is required")
+		return
+	}
+
+	run, err := h.Queries.GetWorkflowRun(r.Context(), runID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "workflow run not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "load workflow run: "+err.Error())
+		return
+	}
+	if uuidToString(run.CaseID) != uuidToString(c.ID) || uuidToString(run.WorkspaceID) != uuidToString(c.WorkspaceID) {
+		writeError(w, http.StatusForbidden, "workflow run is outside workflow case")
+		return
+	}
+
+	node, err := h.Queries.GetWorkflowRunNode(r.Context(), db.GetWorkflowRunNodeParams{
+		RunID:  runID,
+		NodeID: stepID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "review step not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "load review step: "+err.Error())
+		return
+	}
+
+	resp := map[string]any{
+		"run_id":  uuidToString(runID),
+		"step_id": stepID,
+		"status":  node.Status,
+	}
+	if len(node.OutputSnapshot) > 0 && string(node.OutputSnapshot) != "null" {
+		var output map[string]any
+		if err := json.Unmarshal(node.OutputSnapshot, &output); err == nil {
+			if decision, ok := output["review_decision"].(string); ok {
+				resp["decision"] = decision
+			}
+			if comment, ok := output["review_comment"].(string); ok {
+				resp["comment"] = comment
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 // applyReviewDecisionToNodesState marks the review node done and stores the
 // decision output so the run detail view and the sidecar can read it.
 func applyReviewDecisionToNodesState(raw []byte, nodeID string, output map[string]any) ([]byte, error) {

@@ -49,6 +49,7 @@ ORDER BY created_at ASC;
 UPDATE workflow_run_node SET
     status = CASE sqlc.arg('event_type')::text
         WHEN 'node_started' THEN 'running'
+        WHEN 'node_review_requested' THEN 'pending_review'
         WHEN 'node_blocked' THEN 'blocked'
         WHEN 'node_succeeded' THEN 'succeeded'
         WHEN 'node_failed' THEN 'failed'

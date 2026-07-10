@@ -990,6 +990,8 @@ func applyNodeEventToNodesState(raw []byte, nodeID string, event workflowRunNode
 	switch event.EventType {
 	case "node_started":
 		node["status"] = "running"
+	case "node_review_requested":
+		node["status"] = "pending_review"
 	case "node_blocked":
 		node["status"] = "blocked"
 	case "node_succeeded":

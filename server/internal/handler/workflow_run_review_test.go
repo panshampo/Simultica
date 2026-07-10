@@ -165,3 +165,65 @@ func TestReviewWorkflowRunStepRejectsReject(t *testing.T) {
 		t.Fatalf("decision = %v, want rejected", resp["decision"])
 	}
 }
+
+func TestGetWorkflowRunStepReviewReportsPending(t *testing.T) {
+	caseID := createWorkflowCaseForTest(t, "review get pending")
+	runID := seedReviewRunForTest(t, caseID, "review_before_mutation", "pending_review")
+
+	req := newRequest(http.MethodGet,
+		"/api/workflow-cases/"+caseID+"/runs/"+runID+"/steps/review_before_mutation/review?workspace_id="+testWorkspaceID,
+		nil,
+	)
+	req = withURLParam(req, "caseId", caseID)
+	req = withURLParam(req, "runId", runID)
+	req = withURLParam(req, "stepId", "review_before_mutation")
+	rec := httptest.NewRecorder()
+	testHandler.GetWorkflowRunStepReview(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["status"] != "pending_review" {
+		t.Fatalf("status = %v, want pending_review", resp["status"])
+	}
+	if resp["decision"] != nil && resp["decision"] != "" {
+		t.Fatalf("decision should be empty while pending, got %v", resp["decision"])
+	}
+}
+
+func TestGetWorkflowRunStepReviewReportsDecisionAfterApprove(t *testing.T) {
+	caseID := createWorkflowCaseForTest(t, "review get decided")
+	runID := seedReviewRunForTest(t, caseID, "review_before_mutation", "pending_review")
+
+	approve := reviewRequest(caseID, runID, "review_before_mutation", map[string]any{"decision": "approved", "comment": "ok"})
+	approveRec := httptest.NewRecorder()
+	testHandler.ReviewWorkflowRunStep(approveRec, approve)
+	if approveRec.Code != http.StatusOK {
+		t.Fatalf("approve status = %d, body = %s", approveRec.Code, approveRec.Body.String())
+	}
+
+	req := newRequest(http.MethodGet,
+		"/api/workflow-cases/"+caseID+"/runs/"+runID+"/steps/review_before_mutation/review?workspace_id="+testWorkspaceID,
+		nil,
+	)
+	req = withURLParam(req, "caseId", caseID)
+	req = withURLParam(req, "runId", runID)
+	req = withURLParam(req, "stepId", "review_before_mutation")
+	rec := httptest.NewRecorder()
+	testHandler.GetWorkflowRunStepReview(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["decision"] != "approved" {
+		t.Fatalf("decision = %v, want approved", resp["decision"])
+	}
+}
