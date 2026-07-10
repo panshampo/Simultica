@@ -465,7 +465,7 @@ func (s *TaskService) EnqueueWorkflowPlannerTask(ctx context.Context, issue db.I
 	return task, nil
 }
 
-func (s *TaskService) EnqueueWorkflowMainNodeTask(ctx context.Context, issue db.Issue, agentID, workflowRunID pgtype.UUID, nodeID, nodeType string) (db.AgentTaskQueue, error) {
+func (s *TaskService) EnqueueWorkflowMainNodeTask(ctx context.Context, issue db.Issue, agentID, workflowRunID pgtype.UUID, nodeID, nodeType, renderedContext string, inputSnapshot []byte) (db.AgentTaskQueue, error) {
 	agent, err := s.Queries.GetAgent(ctx, agentID)
 	if err != nil {
 		return db.AgentTaskQueue{}, fmt.Errorf("load agent: %w", err)
@@ -476,12 +476,23 @@ func (s *TaskService) EnqueueWorkflowMainNodeTask(ctx context.Context, issue db.
 	if !agent.RuntimeID.Valid {
 		return db.AgentTaskQueue{}, fmt.Errorf("agent has no runtime")
 	}
-	contextRaw, _ := json.Marshal(map[string]string{
+	taskContext := map[string]any{
 		"type":            "workflow_main_node",
 		"workflow_run_id": util.UUIDToString(workflowRunID),
 		"node_id":         nodeID,
 		"node_type":       nodeType,
-	})
+	}
+	if strings.TrimSpace(renderedContext) != "" {
+		taskContext["rendered_context"] = renderedContext
+	}
+	if len(inputSnapshot) > 0 {
+		var snapshot any
+		if err := json.Unmarshal(inputSnapshot, &snapshot); err != nil {
+			return db.AgentTaskQueue{}, fmt.Errorf("decode workflow main node input snapshot: %w", err)
+		}
+		taskContext["input_snapshot"] = snapshot
+	}
+	contextRaw, _ := json.Marshal(taskContext)
 	task, err := s.Queries.CreateWorkflowMainNodeTask(ctx, db.CreateWorkflowMainNodeTaskParams{
 		AgentID:   agentID,
 		RuntimeID: agent.RuntimeID,

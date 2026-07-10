@@ -1085,9 +1085,11 @@ type continueWorkflowRunRequest struct {
 }
 
 type createWorkflowMainNodeTaskRequest struct {
-	NodeID   string `json:"node_id"`
-	NodeType string `json:"node_type"`
-	AgentID  string `json:"agent_id"`
+	NodeID          string          `json:"node_id"`
+	NodeType        string          `json:"node_type"`
+	AgentID         string          `json:"agent_id"`
+	RenderedContext string          `json:"rendered_context"`
+	InputSnapshot   json.RawMessage `json:"input_snapshot"`
 }
 
 func (h *Handler) CreateWorkflowMainNodeTask(w http.ResponseWriter, r *http.Request) {
@@ -1142,7 +1144,7 @@ func (h *Handler) CreateWorkflowMainNodeTask(w http.ResponseWriter, r *http.Requ
 	if nodeType == "" {
 		nodeType = "main_agent"
 	}
-	task, err := h.TaskService.EnqueueWorkflowMainNodeTask(r.Context(), issue, agentID, run.ID, nodeID, nodeType)
+	task, err := h.TaskService.EnqueueWorkflowMainNodeTask(r.Context(), issue, agentID, run.ID, nodeID, nodeType, strings.TrimSpace(req.RenderedContext), req.InputSnapshot)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "create workflow main node task: "+err.Error())
 		return

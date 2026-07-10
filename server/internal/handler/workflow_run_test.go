@@ -510,8 +510,12 @@ func TestCreateWorkflowMainNodeTask(t *testing.T) {
 	})
 
 	req := newRequest("POST", "/api/workflow-runs/"+runID+"/main-node-task?workspace_id="+testWorkspaceID, map[string]any{
-		"node_id":   "final",
-		"node_type": "final_response",
+		"node_id":          "final",
+		"node_type":        "final_response",
+		"rendered_context": "## Workflow Inputs\n### task\nInvestigate bug",
+		"input_snapshot": map[string]any{
+			"task": "Investigate bug",
+		},
 	})
 	req = withURLParam(req, "runId", runID)
 	w := httptest.NewRecorder()
@@ -532,7 +536,7 @@ func TestCreateWorkflowMainNodeTask(t *testing.T) {
 	if err := testPool.QueryRow(ctx, `SELECT context::text FROM agent_task_queue WHERE id = $1`, resp["task_id"]).Scan(&contextRaw); err != nil {
 		t.Fatalf("query task context: %v", err)
 	}
-	for _, want := range []string{`"workflow_main_node"`, `"workflow_run_id": "` + runID + `"`, `"node_id": "final"`} {
+	for _, want := range []string{`"workflow_main_node"`, `"workflow_run_id": "` + runID + `"`, `"node_id": "final"`, `"rendered_context": "## Workflow Inputs\n### task\nInvestigate bug"`, `"input_snapshot": {"task": "Investigate bug"}`} {
 		if !strings.Contains(contextRaw, want) {
 			t.Fatalf("context %s missing %s", contextRaw, want)
 		}

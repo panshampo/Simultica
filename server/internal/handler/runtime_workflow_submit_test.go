@@ -471,7 +471,7 @@ func TestEnqueueWorkflowMainNodeTaskSetsContext(t *testing.T) {
 		t.Fatalf("create workflow run: %v", err)
 	}
 
-	task, err := testHandler.TaskService.EnqueueWorkflowMainNodeTask(ctx, issue, parseUUID(agentID), parseUUID(runID), "final", "final_response")
+	task, err := testHandler.TaskService.EnqueueWorkflowMainNodeTask(ctx, issue, parseUUID(agentID), parseUUID(runID), "final", "final_response", "", nil)
 	if err != nil {
 		t.Fatalf("enqueue workflow main node task: %v", err)
 	}
