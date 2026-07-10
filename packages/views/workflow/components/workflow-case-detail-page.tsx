@@ -299,8 +299,6 @@ export function WorkflowCaseDetailPage({
             saveCaseSettings={saveCaseSettings}
             archiving={archiving}
             archiveCase={archiveCase}
-            versions={definitionVersions}
-            versionHref={(versionId) => paths.workflowCaseVersionDetail(caseId, versionId)}
             setDeleteOpen={setDeleteOpen}
           />
         )}
@@ -320,6 +318,9 @@ export function WorkflowCaseDetailPage({
             publishing={publishing}
             publishOnlineVersion={publishOnlineVersion}
             canPublish={canPublish}
+            onlineVersionId={onlineVersionId}
+            versions={definitionVersions}
+            versionHref={(versionId) => paths.workflowCaseVersionDetail(caseId, versionId)}
           />
         )}
         {activeTab === "runs" && (
@@ -415,8 +416,6 @@ function WorkflowCaseOverview({
   saveCaseSettings,
   archiving,
   archiveCase,
-  versions,
-  versionHref,
   setDeleteOpen,
 }: {
   workflowCase: WorkflowCase;
@@ -437,8 +436,6 @@ function WorkflowCaseOverview({
   saveCaseSettings: () => Promise<void>;
   archiving: boolean;
   archiveCase: () => Promise<void>;
-  versions: WorkflowDefinitionVersion[];
-  versionHref: (versionId: string) => string;
   setDeleteOpen: (open: boolean) => void;
 }) {
   return (
@@ -496,16 +493,10 @@ function WorkflowCaseOverview({
         setCaseOwnerAgentId={setCaseOwnerAgentId}
         savingCase={savingCase}
         saveCaseSettings={saveCaseSettings}
-        setDeleteOpen={setDeleteOpen}
-      />
-
-      <WorkflowCaseLifecyclePanel
-        versions={versions}
-        onlineVersionId={onlineVersionId}
         workflowCaseStatus={workflowCase.status}
         archiving={archiving}
         archiveCase={archiveCase}
-        versionHref={versionHref}
+        setDeleteOpen={setDeleteOpen}
       />
     </main>
   );
@@ -526,6 +517,9 @@ function WorkflowCaseDefinitionPanel({
   publishing,
   publishOnlineVersion,
   canPublish,
+  onlineVersionId,
+  versions,
+  versionHref,
 }: {
   caseId: string;
   wsId: string;
@@ -541,6 +535,9 @@ function WorkflowCaseDefinitionPanel({
   publishing: boolean;
   publishOnlineVersion: () => Promise<void>;
   canPublish: boolean;
+  onlineVersionId: string | null;
+  versions: WorkflowDefinitionVersion[];
+  versionHref: (versionId: string) => string;
 }) {
   return (
     <main className="max-w-6xl space-y-4">
@@ -560,6 +557,9 @@ function WorkflowCaseDefinitionPanel({
             </Button>
           </div>
         </div>
+        <p className="text-xs text-muted-foreground">
+          The Draft sits on top of the Active Workflow. Edit it, validate it, then set it active to create a new snapshot.
+        </p>
         {editingDraft ? (
           <WorkflowCaseDraftEditor
             caseId={caseId}
@@ -591,7 +591,78 @@ function WorkflowCaseDefinitionPanel({
       </section>
 
       <ValidationReportPanel report={validation} />
+
+      <WorkflowCaseVersionsPanel
+        versions={versions}
+        onlineVersionId={onlineVersionId}
+        versionHref={versionHref}
+      />
     </main>
+  );
+}
+
+// WorkflowCaseVersionsPanel renders the workflow timeline below the Draft:
+// the current Active Workflow (online snapshot) highlighted, then historical
+// snapshots. Opening a version routes to the read-only version page.
+function WorkflowCaseVersionsPanel({
+  versions,
+  onlineVersionId,
+  versionHref,
+}: {
+  versions: WorkflowDefinitionVersion[];
+  onlineVersionId: string | null;
+  versionHref: (versionId: string) => string;
+}) {
+  if (versions.length === 0) {
+    return (
+      <section className="rounded-lg border border-dashed bg-background/60 p-4">
+        <h2 className="text-sm font-medium">Active Workflow &amp; snapshots</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          No snapshots yet. Set the draft active to create the first Active Workflow.
+        </p>
+      </section>
+    );
+  }
+  const sorted = [...versions].sort((a, b) => b.version - a.version);
+  return (
+    <section className="overflow-hidden rounded-lg border bg-card">
+      <div className="border-b px-3 py-2">
+        <h2 className="text-sm font-medium">Active Workflow &amp; snapshots</h2>
+        <p className="mt-1 text-xs text-muted-foreground">The Active Workflow is used by new runs. Older snapshots are read-only history.</p>
+      </div>
+      <ul className="divide-y">
+        {sorted.map((version) => {
+          const online = version.id === onlineVersionId;
+          return (
+            <li key={version.id} className={cn("flex items-center justify-between gap-3 px-3 py-2", online && "bg-green-50/60")}>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-medium">v{version.version}</span>
+                  <span
+                    className={cn(
+                      "rounded px-1.5 py-0.5 text-xs",
+                      online ? "bg-green-100 text-green-800" : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {online ? "Active Workflow" : "Historical"}
+                  </span>
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {formatDateTime(version.created_at)}
+                  {version.validation_report?.valid === false ? " · validation issues" : ""}
+                </div>
+              </div>
+              <AppLink
+                href={versionHref(version.id)}
+                className="shrink-0 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                Open v{version.version}
+              </AppLink>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
@@ -680,6 +751,9 @@ function WorkflowCaseSettingsPanel({
   setCaseOwnerAgentId,
   savingCase,
   saveCaseSettings,
+  workflowCaseStatus,
+  archiving,
+  archiveCase,
   setDeleteOpen,
 }: {
   caseTitle: string;
@@ -690,6 +764,9 @@ function WorkflowCaseSettingsPanel({
   setCaseOwnerAgentId: (ownerAgentId: string) => void;
   savingCase: boolean;
   saveCaseSettings: () => Promise<void>;
+  workflowCaseStatus: WorkflowCase["status"];
+  archiving: boolean;
+  archiveCase: () => Promise<void>;
   setDeleteOpen: (open: boolean) => void;
 }) {
   return (
@@ -724,91 +801,18 @@ function WorkflowCaseSettingsPanel({
       <section className="rounded-lg border border-red-200 bg-card p-4">
         <h2 className="text-sm font-medium text-red-700">Danger zone</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Permanent deletion removes the case, draft, versions, runs, node history, and event history. Active runs must be cancelled first.
+          Archiving hides the workflow from active lists but keeps its history. Permanent deletion removes the case, draft, snapshots, runs, node history, and event history. Active runs must be cancelled first.
         </p>
-        <Button type="button" size="sm" variant="outline" className="mt-3 text-red-600 hover:text-red-700" onClick={() => setDeleteOpen(true)}>
-          Delete permanently
-        </Button>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={() => void archiveCase()} disabled={archiving || workflowCaseStatus === "archived"}>
+            {archiving ? "Archiving..." : "Archive case"}
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="text-red-600 hover:text-red-700" onClick={() => setDeleteOpen(true)}>
+            Delete permanently
+          </Button>
+        </div>
       </section>
     </div>
-  );
-}
-
-function WorkflowCaseLifecyclePanel({
-  versions,
-  onlineVersionId,
-  workflowCaseStatus,
-  archiving,
-  archiveCase,
-  versionHref,
-}: {
-  versions: WorkflowDefinitionVersion[];
-  onlineVersionId: string | null;
-  workflowCaseStatus: WorkflowCase["status"];
-  archiving: boolean;
-  archiveCase: () => Promise<void>;
-  versionHref: (versionId: string) => string;
-}) {
-  if (versions.length === 0) {
-    return (
-      <section className="space-y-3 rounded-lg border bg-card p-4">
-        <div>
-          <h2 className="text-sm font-medium">Lifecycle</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            No snapshots yet. Set the draft active to create the first snapshot.
-          </p>
-        </div>
-        <Button type="button" size="sm" variant="outline" onClick={() => void archiveCase()} disabled={archiving || workflowCaseStatus === "archived"}>
-          {archiving ? "Archiving..." : "Archive case"}
-        </Button>
-      </section>
-    );
-  }
-  const sorted = [...versions].sort((a, b) => b.version - a.version);
-  return (
-    <section className="overflow-hidden rounded-lg border bg-card">
-      <div className="flex items-start justify-between gap-3 border-b px-3 py-2">
-        <div>
-          <h2 className="text-sm font-medium">Lifecycle</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Published versions and archive controls.</p>
-        </div>
-        <Button type="button" size="sm" variant="outline" onClick={() => void archiveCase()} disabled={archiving || workflowCaseStatus === "archived"}>
-          {archiving ? "Archiving..." : "Archive case"}
-        </Button>
-      </div>
-      <ul className="divide-y">
-        {sorted.map((version) => {
-          const online = version.id === onlineVersionId;
-          return (
-            <li key={version.id} className="flex items-center justify-between gap-3 px-3 py-2">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="font-medium">v{version.version}</span>
-                  <span
-                    className={cn(
-                      "rounded px-1.5 py-0.5 text-xs",
-                      online ? "bg-green-100 text-green-800" : "bg-muted text-muted-foreground",
-                    )}
-                  >
-                    {online ? "Online" : "Historical"}
-                  </span>
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  {formatDateTime(version.created_at)}
-                  {version.validation_report?.valid === false ? " · validation issues" : ""}
-                </div>
-              </div>
-              <AppLink
-                href={versionHref(version.id)}
-                className="shrink-0 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                Open v{version.version}
-              </AppLink>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
   );
 }
 

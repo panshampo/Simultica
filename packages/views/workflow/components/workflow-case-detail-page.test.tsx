@@ -110,7 +110,7 @@ describe("WorkflowCaseDetailPage", () => {
     expect(screen.queryByRole("tab", { name: "Settings" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Archive case" })).toBeInTheDocument();
-    expect(screen.getByText("Lifecycle")).toBeInTheDocument();
+    expect(screen.queryByText("Lifecycle")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Create run" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Validate draft" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Workflow YAML")).not.toBeInTheDocument();
@@ -208,7 +208,7 @@ describe("WorkflowCaseDetailPage", () => {
     expect(screen.getByText("Set a workflow active before creating a run.")).toBeInTheDocument();
   });
 
-  it("marks the online version and shows historical versions on Overview", async () => {
+  it("shows Active Workflow and historical snapshots on the Workflow tab, not Overview", async () => {
     mocks.getWorkflowCase.mockResolvedValue(makeCase({ online_version_id: "version-2" }));
     mocks.listWorkflowCaseDefinitionVersions.mockResolvedValue([
       makeVersion({ id: "version-1", version: 1 }),
@@ -217,8 +217,14 @@ describe("WorkflowCaseDetailPage", () => {
 
     renderPage();
 
+    // Overview no longer carries the version list.
     await screen.findByRole("tab", { name: "Overview" });
-    expect(await screen.findByText("Online")).toBeInTheDocument();
+    expect(screen.queryByText("Historical")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open v1" })).not.toBeInTheDocument();
+
+    // Workflow tab shows the full timeline: Active Workflow + Snapshots.
+    await userEvent.click(screen.getByRole("tab", { name: "Workflow" }));
+    expect(await screen.findByText("Active Workflow")).toBeInTheDocument();
     expect(screen.getByText("Historical")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open v1" })).toHaveAttribute(
       "href",
@@ -229,9 +235,6 @@ describe("WorkflowCaseDetailPage", () => {
       "/workflow-cases/case-1/versions/version-2",
     );
     expect(screen.queryByRole("button", { name: /Create run from/i })).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("tab", { name: "Workflow" }));
-    expect(screen.queryByText("Historical")).not.toBeInTheDocument();
   });
 
   it("renders multiple parallel active runs and cancels a single run", async () => {
