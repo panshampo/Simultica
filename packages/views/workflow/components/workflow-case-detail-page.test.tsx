@@ -84,6 +84,33 @@ vi.mock("./workflow-canvas", () => ({
   ),
 }));
 
+vi.mock("./workflow-editor", () => ({
+  WorkflowEditor: ({ title, saveLabel, onSave, onSaved }: {
+    title?: string;
+    saveLabel?: string;
+    onSave: (yaml: string) => Promise<void>;
+    onSaved?: (yaml: string) => void;
+  }) => (
+    <div data-testid="workflow-editor">
+      <span>{title}</span>
+      <button
+        type="button"
+        onClick={async () => {
+          const yaml = "meta:\n  name: workflow-case\nstate:\n  fields: []\nnodes: []\nrouting: []\n";
+          await onSave(yaml);
+          onSaved?.(yaml);
+        }}
+      >
+        {saveLabel ?? "Save workflow"}
+      </button>
+    </div>
+  ),
+}));
+
+vi.mock("@multica/core/workspace/queries", () => ({
+  agentListOptions: (wsId: string) => ({ queryKey: ["agents", wsId], queryFn: async () => [] }),
+}));
+
 import { WorkflowCaseDetailPage } from "./workflow-case-detail-page";
 
 describe("WorkflowCaseDetailPage", () => {
@@ -284,7 +311,23 @@ describe("WorkflowCaseDetailPage", () => {
     await waitFor(() => expect(mocks.navigationPush).toHaveBeenCalledWith("/workflow-cases"));
   });
 
-  it("creates a starter draft from an empty case and resets validation after saving", async () => {
+  it("names the section Draft and enters the canvas+YAML editor from Edit draft", async () => {
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("tab", { name: "Workflow" }));
+    // Section is titled "Draft", not "Draft workspace".
+    expect(screen.getByRole("heading", { name: "Draft" })).toBeInTheDocument();
+    expect(screen.queryByText("Draft workspace")).not.toBeInTheDocument();
+    // Non-edit state shows a read-only canvas and an Edit draft button.
+    expect(screen.getByTestId("workflow-canvas")).toBeInTheDocument();
+    expect(screen.queryByTestId("workflow-editor")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit draft" }));
+    // Editing state renders the shared canvas+YAML editor.
+    expect(await screen.findByTestId("workflow-editor")).toBeInTheDocument();
+  });
+
+  it("creates a starter draft from an empty case via the editor", async () => {
     mocks.getWorkflowCaseDefinition.mockResolvedValue(null);
     mocks.upsertWorkflowCaseDefinitionDraft.mockResolvedValue(makeDraft());
 
@@ -293,9 +336,8 @@ describe("WorkflowCaseDetailPage", () => {
     await userEvent.click(await screen.findByRole("tab", { name: "Workflow" }));
     expect(await screen.findByText("No definition draft is available for this workflow case.")).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "Create starter draft" }).at(-1)!);
-    expect(await screen.findByLabelText("Workflow YAML")).toBeInTheDocument();
+    expect(await screen.findByTestId("workflow-editor")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Apply YAML" }));
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
 
     await waitFor(() => {

@@ -937,17 +937,21 @@ export function SkillDetailPage({ skillId }: { skillId: string }) {
                 </Button>
               </div>
               <WorkflowEditor
-                skillId={skill.id}
                 initialYaml={fileMap.get("workflow.yaml")}
                 agents={agents}
+                onSave={async (yaml) => {
+                  await api.upsertSkillFile(skill.id, { path: "workflow.yaml", content: yaml });
+                }}
                 readOnly
               />
             </div>
           ) : (
             <WorkflowEditor
-              skillId={skill.id}
               initialYaml={fileMap.get("workflow.yaml")}
               agents={agents}
+              onSave={async (yaml) => {
+                await api.upsertSkillFile(skill.id, { path: "workflow.yaml", content: yaml });
+              }}
               onSaved={handleWorkflowSaved}
             />
           )}

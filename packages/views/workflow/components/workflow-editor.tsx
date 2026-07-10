@@ -5,7 +5,6 @@ import type { Connection } from "@xyflow/react";
 import { toast } from "sonner";
 import type { Agent } from "@multica/core/types";
 import type { WorkflowDefinition, WorkflowEdge, WorkflowNode } from "@multica/core/workflow/types";
-import { api } from "@multica/core/api";
 import { Button } from "@multica/ui/components/ui/button";
 import { managementActionButtonClass } from "../../common/management-action-button";
 import { WorkflowCanvas } from "./workflow-canvas";
@@ -17,7 +16,6 @@ import { WorkflowYamlEditor } from "./workflow-yaml-editor";
 import { getNodeTypeConfig } from "../lib/schema-registry";
 import { parseWorkflow, serializeWorkflow } from "../lib/serialize";
 import { validateWorkflowDefinition } from "../lib/validation";
-import { useT } from "../../i18n";
 
 const EMPTY_WORKFLOW: WorkflowDefinition = {
   meta: { name: "workflow" },
@@ -32,19 +30,24 @@ type Selection =
   | null;
 
 export function WorkflowEditor({
-  skillId,
   initialYaml,
   agents,
+  onSave,
   onSaved,
   readOnly = false,
+  title = "Workflow",
+  saveLabel = "Save workflow",
+  savedToast = "Workflow saved",
 }: {
-  skillId: string;
   initialYaml?: string;
   agents: Pick<Agent, "id" | "name">[];
+  onSave: (yaml: string) => Promise<void>;
   onSaved?: (yaml: string) => void;
   readOnly?: boolean;
+  title?: string;
+  saveLabel?: string;
+  savedToast?: string;
 }) {
-  const { t } = useT("skills");
   const [definition, setDefinition] = useState<WorkflowDefinition>(() => {
     if (!initialYaml?.trim()) return EMPTY_WORKFLOW;
     try {
@@ -178,11 +181,11 @@ export function WorkflowEditor({
         setSaving(false);
         return;
       }
-      await api.upsertSkillFile(skillId, { path: "workflow.yaml", content: yaml });
+      await onSave(yaml);
       onSaved?.(yaml);
-      toast.success(t(($) => $.detail.toast_workflow_saved));
+      toast.success(savedToast);
     } catch (err) {
-      const message = err instanceof Error ? err.message : t(($) => $.detail.toast_workflow_save_failed);
+      const message = err instanceof Error ? err.message : "Failed to save workflow";
       setError(message);
       toast.error(message);
     } finally {
@@ -252,7 +255,7 @@ export function WorkflowEditor({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-        <h3 className="text-sm font-medium">Workflow</h3>
+        <h3 className="text-sm font-medium">{title}</h3>
         <div className="ml-auto flex items-center gap-2">
           <div className="inline-flex rounded-md border bg-background p-0.5">
             <Button type="button" size="xs" variant={mode === "structured" ? "default" : "ghost"} onClick={() => setMode("structured")}>
@@ -287,7 +290,7 @@ export function WorkflowEditor({
           )}
           {!readOnly && (
             <Button type="button" size="xs" className={managementActionButtonClass("save")} onClick={save} disabled={saving}>
-              {saving ? "Saving..." : "Save workflow"}
+              {saving ? "Saving..." : saveLabel}
             </Button>
           )}
           </div>

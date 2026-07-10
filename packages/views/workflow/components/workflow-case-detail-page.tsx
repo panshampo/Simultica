@@ -15,8 +15,10 @@ import {
   workflowCaseRunsOptions,
   workflowRunKeys,
 } from "@multica/core/workflow/queries";
+import { agentListOptions } from "@multica/core/workspace/queries";
 import type {
   WorkflowCase,
+  WorkflowDefinition,
   WorkflowDefinitionDraft,
   WorkflowDefinitionVersion,
   WorkflowRun,
@@ -39,8 +41,33 @@ import { cn } from "@multica/ui/lib/utils";
 import { PageHeader } from "../../layout/page-header";
 import { AppLink, useNavigation } from "../../navigation";
 import { WorkflowCanvas } from "./workflow-canvas";
-import { WorkflowCaseDraftEditor } from "./workflow-case-draft-editor";
+import { WorkflowEditor } from "./workflow-editor";
+import { serializeWorkflow, parseWorkflow } from "../lib/serialize";
 import { WorkflowCaseRunList } from "./workflow-case-run-list";
+
+// Starter draft used when a workflow case has no draft yet. Kept here so the
+// Draft section can seed the editor without a separate draft-editor component.
+const WORKFLOW_CASE_STARTER_DRAFT: WorkflowDefinition = {
+  meta: { name: "workflow-case", version: "1" },
+  state: {
+    fields: [{ name: "task", type: "string", required: true }],
+  },
+  nodes: [
+    {
+      id: "gate",
+      type: "condition",
+      dispatch: "inline",
+      config: {
+        condition: "true",
+        output: "route_decision",
+      },
+    },
+  ],
+  routing: [
+    { from: "START", to: "gate" },
+    { from: "gate", to: "END" },
+  ],
+};
 
 const ACTIVE_RUN_STATUSES = new Set<WorkflowRun["status"]>(["pending", "planning", "running", "finalizing", "cancelling"]);
 
@@ -84,6 +111,7 @@ export function WorkflowCaseDetailPage({
   const { data: definitionVersions = [] } = useQuery(workflowCaseDefinitionVersionsOptions(wsId, caseId));
   const { data: runs = [] } = useQuery(workflowCaseRunsOptions(wsId, caseId));
   const { data: currentRunFromApi = null } = useQuery(workflowCaseCurrentRunOptions(wsId, caseId));
+  const { data: agents = [] } = useQuery(agentListOptions(wsId));
 
   const onlineVersionId = workflowCase?.online_version_id ?? null;
   const hasOnlineVersion = Boolean(onlineVersionId);
@@ -321,6 +349,7 @@ export function WorkflowCaseDetailPage({
             onlineVersionId={onlineVersionId}
             versions={definitionVersions}
             versionHref={(versionId) => paths.workflowCaseVersionDetail(caseId, versionId)}
+            agents={agents}
           />
         )}
         {activeTab === "runs" && (
@@ -520,6 +549,7 @@ function WorkflowCaseDefinitionPanel({
   onlineVersionId,
   versions,
   versionHref,
+  agents,
 }: {
   caseId: string;
   wsId: string;
@@ -538,40 +568,63 @@ function WorkflowCaseDefinitionPanel({
   onlineVersionId: string | null;
   versions: WorkflowDefinitionVersion[];
   versionHref: (versionId: string) => string;
+  agents: Array<{ id: string; name: string }>;
 }) {
+  async function saveDraftYaml(yaml: string): Promise<WorkflowDefinitionDraft> {
+    const draft = parseWorkflow(yaml);
+    return api.upsertWorkflowCaseDefinitionDraft(caseId, {
+      draft_json: draft,
+      source_templates: definition?.source_templates ?? [],
+    });
+  }
+
+  if (editingDraft) {
+    return (
+      <main className="flex min-h-0 max-w-6xl flex-1 flex-col">
+        <WorkflowEditor
+          initialYaml={serializeWorkflow(definition?.draft_json ?? WORKFLOW_CASE_STARTER_DRAFT)}
+          agents={agents}
+          title="Edit draft"
+          saveLabel="Save draft"
+          savedToast="Draft saved"
+          onSave={async (yaml) => {
+            const saved = await saveDraftYaml(yaml);
+            qc.setQueryData(workflowRunKeys.caseDefinition(wsId, caseId), saved);
+            setValidation(null);
+          }}
+          onSaved={() => setEditingDraft(false)}
+        />
+        <div className="mt-3">
+          <Button type="button" size="sm" variant="outline" onClick={() => setEditingDraft(false)}>
+            Close editor
+          </Button>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="max-w-6xl space-y-4">
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-medium">Draft workspace</h2>
+          <h2 className="text-sm font-medium">Draft</h2>
           <div className="flex items-center gap-2">
             <Button type="button" size="sm" variant="outline" onClick={() => setEditingDraft(true)}>
               {definition ? "Edit draft" : "Create starter draft"}
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => void validateDefinition()} disabled={!definition || validating || editingDraft}>
+            <Button type="button" size="sm" variant="outline" onClick={() => void validateDefinition()} disabled={!definition || validating}>
               {validating ? "Validating..." : "Validate draft"}
             </Button>
-            <Button type="button" size="sm" onClick={() => void publishOnlineVersion()} disabled={!canPublish || publishing}>
+            <Button type="button" size="sm" onClick={() => void publishOnlineVersion()} disabled={!canPublish}>
               <Rocket className="mr-1 size-3.5" />
               {publishing ? "Setting active..." : "Set active"}
             </Button>
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          The Draft sits on top of the Active Workflow. Edit it, validate it, then set it active to create a new snapshot.
+          The Draft sits on top of the Active Workflow. Edit it on the canvas or as YAML, validate it, then set it active to create a new snapshot.
         </p>
-        {editingDraft ? (
-          <WorkflowCaseDraftEditor
-            caseId={caseId}
-            definition={definition}
-            onCancel={() => setEditingDraft(false)}
-            onSaved={(saved) => {
-              qc.setQueryData(workflowRunKeys.caseDefinition(wsId, caseId), saved);
-              setValidation(null);
-              setEditingDraft(false);
-            }}
-          />
-        ) : definitionLoading ? (
+        {definitionLoading ? (
           <Skeleton className="h-[360px] rounded-lg" />
         ) : definition ? (
           <WorkflowCanvas definition={definition.draft_json} fullscreenTitle="Workflow definition draft" />
