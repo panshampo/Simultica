@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WorkflowDefinition } from "@multica/core/workflow/types";
-import { WORKFLOW_NODE_HEIGHT, WORKFLOW_NODE_WIDTH, workflowToReactFlow } from "./to-react-flow";
+import { WORKFLOW_NODE_HEIGHT, WORKFLOW_NODE_WIDTH, type WorkflowCanvasEdgeData, workflowToReactFlow } from "./to-react-flow";
 
 const definition: WorkflowDefinition = {
   meta: { name: "canvas" },
@@ -182,16 +182,16 @@ describe("workflowToReactFlow", () => {
       ]),
     );
     expect(backEdge).toEqual(expect.objectContaining({
-      type: "smoothstep",
+      type: "workflow",
       sourceHandle: "source-top",
       targetHandle: "target-top",
-      data: expect.objectContaining({ routeKind: "back" }),
+      data: expect.objectContaining({ routeKind: "back", routePoints: expect.any(Array) }),
     }));
     expect(elseEdge).toEqual(expect.objectContaining({
-      type: "smoothstep",
+      type: "workflow",
       sourceHandle: "source-right",
       targetHandle: "target-left",
-      data: expect.objectContaining({ routeKind: "else" }),
+      data: expect.objectContaining({ routeKind: "else", routePoints: expect.any(Array) }),
     }));
   });
 
@@ -219,6 +219,35 @@ describe("workflowToReactFlow", () => {
     expect(loopBackEdge.style).not.toEqual(classifyBackEdge.style);
     expect(finalEdge.data).toEqual(expect.objectContaining({ routeKind: "else", lane: 2 }));
   });
+
+  it("plans edge routes that avoid node boxes without overlapping each other", () => {
+    const { nodes, edges } = workflowToReactFlow(frontendBugInvestigationDefinition);
+    const nodeBoxes = new Map(nodes.map((node) => [
+      node.id,
+      {
+        left: node.position.x,
+        right: node.position.x + WORKFLOW_NODE_WIDTH,
+        top: node.position.y,
+        bottom: node.position.y + WORKFLOW_NODE_HEIGHT,
+      },
+    ]));
+    const occupiedSegments = new Set<string>();
+
+    for (const edge of edges) {
+      const data = edge.data as WorkflowCanvasEdgeData;
+      expect(data.routePoints.length).toBeGreaterThanOrEqual(2);
+
+      for (let i = 0; i < data.routePoints.length - 1; i += 1) {
+        const from = data.routePoints[i]!;
+        const to = data.routePoints[i + 1]!;
+        expect(segmentIntersectsAnyNonEndpointNode(from, to, edge.source, edge.target, nodeBoxes)).toBe(false);
+
+        const key = segmentKey(from, to);
+        expect(occupiedSegments.has(key)).toBe(false);
+        occupiedSegments.add(key);
+      }
+    }
+  });
 });
 
 function nodesDoNotOverlap(nodes: ReturnType<typeof workflowToReactFlow>["nodes"]): boolean {
@@ -232,6 +261,35 @@ function nodesDoNotOverlap(nodes: ReturnType<typeof workflowToReactFlow>["nodes"
     }
   }
   return true;
+}
+
+function segmentIntersectsAnyNonEndpointNode(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  source: string,
+  target: string,
+  nodeBoxes: Map<string, { left: number; right: number; top: number; bottom: number }>,
+): boolean {
+  for (const [nodeId, box] of nodeBoxes) {
+    if (nodeId === source || nodeId === target) continue;
+    if (from.y === to.y) {
+      const minX = Math.min(from.x, to.x);
+      const maxX = Math.max(from.x, to.x);
+      if (from.y > box.top && from.y < box.bottom && minX < box.right && maxX > box.left) return true;
+    }
+    if (from.x === to.x) {
+      const minY = Math.min(from.y, to.y);
+      const maxY = Math.max(from.y, to.y);
+      if (from.x > box.left && from.x < box.right && minY < box.bottom && maxY > box.top) return true;
+    }
+  }
+  return false;
+}
+
+function segmentKey(from: { x: number; y: number }, to: { x: number; y: number }): string {
+  const a = `${from.x},${from.y}`;
+  const b = `${to.x},${to.y}`;
+  return a < b ? `${a}->${b}` : `${b}->${a}`;
 }
 
 const frontendBugInvestigationDefinition: WorkflowDefinition = {

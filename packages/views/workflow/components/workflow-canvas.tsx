@@ -3,8 +3,10 @@
 import { memo, useCallback, useEffect, useMemo, useState, type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
+  BaseEdge,
   Background,
   Controls,
+  EdgeText,
   Handle,
   MarkerType,
   Position,
@@ -13,6 +15,8 @@ import {
   useReactFlow,
   type Connection,
   type Edge,
+  type EdgeProps,
+  type EdgeTypes,
   type Node,
   type NodeProps,
   type NodeTypes,
@@ -453,6 +457,7 @@ function WorkflowCanvasInnerInner({
       defaultNodes={defaultNodes}
       defaultEdges={defaultEdges}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       fitView
       fitViewOptions={{ padding: 0.25 }}
       nodesDraggable
@@ -750,6 +755,63 @@ const WorkflowNode = memo(function WorkflowNode({ data }: NodeProps) {
 });
 
 const nodeTypes: NodeTypes = { workflow: WorkflowNode };
+
+const WorkflowEdge = memo(function WorkflowEdge({
+  id,
+  data,
+  label,
+  labelStyle,
+  labelBgStyle,
+  labelBgPadding,
+  labelBgBorderRadius,
+  style,
+  markerEnd,
+  interactionWidth,
+}: EdgeProps<Edge<WorkflowCanvasEdgeData>>) {
+  const points = data?.routePoints ?? [];
+  if (points.length < 2) return null;
+  const path = pointsToPath(points);
+  const labelPoint = midpoint(points);
+  return (
+    <>
+      <BaseEdge
+        id={id}
+        path={path}
+        style={style}
+        markerEnd={markerEnd}
+        interactionWidth={interactionWidth}
+      />
+      {label && (
+        <EdgeText
+          x={labelPoint.x}
+          y={labelPoint.y}
+          label={String(label)}
+          labelStyle={labelStyle}
+          labelBgStyle={labelBgStyle}
+          labelBgPadding={labelBgPadding}
+          labelBgBorderRadius={labelBgBorderRadius}
+        />
+      )}
+    </>
+  );
+});
+
+const edgeTypes: EdgeTypes = { workflow: WorkflowEdge };
+
+function pointsToPath(points: Array<{ x: number; y: number }>): string {
+  const [first, ...rest] = points;
+  if (!first) return "";
+  return [`M ${first.x} ${first.y}`, ...rest.map((point) => `L ${point.x} ${point.y}`)].join(" ");
+}
+
+function midpoint(points: Array<{ x: number; y: number }>): { x: number; y: number } {
+  if (points.length === 0) return { x: 0, y: 0 };
+  if (points.length === 1) return points[0]!;
+  const middleIndex = Math.floor((points.length - 1) / 2);
+  const from = points[middleIndex]!;
+  const to = points[middleIndex + 1] ?? from;
+  return { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+}
 
 function statusClass(status: string): string {
   switch (status) {

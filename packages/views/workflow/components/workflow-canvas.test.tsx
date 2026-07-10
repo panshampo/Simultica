@@ -34,6 +34,7 @@ vi.mock("@xyflow/react", () => ({
     nodesDraggable,
     nodesConnectable,
     nodeTypes,
+    edgeTypes,
     children,
     onNodeClick,
     onNodeMouseEnter,
@@ -43,12 +44,13 @@ vi.mock("@xyflow/react", () => ({
     onEdgeClick,
   }: {
     nodes?: MockFlowNode[];
-    edges?: Array<{ id: string; label?: string; data?: { fullLabel?: string; hovered?: boolean; mutedByHover?: boolean } }>;
+    edges?: Array<{ id: string; label?: string; type?: string; data?: { fullLabel?: string; hovered?: boolean; mutedByHover?: boolean; routePoints?: Array<{ x: number; y: number }> } }>;
     defaultNodes?: MockFlowNode[];
-    defaultEdges?: Array<{ id: string; label?: string; data?: { fullLabel?: string; hovered?: boolean; mutedByHover?: boolean } }>;
+    defaultEdges?: Array<{ id: string; label?: string; type?: string; data?: { fullLabel?: string; hovered?: boolean; mutedByHover?: boolean; routePoints?: Array<{ x: number; y: number }> } }>;
     nodesDraggable?: boolean;
     nodesConnectable?: boolean;
     nodeTypes: Record<string, React.ComponentType<{ data: unknown }>>;
+    edgeTypes?: Record<string, React.ComponentType<unknown>>;
     children: React.ReactNode;
     onNodeClick?: (event: unknown, node: { id: string }) => void;
     onNodeMouseEnter?: (event: unknown, node: { id: string }) => void;
@@ -73,6 +75,7 @@ vi.mock("@xyflow/react", () => ({
       data-testid="react-flow"
       data-nodes-draggable={String(Boolean(nodesDraggable))}
       data-nodes-connectable={String(Boolean(nodesConnectable))}
+      data-edge-types={Object.keys(edgeTypes ?? {}).join(",")}
     >
       {renderedNodes.map((node) => {
         const NodeComponent = nodeTypes.workflow;
@@ -97,6 +100,8 @@ vi.mock("@xyflow/react", () => ({
           data-full-label={edge.data?.fullLabel}
           data-hovered={String(Boolean(edge.data?.hovered))}
           data-muted={String(Boolean(edge.data?.mutedByHover))}
+          data-edge-type={edge.type}
+          data-route-points={String(edge.data?.routePoints?.length ?? 0)}
           onMouseEnter={() => onEdgeMouseEnter?.({}, edge)}
           onMouseLeave={() => onEdgeMouseLeave?.()}
           onClick={() => onEdgeClick?.({}, edge)}
@@ -141,6 +146,7 @@ describe("WorkflowCanvas", () => {
     render(<WorkflowCanvas definition={definition} />);
 
     expect(screen.getByTestId("react-flow")).toBeInTheDocument();
+    expect(screen.getByTestId("react-flow")).toHaveAttribute("data-edge-types", "workflow");
     expect(screen.getAllByTestId("handle").map((handle) => handle.getAttribute("data-handle-id")).sort()).toEqual([
       "source-bottom",
       "source-right",
@@ -164,6 +170,8 @@ describe("WorkflowCanvas", () => {
 
     const edge = screen.getByTestId("edge-edge-1-to");
     expect(edge).toHaveAttribute("data-full-label", "a_very_long_condition_expression == true && second_check == true");
+    expect(edge).toHaveAttribute("data-edge-type", "workflow");
+    expect(Number(edge.getAttribute("data-route-points"))).toBeGreaterThanOrEqual(2);
 
     fireEvent.mouseEnter(edge);
 

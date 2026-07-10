@@ -4,6 +4,7 @@ import type { WorkflowDefinition, WorkflowEdge, WorkflowNode, WorkflowNodeRunSta
 const COLUMN_GAP = 360;
 const ROW_GAP = 180;
 const EDGE_LANE_GAP = 56;
+const EDGE_NODE_PADDING = 32;
 export const WORKFLOW_NODE_WIDTH = 208;
 export const WORKFLOW_NODE_HEIGHT = 104;
 const MAX_CONDITION_LABEL_LENGTH = 44;
@@ -30,6 +31,7 @@ export type WorkflowCanvasNodeData = {
 };
 
 type LayoutPoint = { layer: number; row: number };
+type CanvasPoint = { x: number; y: number };
 type WorkflowEdgeKind = "forward" | "condition" | "else" | "back";
 type EdgePlan = { routeKind: WorkflowEdgeKind; lane: number };
 
@@ -40,6 +42,7 @@ export type WorkflowCanvasEdgeData = {
   selectedByRouteDecision: boolean;
   mutedByRouteDecision: boolean;
   completedPath: boolean;
+  routePoints: CanvasPoint[];
   hovered?: boolean;
   mutedByHover?: boolean;
 };
@@ -155,6 +158,7 @@ function buildEdge({
     plan?.routeKind ?? (sourcePoint && targetPoint && targetPoint.layer <= sourcePoint.layer ? "back" : kindHint);
   const lane = plan?.lane ?? 0;
   const handles = edgeHandles(routeKind, sourcePoint, targetPoint, lane);
+  const routePoints = buildRoutePoints({ routeKind, lane, sourcePoint, targetPoint });
   const routeDecision = runState[source]?.route_decision;
   const selectedByRouteDecision = Boolean(routeDecision && routeDecision.selected_route === target);
   const mutedByRouteDecision = Boolean(routeDecision && !selectedByRouteDecision);
@@ -165,7 +169,7 @@ function buildEdge({
     source,
     target,
     label: displayEdgeLabel(label),
-    type: "smoothstep",
+    type: "workflow",
     sourceHandle: route.sourceHandle || handles.sourceHandle,
     targetHandle: route.targetHandle || handles.targetHandle,
     animated: selectedByRouteDecision,
@@ -178,6 +182,7 @@ function buildEdge({
       selectedByRouteDecision,
       mutedByRouteDecision,
       completedPath,
+      routePoints,
     } satisfies WorkflowCanvasEdgeData,
     style: edgeStyle({
       routeKind,
@@ -198,6 +203,68 @@ function buildEdge({
     },
     labelBgPadding: [6, 3],
     labelBgBorderRadius: 4,
+  };
+}
+
+function buildRoutePoints({
+  routeKind,
+  lane,
+  sourcePoint,
+  targetPoint,
+}: {
+  routeKind: WorkflowEdgeKind;
+  lane: number;
+  sourcePoint: LayoutPoint | undefined;
+  targetPoint: LayoutPoint | undefined;
+}): CanvasPoint[] {
+  if (!sourcePoint || !targetPoint) return [];
+  const sourceBox = nodeBox(sourcePoint);
+  const targetBox = nodeBox(targetPoint);
+
+  if (routeKind === "back") {
+    const useBottom = lane % 2 === 0;
+    const sourceAnchor = useBottom
+      ? { x: sourceBox.centerX, y: sourceBox.bottom }
+      : { x: sourceBox.centerX, y: sourceBox.top };
+    const targetAnchor = useBottom
+      ? { x: targetBox.centerX, y: targetBox.bottom }
+      : { x: targetBox.centerX, y: targetBox.top };
+    const laneY = useBottom
+      ? Math.max(sourceBox.bottom, targetBox.bottom) + EDGE_NODE_PADDING + lane * EDGE_LANE_GAP
+      : Math.min(sourceBox.top, targetBox.top) - EDGE_NODE_PADDING - lane * EDGE_LANE_GAP;
+    return [
+      sourceAnchor,
+      { x: sourceAnchor.x, y: laneY },
+      { x: targetAnchor.x, y: laneY },
+      targetAnchor,
+    ];
+  }
+
+  const sourceAnchor = sourcePoint.row < targetPoint.row
+    ? { x: sourceBox.centerX, y: sourceBox.bottom }
+    : sourcePoint.row > targetPoint.row
+      ? { x: sourceBox.centerX, y: sourceBox.top }
+      : { x: sourceBox.right, y: sourceBox.centerY };
+  const targetAnchor = { x: targetBox.left, y: targetBox.centerY };
+  const corridorX = sourceBox.right + EDGE_NODE_PADDING + lane * EDGE_LANE_GAP;
+  return [
+    sourceAnchor,
+    { x: corridorX, y: sourceAnchor.y },
+    { x: corridorX, y: targetAnchor.y },
+    targetAnchor,
+  ];
+}
+
+function nodeBox(point: LayoutPoint) {
+  const left = point.layer * COLUMN_GAP;
+  const top = point.row * ROW_GAP;
+  return {
+    left,
+    right: left + WORKFLOW_NODE_WIDTH,
+    top,
+    bottom: top + WORKFLOW_NODE_HEIGHT,
+    centerX: left + WORKFLOW_NODE_WIDTH / 2,
+    centerY: top + WORKFLOW_NODE_HEIGHT / 2,
   };
 }
 
