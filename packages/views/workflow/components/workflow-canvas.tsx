@@ -767,8 +767,18 @@ const WorkflowEdge = memo(function WorkflowEdge({
   style,
   markerEnd,
   interactionWidth,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
 }: EdgeProps<Edge<WorkflowCanvasEdgeData>>) {
-  const points = data?.routePoints ?? [];
+  const points = routePointsFromLiveEdge({
+    data,
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+  });
   if (points.length < 2) return null;
   const path = pointsToPath(points);
   const labelPoint = midpoint(points);
@@ -797,6 +807,59 @@ const WorkflowEdge = memo(function WorkflowEdge({
 });
 
 const edgeTypes: EdgeTypes = { workflow: WorkflowEdge };
+
+function routePointsFromLiveEdge({
+  data,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+}: {
+  data?: WorkflowCanvasEdgeData;
+  sourceX: number;
+  sourceY: number;
+  targetX: number;
+  targetY: number;
+}): Array<{ x: number; y: number }> {
+  const routeKind = data?.routeKind;
+  const lane = data?.lane ?? 0;
+  const laneOffset = 32 + lane * 56;
+
+  if (routeKind === "back") {
+    const useBottom = data?.routeSide === "bottom";
+    const laneY = useBottom
+      ? Math.max(sourceY, targetY) + laneOffset
+      : Math.min(sourceY, targetY) - laneOffset;
+    return [
+      { x: sourceX, y: sourceY },
+      { x: sourceX, y: laneY },
+      { x: targetX, y: laneY },
+      { x: targetX, y: targetY },
+    ];
+  }
+
+  const forwardSign = targetX >= sourceX ? 1 : -1;
+  const corridorX = liveEdgeCorridorX(sourceX, targetX, lane, laneOffset, forwardSign);
+  return [
+    { x: sourceX, y: sourceY },
+    { x: corridorX, y: sourceY },
+    { x: corridorX, y: targetY },
+    { x: targetX, y: targetY },
+  ];
+}
+
+function liveEdgeCorridorX(sourceX: number, targetX: number, lane: number, laneOffset: number, direction: number): number {
+  const minX = Math.min(sourceX, targetX) + 24;
+  const maxX = Math.max(sourceX, targetX) - 24;
+  if (maxX <= minX) return sourceX + direction * laneOffset;
+  const midX = (minX + maxX) / 2;
+  const maxOffset = Math.max(0, (maxX - minX) / 2);
+  const step = Math.min(28, Math.max(8, maxOffset / 2));
+  if (!lane) return midX;
+  const magnitude = Math.ceil(lane / 2) * step;
+  const laneDirection = lane % 2 === 1 ? 1 : -1;
+  return midX + laneDirection * Math.min(magnitude, maxOffset);
+}
 
 function pointsToPath(points: Array<{ x: number; y: number }>): string {
   const [first, ...rest] = points;

@@ -18,8 +18,10 @@ type MockFlowNode = {
 };
 
 vi.mock("@xyflow/react", () => ({
+  BaseEdge: ({ path }: { path: string }) => <path data-testid="workflow-edge-path" data-path={path} />,
   Background: () => <div data-testid="background" />,
   Controls: () => <div data-testid="controls" />,
+  EdgeText: ({ label }: { label: string }) => <text>{label}</text>,
   Handle: ({ id, type, position }: { id?: string; type: string; position: string }) => (
     <div data-testid="handle" data-handle-id={id} data-type={type} data-position={position} />
   ),
@@ -50,7 +52,7 @@ vi.mock("@xyflow/react", () => ({
     nodesDraggable?: boolean;
     nodesConnectable?: boolean;
     nodeTypes: Record<string, React.ComponentType<{ data: unknown }>>;
-    edgeTypes?: Record<string, React.ComponentType<unknown>>;
+    edgeTypes?: Record<string, React.ComponentType<Record<string, unknown>>>;
     children: React.ReactNode;
     onNodeClick?: (event: unknown, node: { id: string }) => void;
     onNodeMouseEnter?: (event: unknown, node: { id: string }) => void;
@@ -69,6 +71,7 @@ vi.mock("@xyflow/react", () => ({
     };
     const renderedNodes = nodes ?? internalNodes;
     const renderedEdges = edges ?? internalEdges;
+    const WorkflowEdgeComponent = edgeTypes?.workflow;
 
     return (
     <div
@@ -93,21 +96,38 @@ vi.mock("@xyflow/react", () => ({
         );
       })}
       {renderedEdges.map((edge) => (
-        <button
-          key={edge.id}
-          type="button"
-          data-testid={`edge-${edge.id}`}
-          data-full-label={edge.data?.fullLabel}
-          data-hovered={String(Boolean(edge.data?.hovered))}
-          data-muted={String(Boolean(edge.data?.mutedByHover))}
-          data-edge-type={edge.type}
-          data-route-points={String(edge.data?.routePoints?.length ?? 0)}
-          onMouseEnter={() => onEdgeMouseEnter?.({}, edge)}
-          onMouseLeave={() => onEdgeMouseLeave?.()}
-          onClick={() => onEdgeClick?.({}, edge)}
-        >
-          {edge.label}
-        </button>
+        <div key={edge.id}>
+          <button
+            type="button"
+            data-testid={`edge-${edge.id}`}
+            data-full-label={edge.data?.fullLabel}
+            data-hovered={String(Boolean(edge.data?.hovered))}
+            data-muted={String(Boolean(edge.data?.mutedByHover))}
+            data-edge-type={edge.type}
+            data-route-points={String(edge.data?.routePoints?.length ?? 0)}
+            onMouseEnter={() => onEdgeMouseEnter?.({}, edge)}
+            onMouseLeave={() => onEdgeMouseLeave?.()}
+            onClick={() => onEdgeClick?.({}, edge)}
+          >
+            {edge.label}
+          </button>
+          {WorkflowEdgeComponent ? (
+            <svg>
+              <WorkflowEdgeComponent
+                id={edge.id}
+                source={edge.id}
+                target={edge.id}
+                sourceX={10}
+                sourceY={20}
+                targetX={210}
+                targetY={120}
+                data={edge.data}
+                label={edge.label}
+                style={{}}
+              />
+            </svg>
+          ) : null}
+        </div>
       ))}
       {children}
     </div>
@@ -172,6 +192,7 @@ describe("WorkflowCanvas", () => {
     expect(edge).toHaveAttribute("data-full-label", "a_very_long_condition_expression == true && second_check == true");
     expect(edge).toHaveAttribute("data-edge-type", "workflow");
     expect(Number(edge.getAttribute("data-route-points"))).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByTestId("workflow-edge-path")[0]).toHaveAttribute("data-path", expect.stringContaining("M 10 20"));
 
     fireEvent.mouseEnter(edge);
 

@@ -205,10 +205,13 @@ describe("workflowToReactFlow", () => {
     const loopBackEdge = edges.find((edge) => edge.id === "edge-5-to")!;
     const classifyBackEdge = edges.find((edge) => edge.id === "edge-6-to")!;
     const finalEdge = edges.find((edge) => edge.id === "edge-6-else")!;
+    const humanReviewEdge = edges.find((edge) => edge.id === "edge-7-to")!;
+    const humanReworkEdge = edges.find((edge) => edge.id === "edge-7-else")!;
 
     expect(loopGate.position.y).toBe(nodesById.get("review_cleanup")!.position.y);
     expect(finalRouteGate.position.y).toBe(nodesById.get("review_cleanup")!.position.y);
     expect(nodesById.get("scope_and_baseline")!.position.y).toBe(loopGate.position.y);
+    expect(nodesById.get("human_final_review")!.position.y).toBe(loopGate.position.y);
     expect(nodesById.get("final_report")!.position.y).toBe(loopGate.position.y);
     expect(investigate.position.x).toBeLessThan(loopGate.position.x);
     expect(classify.position.x).toBeLessThan(finalRouteGate.position.x);
@@ -218,6 +221,8 @@ describe("workflowToReactFlow", () => {
     expect(classifyBackEdge.style).toEqual(expect.objectContaining({ strokeDashoffset: 112 }));
     expect(loopBackEdge.style).not.toEqual(classifyBackEdge.style);
     expect(finalEdge.data).toEqual(expect.objectContaining({ routeKind: "else", lane: 2 }));
+    expect(humanReviewEdge.data).toEqual(expect.objectContaining({ routeKind: "condition", lane: 3 }));
+    expect(humanReworkEdge.data).toEqual(expect.objectContaining({ routeKind: "else", lane: 4 }));
   });
 
   it("plans edge routes that avoid node boxes without overlapping each other", () => {
@@ -240,7 +245,7 @@ describe("workflowToReactFlow", () => {
       for (let i = 0; i < data.routePoints.length - 1; i += 1) {
         const from = data.routePoints[i]!;
         const to = data.routePoints[i + 1]!;
-        expect(segmentIntersectsAnyNonEndpointNode(from, to, edge.source, edge.target, nodeBoxes)).toBe(false);
+        expect(intersectingNonEndpointNode(from, to, edge.source, edge.target, nodeBoxes), `${edge.id} segment ${i}`).toBe(null);
 
         const key = segmentKey(from, to);
         expect(occupiedSegments.has(key)).toBe(false);
@@ -263,27 +268,27 @@ function nodesDoNotOverlap(nodes: ReturnType<typeof workflowToReactFlow>["nodes"
   return true;
 }
 
-function segmentIntersectsAnyNonEndpointNode(
+function intersectingNonEndpointNode(
   from: { x: number; y: number },
   to: { x: number; y: number },
   source: string,
   target: string,
   nodeBoxes: Map<string, { left: number; right: number; top: number; bottom: number }>,
-): boolean {
+): string | null {
   for (const [nodeId, box] of nodeBoxes) {
     if (nodeId === source || nodeId === target) continue;
     if (from.y === to.y) {
       const minX = Math.min(from.x, to.x);
       const maxX = Math.max(from.x, to.x);
-      if (from.y > box.top && from.y < box.bottom && minX < box.right && maxX > box.left) return true;
+      if (from.y > box.top && from.y < box.bottom && minX < box.right && maxX > box.left) return nodeId;
     }
     if (from.x === to.x) {
       const minY = Math.min(from.y, to.y);
       const maxY = Math.max(from.y, to.y);
-      if (from.x > box.left && from.x < box.right && minY < box.bottom && maxY > box.top) return true;
+      if (from.x > box.left && from.x < box.right && minY < box.bottom && maxY > box.top) return nodeId;
     }
   }
-  return false;
+  return null;
 }
 
 function segmentKey(from: { x: number; y: number }, to: { x: number; y: number }): string {
@@ -302,6 +307,8 @@ const frontendBugInvestigationDefinition: WorkflowDefinition = {
     { id: "review_cleanup", type: "agent", dispatch: "subissue" },
     { id: "loop_gate", type: "transform", dispatch: "inline" },
     { id: "final_route_gate", type: "transform", dispatch: "inline" },
+    { id: "human_final_review", type: "human_review", dispatch: "human_gate" },
+    { id: "human_rework", type: "agent", dispatch: "subissue" },
     { id: "final_report", type: "final_response", dispatch: "main_issue_task" },
   ],
   routing: [
@@ -320,8 +327,10 @@ const frontendBugInvestigationDefinition: WorkflowDefinition = {
       from: "final_route_gate",
       condition: 'workflow_status == "fixable_auto" && next_target == "classify_and_record" && revisionCount < 2',
       to: "classify_and_record",
-      else: "final_report",
+      else: "human_final_review",
     },
+    { from: "human_final_review", condition: 'review_decision == "approved"', to: "final_report", else: "human_rework" },
+    { from: "human_rework", to: "loop_gate" },
     { from: "final_report", to: "END" },
   ],
 };

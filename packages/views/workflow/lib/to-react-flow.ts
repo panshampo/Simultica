@@ -33,6 +33,7 @@ export type WorkflowCanvasNodeData = {
 type LayoutPoint = { layer: number; row: number };
 type CanvasPoint = { x: number; y: number };
 type WorkflowEdgeKind = "forward" | "condition" | "else" | "back";
+type EdgeRouteSide = "top" | "bottom";
 type EdgePlan = { routeKind: WorkflowEdgeKind; lane: number };
 
 export type WorkflowCanvasEdgeData = {
@@ -43,6 +44,7 @@ export type WorkflowCanvasEdgeData = {
   mutedByRouteDecision: boolean;
   completedPath: boolean;
   routePoints: CanvasPoint[];
+  routeSide?: EdgeRouteSide;
   hovered?: boolean;
   mutedByHover?: boolean;
 };
@@ -157,8 +159,9 @@ function buildEdge({
   const routeKind: WorkflowEdgeKind =
     plan?.routeKind ?? (sourcePoint && targetPoint && targetPoint.layer <= sourcePoint.layer ? "back" : kindHint);
   const lane = plan?.lane ?? 0;
+  const routeSide = routeKind === "back" ? backRouteSide(lane, sourcePoint) : undefined;
   const handles = edgeHandles(routeKind, sourcePoint, targetPoint, lane);
-  const routePoints = buildRoutePoints({ routeKind, lane, sourcePoint, targetPoint });
+  const routePoints = buildRoutePoints({ routeKind, lane, routeSide, sourcePoint, targetPoint });
   const routeDecision = runState[source]?.route_decision;
   const selectedByRouteDecision = Boolean(routeDecision && routeDecision.selected_route === target);
   const mutedByRouteDecision = Boolean(routeDecision && !selectedByRouteDecision);
@@ -183,6 +186,7 @@ function buildEdge({
       mutedByRouteDecision,
       completedPath,
       routePoints,
+      ...(routeSide ? { routeSide } : {}),
     } satisfies WorkflowCanvasEdgeData,
     style: edgeStyle({
       routeKind,
@@ -209,11 +213,13 @@ function buildEdge({
 function buildRoutePoints({
   routeKind,
   lane,
+  routeSide,
   sourcePoint,
   targetPoint,
 }: {
   routeKind: WorkflowEdgeKind;
   lane: number;
+  routeSide?: EdgeRouteSide;
   sourcePoint: LayoutPoint | undefined;
   targetPoint: LayoutPoint | undefined;
 }): CanvasPoint[] {
@@ -222,7 +228,7 @@ function buildRoutePoints({
   const targetBox = nodeBox(targetPoint);
 
   if (routeKind === "back") {
-    const useBottom = lane % 2 === 0;
+    const useBottom = routeSide === "bottom";
     const sourceAnchor = useBottom
       ? { x: sourceBox.centerX, y: sourceBox.bottom }
       : { x: sourceBox.centerX, y: sourceBox.top };
@@ -246,13 +252,37 @@ function buildRoutePoints({
       ? { x: sourceBox.centerX, y: sourceBox.top }
       : { x: sourceBox.right, y: sourceBox.centerY };
   const targetAnchor = { x: targetBox.left, y: targetBox.centerY };
-  const corridorX = sourceBox.right + EDGE_NODE_PADDING + lane * EDGE_LANE_GAP;
+  const corridorX = edgeCorridorX(sourceBox.right, targetBox.left, lane);
   return [
     sourceAnchor,
     { x: corridorX, y: sourceAnchor.y },
     { x: corridorX, y: targetAnchor.y },
     targetAnchor,
   ];
+}
+
+function backRouteSide(lane: number, sourcePoint: LayoutPoint | undefined): EdgeRouteSide {
+  if ((sourcePoint?.row ?? 0) > 0) return "bottom";
+  return lane % 2 === 0 ? "bottom" : "top";
+}
+
+function edgeCorridorX(sourceBoundaryX: number, targetBoundaryX: number, lane: number): number {
+  const minX = Math.min(sourceBoundaryX, targetBoundaryX) + EDGE_NODE_PADDING;
+  const maxX = Math.max(sourceBoundaryX, targetBoundaryX) - EDGE_NODE_PADDING;
+  if (maxX <= minX) return (sourceBoundaryX + targetBoundaryX) / 2;
+
+  const midX = (minX + maxX) / 2;
+  const maxOffset = Math.max(0, (maxX - minX) / 2);
+  const step = Math.min(EDGE_LANE_GAP / 2, Math.max(8, maxOffset / 2));
+  const offset = centeredLaneOffset(lane, step, maxOffset);
+  return midX + offset;
+}
+
+function centeredLaneOffset(lane: number, step: number, maxOffset: number): number {
+  if (!lane) return 0;
+  const magnitude = Math.ceil(lane / 2) * step;
+  const direction = lane % 2 === 1 ? 1 : -1;
+  return direction * Math.min(magnitude, maxOffset);
 }
 
 function nodeBox(point: LayoutPoint) {
@@ -275,7 +305,7 @@ function edgeHandles(
   lane = 0,
 ): { sourceHandle: string; targetHandle: string } {
   if (routeKind === "back") {
-    return lane % 2 === 0
+    return backRouteSide(lane, sourcePoint) === "bottom"
       ? { sourceHandle: "source-bottom", targetHandle: "target-bottom" }
       : { sourceHandle: "source-top", targetHandle: "target-top" };
   }
