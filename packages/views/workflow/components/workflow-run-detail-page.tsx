@@ -31,6 +31,27 @@ export function WorkflowRunDetailPage({
   runId: string;
   initialNodeId?: string | null;
 }) {
+  return (
+    <WorkflowRunDetailView
+      caseId={caseId}
+      runId={runId}
+      initialNodeId={initialNodeId}
+      showHeader
+    />
+  );
+}
+
+export function WorkflowRunDetailView({
+  caseId,
+  runId,
+  initialNodeId,
+  showHeader = false,
+}: {
+  caseId: string;
+  runId: string;
+  initialNodeId?: string | null;
+  showHeader?: boolean;
+}) {
   const wsId = useWorkspaceId();
   const paths = useWorkspacePaths();
   const qc = useQueryClient();
@@ -86,51 +107,73 @@ export function WorkflowRunDetailPage({
   }
 
   if (isLoading) {
-    return <WorkflowRunDetailSkeleton />;
+    return <WorkflowRunDetailSkeleton showHeader={showHeader} />;
   }
 
   if (!run) {
     return (
-      <div className="flex h-full flex-col">
-        <PageHeader className="px-5">
-          <AppLink href={paths.workflowCaseDetail(caseId)} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="size-4" />
-            Workflow case
-          </AppLink>
-        </PageHeader>
+      <div className={cn("flex h-full flex-col", !showHeader && "min-h-[220px] rounded-lg border border-dashed bg-background/60")}>
+        {showHeader && (
+          <PageHeader className="px-5">
+            <AppLink href={paths.workflowCaseDetail(caseId)} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="size-4" />
+              Workflow case
+            </AppLink>
+          </PageHeader>
+        )}
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">Workflow run not found in this case.</div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <PageHeader className="justify-between px-5">
-        <div className="flex min-w-0 items-center gap-2">
-          <AppLink
-            href={paths.workflowCaseDetail(caseId)}
-            className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-            aria-label="Back to workflow case"
-          >
-            <ArrowLeft className="size-4" />
-          </AppLink>
-          <FolderGit2 className="size-4 shrink-0 text-muted-foreground" />
-          <h1 className="truncate text-sm font-medium">
-            {run.label || `Run ${shortId(run.id)}`}
-          </h1>
-          <span className={runStatusClass(run.status)}>{run.status}</span>
+    <div className={cn("flex h-full min-h-0 flex-col", !showHeader && "overflow-hidden rounded-lg border bg-background/60")}>
+      {showHeader ? (
+        <PageHeader className="justify-between px-5">
+          <div className="flex min-w-0 items-center gap-2">
+            <AppLink
+              href={paths.workflowCaseDetail(caseId)}
+              className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              aria-label="Back to workflow case"
+            >
+              <ArrowLeft className="size-4" />
+            </AppLink>
+            <FolderGit2 className="size-4 shrink-0 text-muted-foreground" />
+            <h1 className="truncate text-sm font-medium">
+              {run.label || `Run ${shortId(run.id)}`}
+            </h1>
+            <span className={runStatusClass(run.status)}>{run.status}</span>
+          </div>
+          {workflowCase && (
+            <AppLink
+              href={paths.workflowCaseDetail(caseId)}
+              className="shrink-0 truncate text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              {workflowCase.title}
+            </AppLink>
+          )}
+        </PageHeader>
+      ) : (
+        <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <FolderGit2 className="size-4 shrink-0 text-muted-foreground" />
+            <h3 className="truncate text-sm font-medium">
+              {run.label || `Run ${shortId(run.id)}`}
+            </h3>
+            <span className={runStatusClass(run.status)}>{run.status}</span>
+          </div>
+          {workflowCase && (
+            <AppLink
+              href={paths.workflowCaseDetail(caseId)}
+              className="shrink-0 truncate text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              {workflowCase.title}
+            </AppLink>
+          )}
         </div>
-        {workflowCase && (
-          <AppLink
-            href={paths.workflowCaseDetail(caseId)}
-            className="shrink-0 truncate text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-          >
-            {workflowCase.title}
-          </AppLink>
-        )}
-      </PageHeader>
+      )}
 
-      <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className={cn("grid min-h-0 flex-1 gap-4 overflow-y-auto p-5 xl:grid-cols-[minmax(0,1fr)_320px]", !showHeader && "p-3 sm:p-4")}>
         <main className="min-w-0 space-y-4">
           <section className="rounded-lg border bg-card p-4">
             <div className="grid gap-3 text-sm md:grid-cols-3 lg:grid-cols-5">
@@ -306,12 +349,18 @@ function Property({ label, value, mono = false, children }: { label: string; val
   );
 }
 
-function WorkflowRunDetailSkeleton() {
+function WorkflowRunDetailSkeleton({ showHeader = true }: { showHeader?: boolean }) {
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader className="justify-between px-5">
-        <Skeleton className="h-5 w-48" />
-      </PageHeader>
+    <div className={cn("flex h-full flex-col", !showHeader && "overflow-hidden rounded-lg border bg-background/60")}>
+      {showHeader ? (
+        <PageHeader className="justify-between px-5">
+          <Skeleton className="h-5 w-48" />
+        </PageHeader>
+      ) : (
+        <div className="border-b px-4 py-3">
+          <Skeleton className="h-5 w-48" />
+        </div>
+      )}
       <div className="grid flex-1 gap-4 p-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-4">
           <Skeleton className="h-24 rounded-lg" />

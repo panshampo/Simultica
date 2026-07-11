@@ -2,17 +2,28 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderGit2 } from "lucide-react";
-import { issueWorkflowContextOptions, workflowRunKeys } from "@multica/core/workflow/queries";
+import {
+  issueWorkflowContextOptions,
+  workflowCaseCurrentRunOptions,
+  workflowRunKeys,
+} from "@multica/core/workflow/queries";
 import type { IssueWorkflowContext, WorkflowRun } from "@multica/core/workflow/types";
 import { useWSEvent } from "@multica/core/realtime";
 import { useWorkspacePaths } from "@multica/core/paths";
 import { AppLink } from "../../navigation";
+import { WorkflowRunDetailView } from "./workflow-run-detail-page";
+
+const LOADING_CURRENT_RUN_COPY = "Loading current workflow run...";
+const NO_CURRENT_RUN_COPY = "No current workflow run is available for this issue yet.";
 
 export function IssueWorkflowPanel({ wsId, issueId }: { wsId: string; issueId: string }) {
   const qc = useQueryClient();
   const paths = useWorkspacePaths();
   const { data: context, isLoading } = useQuery(issueWorkflowContextOptions(wsId, issueId));
   const relatedCaseId = context?.workflow_case_id ?? null;
+  const { data: currentRun, isLoading: isCurrentRunLoading } = useQuery(
+    workflowCaseCurrentRunOptions(wsId, relatedCaseId ?? ""),
+  );
 
   useWSEvent("workflow_run:updated", (payload: unknown) => {
     const incoming = (payload as { workflow_run?: WorkflowRun } | null)?.workflow_run;
@@ -58,14 +69,6 @@ export function IssueWorkflowPanel({ wsId, issueId }: { wsId: string; issueId: s
               <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{relatedCaseId}</div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              {context.role === "node_issue" && context.workflow_run_id && (
-                <AppLink
-                  href={paths.workflowCaseRunDetail(relatedCaseId, context.workflow_run_id, context.workflow_node_id ?? undefined)}
-                  className="inline-flex h-7 shrink-0 items-center justify-center rounded-[min(var(--radius-md),12px)] border border-border bg-background px-2.5 text-[0.8rem] font-medium hover:bg-muted hover:text-foreground"
-                >
-                  Open Run at Node
-                </AppLink>
-              )}
               <AppLink
                 href={paths.workflowCaseDetail(relatedCaseId)}
                 className="inline-flex h-7 shrink-0 items-center justify-center rounded-[min(var(--radius-md),12px)] border border-border bg-background px-2.5 text-[0.8rem] font-medium hover:bg-muted hover:text-foreground"
@@ -88,6 +91,25 @@ export function IssueWorkflowPanel({ wsId, issueId }: { wsId: string; issueId: s
           </div>
         )}
       </div>
+      {relatedCaseId && context && (
+        <div>
+          {isCurrentRunLoading ? (
+            <div className="rounded-lg border border-dashed bg-background/60 p-4 text-sm text-muted-foreground">
+              {LOADING_CURRENT_RUN_COPY}
+            </div>
+          ) : currentRun ? (
+            <WorkflowRunDetailView
+              caseId={relatedCaseId}
+              runId={currentRun.id}
+              initialNodeId={context.role === "node_issue" ? context.workflow_node_id ?? null : null}
+            />
+          ) : (
+            <div className="rounded-lg border border-dashed bg-background/60 p-4 text-sm text-muted-foreground">
+              {NO_CURRENT_RUN_COPY}
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }
