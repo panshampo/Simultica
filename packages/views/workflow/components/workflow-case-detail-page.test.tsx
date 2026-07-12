@@ -67,9 +67,10 @@ vi.mock("../../navigation", () => ({
 }));
 
 vi.mock("./workflow-canvas", () => ({
-  WorkflowCanvas: ({ definition, runStatus, onSelectNode }: {
+  WorkflowCanvas: ({ definition, runStatus, selectedNodeId, onSelectNode }: {
     definition: WorkflowDefinition;
     runStatus?: string;
+    selectedNodeId?: string | null;
     onSelectNode?: (id: string) => void;
   }) => (
     <button
@@ -77,6 +78,7 @@ vi.mock("./workflow-canvas", () => ({
       data-testid="workflow-canvas"
       data-name={definition.meta.name}
       data-status={runStatus ?? ""}
+      data-selected={selectedNodeId ?? ""}
       onClick={() => onSelectNode?.("plan")}
     >
       {definition.meta.name}
@@ -274,14 +276,33 @@ describe("WorkflowCaseDetailPage", () => {
     renderPage();
 
     await userEvent.click(await screen.findByRole("tab", { name: "Runs" }));
-    expect(await screen.findByText("run-a")).toBeInTheDocument();
+    expect((await screen.findAllByText("run-a")).length).toBeGreaterThan(0);
     expect(screen.getByText("run-b")).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "v1" })).toHaveLength(2);
-    expect(screen.queryAllByText("v1")).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: "v1" }).length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryAllByText("v1").length).toBeGreaterThanOrEqual(2);
     const cancelButtons = screen.getAllByRole("button", { name: "Cancel" });
     expect(cancelButtons.length).toBe(2);
     fireEvent.click(cancelButtons[0]!);
     await waitFor(() => expect(mocks.cancelWorkflowCaseRun).toHaveBeenCalledWith("case-1", "run-a"));
+  });
+
+  it("embeds the current run detail directly in the Runs tab", async () => {
+    mocks.getWorkflowCase.mockResolvedValue(makeCase({ current_run_id: "run-active" }));
+    mocks.listWorkflowCaseRuns.mockResolvedValue([
+      makeRun({ id: "run-active", label: "Active investigation", status: "running" }),
+      makeRun({ id: "run-history", label: "Older run", status: "done" }),
+    ]);
+
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("tab", { name: "Runs" }));
+
+    expect(await screen.findByText("Active investigation")).toBeInTheDocument();
+    expect(screen.getByText("Run graph")).toBeInTheDocument();
+    expect(screen.getByText("Nodes")).toBeInTheDocument();
+    expect(screen.getByTestId("workflow-canvas")).toHaveAttribute("data-status", "running");
+    expect(screen.queryByRole("link", { name: "Open current run" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Older run/)).toBeInTheDocument();
   });
 
   it("has no confirm-and-run affordance in the UI", async () => {

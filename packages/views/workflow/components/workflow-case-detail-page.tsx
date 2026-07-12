@@ -44,6 +44,7 @@ import { WorkflowCanvas } from "./workflow-canvas";
 import { WorkflowEditor } from "./workflow-editor";
 import { serializeWorkflow, parseWorkflow } from "../lib/serialize";
 import { WorkflowCaseRunList } from "./workflow-case-run-list";
+import { WorkflowRunDetailView } from "./workflow-run-detail-page";
 
 // Starter draft used when a workflow case has no draft yet. Kept here so the
 // Draft section can seed the editor without a separate draft-editor component.
@@ -354,6 +355,7 @@ export function WorkflowCaseDetailPage({
         )}
         {activeTab === "runs" && (
           <WorkflowCaseRunsPanel
+            caseId={caseId}
             runs={runs}
             currentRun={currentRun}
             versions={definitionVersions}
@@ -720,6 +722,7 @@ function WorkflowCaseVersionsPanel({
 }
 
 function WorkflowCaseRunsPanel({
+  caseId,
   runs,
   currentRun,
   versions,
@@ -736,6 +739,7 @@ function WorkflowCaseRunsPanel({
   runHref,
   versionHref,
 }: {
+  caseId: string;
   runs: WorkflowRun[];
   currentRun: WorkflowRun | null;
   versions: WorkflowDefinitionVersion[];
@@ -755,36 +759,52 @@ function WorkflowCaseRunsPanel({
   const versionLabelById = Object.fromEntries(
     versions.map((version) => [version.id, `v${version.version}`]),
   );
+  const displayedRuns = mergeCurrentRun(runs, currentRun);
+  const selectedRun = displayedRuns.find((run) => run.id === selectedRunId) ?? currentRun ?? displayedRuns[0] ?? null;
   return (
-    <div className="grid max-w-6xl gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-      <section className="h-fit space-y-3 rounded-lg border bg-card p-3">
-        <h2 className="text-sm font-medium">Create run</h2>
-        <Input
-          aria-label="Run label"
-          className="h-8"
-          placeholder="Label (optional)"
-          value={runLabel}
-          onChange={(event) => setRunLabel(event.target.value)}
+    <div className="grid max-w-7xl gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+      <aside className="space-y-4">
+        <section className="h-fit space-y-3 rounded-lg border bg-card p-3">
+          <h2 className="text-sm font-medium">Create run</h2>
+          <Input
+            aria-label="Run label"
+            className="h-8"
+            placeholder="Label (optional)"
+            value={runLabel}
+            onChange={(event) => setRunLabel(event.target.value)}
+          />
+          <Button type="button" size="sm" className="w-full" onClick={() => void startRun()} disabled={!canStart || starting}>
+            <Play className="mr-1 size-3.5" />
+            {starting ? "Creating..." : "Create run"}
+          </Button>
+          {!hasOnlineVersion && (
+            <p className="text-xs text-muted-foreground">Set a workflow active before creating a run.</p>
+          )}
+        </section>
+        <WorkflowCaseRunList
+          runs={displayedRuns}
+          selectedRunId={selectedRun?.id ?? selectedRunId}
+          onSelectRun={setSelectedRunId}
+          onCancelRun={(runId) => void cancelRun(runId)}
+          cancellingRunId={cancellingRunId}
+          activeStatuses={ACTIVE_RUN_STATUSES}
+          openRunHref={(runId) => runHref(runId)}
+          versionHref={versionHref}
+          versionLabelById={versionLabelById}
         />
-        <Button type="button" size="sm" className="w-full" onClick={() => void startRun()} disabled={!canStart || starting}>
-          <Play className="mr-1 size-3.5" />
-          {starting ? "Creating..." : "Create run"}
-        </Button>
-        {!hasOnlineVersion && (
-          <p className="text-xs text-muted-foreground">Set a workflow active before creating a run.</p>
+      </aside>
+      <main className="min-w-0">
+        {selectedRun ? (
+          <WorkflowRunDetailView
+            caseId={caseId}
+            runId={selectedRun.id}
+          />
+        ) : (
+          <section className="rounded-lg border border-dashed bg-background/60 p-4 text-sm text-muted-foreground">
+            No workflow runs yet.
+          </section>
         )}
-      </section>
-      <WorkflowCaseRunList
-        runs={mergeCurrentRun(runs, currentRun)}
-        selectedRunId={selectedRunId}
-        onSelectRun={setSelectedRunId}
-        onCancelRun={(runId) => void cancelRun(runId)}
-        cancellingRunId={cancellingRunId}
-        activeStatuses={ACTIVE_RUN_STATUSES}
-        openRunHref={(runId) => runHref(runId)}
-        versionHref={versionHref}
-        versionLabelById={versionLabelById}
-      />
+      </main>
     </div>
   );
 }
