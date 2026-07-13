@@ -34,13 +34,15 @@ export function WorkflowCaseRunList({
     );
   }
 
+  const orderedRuns = [...runs].sort(compareRunsByCreatedAtDesc);
+
   return (
     <div className="overflow-hidden rounded-lg border bg-card">
       <div className="border-b px-3 py-2">
         <h2 className="text-sm font-medium">Runs</h2>
       </div>
       <ul className="divide-y">
-        {runs.map((run) => {
+        {orderedRuns.map((run) => {
           const selected = run.id === selectedRunId;
           const cancellable = Boolean(onCancelRun) && (activeStatuses ? activeStatuses.has(run.status) : false);
           const versionLabel = run.definition_version_id ? (versionLabelById[run.definition_version_id] ?? shortId(run.definition_version_id)) : null;
@@ -101,6 +103,14 @@ export function WorkflowCaseRunList({
       </ul>
     </div>
   );
+}
+
+function compareRunsByCreatedAtDesc(a: WorkflowRun, b: WorkflowRun): number {
+  return runSortTime(b) - runSortTime(a);
+}
+
+function runSortTime(run: WorkflowRun): number {
+  return Date.parse(run.created_at || run.started_at || run.updated_at || "") || 0;
 }
 
 function statusClass(status: WorkflowRun["status"]): string {

@@ -101,6 +101,28 @@ describe("WorkflowRunDetailPage", () => {
     );
   });
 
+  it("does not render an empty node detail panel before a node is selected", async () => {
+    renderPage("run-1");
+
+    expect(await screen.findByText("Approach A")).toBeInTheDocument();
+    expect(screen.queryByText("Node detail")).not.toBeInTheDocument();
+    expect(screen.queryByText("Select a run node to inspect its projection.")).not.toBeInTheDocument();
+  });
+
+  it("renders graph before run basic info and keeps info panels below the graph", async () => {
+    renderPage("run-1");
+
+    expect(await screen.findByText("Approach A")).toBeInTheDocument();
+    const layout = screen.getByTestId("workflow-run-detail-layout");
+    const graph = screen.getByTestId("workflow-run-graph-section");
+    const metadata = screen.getByTestId("workflow-run-basic-info");
+    const lowerPanels = screen.getByTestId("workflow-run-lower-panels");
+
+    expect(layout.compareDocumentPosition(graph) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(graph.compareDocumentPosition(lowerPanels) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(graph.compareDocumentPosition(metadata) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("preselects the deep-linked node and opens its detail panel", async () => {
     renderPage("run-1", "implement");
 

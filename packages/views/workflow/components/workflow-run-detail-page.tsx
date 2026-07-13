@@ -173,9 +173,37 @@ export function WorkflowRunDetailView({
         </div>
       )}
 
-      <div className={cn("grid min-h-0 flex-1 gap-4 overflow-y-auto p-5 xl:grid-cols-[minmax(0,1fr)_320px]", !showHeader && "p-3 sm:p-4")}>
-        <main className="min-w-0 space-y-4">
-          <section className="rounded-lg border bg-card p-4">
+      <div
+        data-testid="workflow-run-detail-layout"
+        className={cn("min-h-0 flex-1 space-y-4 overflow-y-auto p-5", !showHeader && "p-3 sm:p-4")}
+      >
+        <section data-testid="workflow-run-graph-section" className="space-y-3">
+          <h2 className="text-sm font-medium">Run graph</h2>
+          {nodeMissing && (
+            <div className="rounded-md border border-dashed bg-background/60 p-2 text-xs text-muted-foreground">
+              Node not found in this run.
+            </div>
+          )}
+          <WorkflowCanvas
+            definition={run.definition_snapshot}
+            runState={run.nodes_state}
+            runStatus={run.status}
+            selectedNodeId={selectedNodeId}
+            onSelectNode={setSelectedNodeId}
+            onPaneClick={() => setSelectedNodeId(null)}
+            hideSelectionOverlay
+            fullscreenTitle={run.label || `Run ${shortId(run.id)}`}
+          />
+        </section>
+
+        <div
+          data-testid="workflow-run-lower-panels"
+          className={cn(
+            "grid gap-4",
+            selectedNode ? "xl:grid-cols-[minmax(220px,0.8fr)_minmax(320px,1.1fr)_320px]" : "xl:grid-cols-[minmax(220px,0.8fr)_minmax(320px,1.2fr)]",
+          )}
+        >
+          <section data-testid="workflow-run-basic-info" className="rounded-lg border bg-card p-4">
             <div className="grid gap-3 text-sm md:grid-cols-3 lg:grid-cols-5">
               <Property label="Run" value={shortId(run.id)} mono />
               <Property label="Status" value={run.status} />
@@ -192,6 +220,7 @@ export function WorkflowRunDetailView({
             {run.error && <p className="mt-3 rounded-md bg-red-50 p-2 text-xs text-red-700">{run.error}</p>}
           </section>
 
+          <div className="space-y-4">
           {reviewStepId && (
             <section className="rounded-lg border border-amber-300 bg-amber-50 p-4">
               <h2 className="text-sm font-medium text-amber-900">Review required</h2>
@@ -219,40 +248,24 @@ export function WorkflowRunDetailView({
             </section>
           )}
 
-          <section className="space-y-3">
-            <h2 className="text-sm font-medium">Run graph</h2>
-            {nodeMissing && (
-              <div className="rounded-md border border-dashed bg-background/60 p-2 text-xs text-muted-foreground">
-                Node not found in this run.
-              </div>
-            )}
-            <WorkflowCanvas
-              definition={run.definition_snapshot}
-              runState={run.nodes_state}
-              runStatus={run.status}
-              selectedNodeId={selectedNodeId}
-              onSelectNode={setSelectedNodeId}
-              onPaneClick={() => setSelectedNodeId(null)}
-              hideSelectionOverlay
-              fullscreenTitle={run.label || `Run ${shortId(run.id)}`}
-            />
-          </section>
-
           <NodeTable
             nodes={nodes}
             selectedNodeId={selectedNodeId}
             onSelectNode={setSelectedNodeId}
             issueHref={(issueId) => paths.issueDetail(issueId)}
           />
-        </main>
+          </div>
 
-        <aside className="space-y-4">
-          <WorkflowRunNodeDetailPanel
-            node={selectedNode}
-            definitionNode={selectedDefinitionNode}
-            issueHref={(issueId) => paths.issueDetail(issueId)}
-          />
-        </aside>
+          {selectedNode && (
+            <aside className="space-y-4">
+              <WorkflowRunNodeDetailPanel
+                node={selectedNode}
+                definitionNode={selectedDefinitionNode}
+                issueHref={(issueId) => paths.issueDetail(issueId)}
+              />
+            </aside>
+          )}
+        </div>
       </div>
     </div>
   );
