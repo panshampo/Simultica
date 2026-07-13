@@ -76,6 +76,40 @@ func TestStartWorkflowCaseRunUsesOnlineVersionWithoutRunKind(t *testing.T) {
 	}
 }
 
+func TestStartWorkflowCaseRunAcceptsHumanReviewNode(t *testing.T) {
+	ctx := context.Background()
+	sidecar := newRunSidecar(t)
+	t.Setenv("MULTICA_WORKFLOW_SIDECAR_URL", sidecar.URL)
+
+	caseID := createWorkflowCaseForTest(t, "start human review workflow")
+	upsertWorkflowCaseDefinitionForTest(t, caseID, workflowCaseHumanReviewDefinition())
+	publishWorkflowCaseForTest(t, caseID)
+
+	rec := startWorkflowCaseRunViaHandler(t, caseID, map[string]any{
+		"label":         "Review flow",
+		"initial_state": map[string]any{"task": "review me"},
+	})
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp WorkflowRunResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode run: %v", err)
+	}
+
+	var nodeType, dispatch, carrierKind string
+	if err := testPool.QueryRow(ctx, `
+		SELECT node_type, dispatch, carrier_kind
+		FROM workflow_run_node
+		WHERE run_id = $1 AND node_id = 'human_final_review'
+	`, resp.ID).Scan(&nodeType, &dispatch, &carrierKind); err != nil {
+		t.Fatalf("load review node row: %v", err)
+	}
+	if nodeType != "human_review" || dispatch != "human_gate" || carrierKind != "inline" {
+		t.Fatalf("review node projection = type:%s dispatch:%s carrier:%s, want human_review/human_gate/inline", nodeType, dispatch, carrierKind)
+	}
+}
+
 func TestStartWorkflowCaseRunRejectsWithoutOnlineVersion(t *testing.T) {
 	ctx := context.Background()
 	caseID := createWorkflowCaseForTest(t, "start without online version")
@@ -91,6 +125,42 @@ func TestStartWorkflowCaseRunRejectsWithoutOnlineVersion(t *testing.T) {
 	}
 	if runCount != 0 {
 		t.Fatalf("workflow_run count = %d, want 0", runCount)
+	}
+}
+
+func workflowCaseHumanReviewDefinition() map[string]any {
+	return map[string]any{
+		"meta": map[string]any{"name": "human review workflow", "version": "1"},
+		"state": map[string]any{
+			"fields": []map[string]any{
+				{"name": "task", "type": "string"},
+				{"name": "review_decision", "type": "string"},
+				{"name": "review_comment", "type": "string"},
+			},
+		},
+		"nodes": []map[string]any{
+			{
+				"id":       "prepare",
+				"type":     "condition",
+				"dispatch": "inline",
+			},
+			{
+				"id":       "human_final_review",
+				"type":     "human_review",
+				"dispatch": "human_gate",
+				"inputs":   []string{"task"},
+				"outputs":  []string{"review_decision", "review_comment"},
+				"config": map[string]any{
+					"title":    "Review result",
+					"question": "Approve final report?",
+				},
+			},
+		},
+		"routing": []map[string]any{
+			{"from": "START", "to": "prepare"},
+			{"from": "prepare", "to": "human_final_review"},
+			{"from": "human_final_review", "condition": `review_decision == "approved"`, "to": "END", "else": "END"},
+		},
 	}
 }
 
