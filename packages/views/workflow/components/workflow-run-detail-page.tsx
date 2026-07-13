@@ -198,10 +198,7 @@ export function WorkflowRunDetailView({
 
         <div
           data-testid="workflow-run-lower-panels"
-          className={cn(
-            "grid gap-4",
-            selectedNode ? "xl:grid-cols-[minmax(220px,0.8fr)_minmax(320px,1.1fr)_320px]" : "xl:grid-cols-[minmax(220px,0.8fr)_minmax(320px,1.2fr)]",
-          )}
+          className="grid gap-4 xl:grid-cols-[minmax(220px,0.8fr)_minmax(320px,1.1fr)_320px]"
         >
           <section data-testid="workflow-run-basic-info" className="rounded-lg border bg-card p-4">
             <div className="grid gap-3 text-sm md:grid-cols-3 lg:grid-cols-5">
@@ -256,15 +253,13 @@ export function WorkflowRunDetailView({
           />
           </div>
 
-          {selectedNode && (
-            <aside className="space-y-4">
-              <WorkflowRunNodeDetailPanel
-                node={selectedNode}
-                definitionNode={selectedDefinitionNode}
-                issueHref={(issueId) => paths.issueDetail(issueId)}
-              />
-            </aside>
-          )}
+          <aside className="space-y-4">
+            <WorkflowRunNodeDetailPanel
+              node={selectedNode}
+              definitionNode={selectedDefinitionNode}
+              issueHref={(issueId) => paths.issueDetail(issueId)}
+            />
+          </aside>
         </div>
       </div>
     </div>
